@@ -18,7 +18,7 @@ TODO:
 - chili support
 --]]
 
-local versionNum = '0.25'
+local versionNum = '0.30'
 
 function widget:GetInfo()
   return {
@@ -37,9 +37,9 @@ end
 --------------------------------------------------------------------------------
 
 options_path = 'Settings/Audio/Ambient Sound'
-options_order = {}
+options_order = {'verbose', 'autosave', 'autoreload', 'showemitters', 'checkrate', 'volume', 'autoplay'}
 options = {
-	settingslabel = {name = "settingslabel", type = 'label', value = "General Settings", path = options_path},
+	--settingslabel = {name = "settingslabel", type = 'label', value = "General Settings", path = options_path},
 	checkrate = {
 		name = "Update frequency",
         type = 'number',
@@ -125,6 +125,14 @@ local SOUNDDEF_HEADER = [[--Sounditem definitions in the format of gamedata soun
 local OPTIONS_HEADER = [[--Config file. Words contains user-defined string variables]].."\n"
 local EMITTERS_HEADER = [[--Emitters for positional sounds. Each sounditem will be unique for every emitter, if created by the widget.]].."\n"
 
+--local PLAYER_CONTROLS_ICON = PATH_LUA..'Images/Commands/Bold/'..'drop_beacon.png'
+local SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
+local HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
+local CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
+local PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
+
+local HELPTEXT = [[generic info here]]
+
 local SOUNDITEM_TEMPLATE = {
 	-- sounditem stats
 	file = "",
@@ -162,7 +170,24 @@ local EMITTER_TEMPLATE = {
 	--mods = {},	
 }
 
-
+local Chili
+local Image
+local Button
+local Checkbox
+local Window
+local ScrollPanel
+local LayoutPanel
+local Grid
+local StackPanel
+local TreeView
+local Node
+local Label
+local Line
+local EditBox
+local TextBox
+local screen0
+local color2incolor
+local incolor2color
 
 --------------------------------------------------------------------------------
 -- VARS
@@ -181,9 +206,9 @@ local emitters = {
 	index = 1,
 	global = {
 		pos = {
-				x=false,
-				y=false,
-				z=false,
+			x=false,
+			y=false,
+			z=false,
 			},
 		playlist = {},
 	},
@@ -191,11 +216,14 @@ local emitters = {
 
 
 local logfile = [[]]
+local consoleText
 local mx, my
 local needReload = false
 
 local SaveTable, MakeSortedTable, CompareKeys, valueTypes, keyTypes, encloseKey, encloseStr, keyWordSet, keyWords, saveTables, indendtString
 
+local tracklist_controls = {}
+local emitters_controls = {}
 
 --------------------------------------------------------------------------------
 -- INIT
@@ -203,20 +231,46 @@ local SaveTable, MakeSortedTable, CompareKeys, valueTypes, keyTypes, encloseKey,
 
 function widget:Initialize()
 
+	if (not WG.Chili) then
+		widgetHandler:RemoveWidget()
+		return
+	end
+	
+	Chili = WG.Chili
+	Image = Chili.Image
+	Button = Chili.Button
+	Checkbox = Chili.Checkbox
+	Window = Chili.Window
+	Label = Chili.Label
+	Line = Chili.Line
+	EditBox = Chili.EditBox
+	TextBox = Chili.TextBox
+	screen0 = Chili.Screen0	
+	ScrollPanel = Chili.ScrollPanel
+	LayoutPanel = Chili.LayoutPanel
+	Grid = Chili.Grid
+	StackPanel = Chili.StackPanel
+	TreeView = Chili.TreeView
+	Node = Chili.TreeViewNode
+	color2incolor = Chili.color2incolor
+	incolor2color = Chili.incolor2color
+	
+
 	local cpath = PATH_LUA..PATH_CONFIG
 	local upath = PATH_LUA..PATH_UTIL
 
 	--if VFS.FileExists(cpath..LOG_FILENAME, VFS.RAW_FIRST) then
 	--	log = log..VFS.Include(cpath..LOG_FILENAME, nil, VFS.RAW_FIRST)
 
+	SetupGUI()
 	
 	if VFS.FileExists(cpath..OPTIONS_FILENAME, VFS.RAW_FIRST) then
-		local options = VFS.Include(cpath..OPTIONS_FILENAME, nil, VFS.RAW_FIRST)
-		if (options.config) then
-			for k, v in pairs(options.config) do config[k] = v or config[k]	end
+		local opt = VFS.Include(cpath..OPTIONS_FILENAME, nil, VFS.RAW_FIRST)
+		if (opt.config) then
+			for k, v in pairs(opt.config) do config[k] = v or config[k]	end
 		end
-		if (options.words) then	
-			for k, t in pairs(options.words) do	words[k] = t or words[k] end
+		if (opt.words) then	
+			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
 		end
 	else Echo("<ambient player>: no config found, using defaults")
 	end	
@@ -264,6 +318,7 @@ function widget:Initialize()
 	
 	if not (config.path_map) then	config.path_map= 'maps/'..Game.mapName..'.sdd/' end
 	inited=true --?
+	UpdateGUI()
 end
 
 
@@ -277,38 +332,501 @@ end
 --end
 
 
+function widget:SetupGUI()
+	---------------------------------------------------- main frame ------------------------------------------------
+	 mainWindow = Window:New {
+		x = '65%',
+		y = '25%',	
+		--dockable = false,
+		parent = screen0,
+		caption = "Ambient Sound Editor",
+		draggable = true,
+		resizable = true,
+		dragUseGrip = true,
+		clientWidth = 340,
+		clientHeight = 540,
+		backgroundColor = {0.8,0.8,0.8,0.9},		
+	}
+	tracklistLabel = Label:New {
+		x = 0,
+		y = 20,
+		clientWidth = 260,
+		parent = mainWindow,
+		align = 'center',
+		caption = '-Track Overview-',
+		textColor = {1,1,0,0.9},		
+	}
+	tracklistScroll = ScrollPanel:New {
+		x = 0,
+		y = 40,
+		clientWidth = 308,
+		clientHeight = 420,
+		parent = mainWindow,
+		scrollPosX = -16,
+		horizontalScrollbar = false,
+		verticalScrollbar = true,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+		padding = {5,10,5,10},
+		
+	}	
+	tracklistLayout = LayoutPanel:New {
+		x = 0,
+		y = 0,
+		--clientWidth = 160,
+		--clientHeight = 420,
+		parent = tracklistScroll,
+		orientation = 'vertical',
+		--orientation = 'left',
+		selectable = false,		
+		multiSelect = false,
+		maxWidth = 320,
+		minWidth = 320,
+		itemPadding = {6,2,6,2},
+		itemMargin = {0,0,0,0},
+		autosize = true,
+		align = 'left',
+		columns = 3,
+		left = 0,
+		centerItems = false,		
+	}	
+	button_console = Button:New {
+		x = 0,
+		y = -32,
+		parent = mainWindow,		
+		tooltip = 'Message Log',
+		clientWidth = 12,
+		clientHeight = 12,
+		caption = '',
+		OnClick = {	function()
+						consoleWindow:ToggleVisibility()
+					end
+					},
+	}
+	button_console_image = Image:New {
+		width = "100%",
+		height = "100%",		
+		y=0,
+		x=0,
+		file = CONSOLE_ICON,
+		parent = button_console,
+		}
+	button_help = Button:New {
+		x = - 32,
+		y = -32,
+		parent = mainWindow,		
+		tooltip = 'Halp!',
+		clientWidth = 12,
+		clientHeight = 12,
+		caption = '',
+		OnClick = {	function()
+						help_window:ToggleVisibility()
+					end
+					},
+	}
+	button_help_image = Image:New {
+		width = "100%",
+		height = "100%",		
+		y=0,
+		x=0,
+		file = HELP_ICON,
+		parent = button_help,
+	}
+	
+	button_settings = Button:New {
+		x = - 74,
+		y = -32,
+		parent = mainWindow,		
+		tooltip = 'Settings',
+		clientWidth = 12,
+		clientHeight = 12,
+		caption = '',
+		OnClick = {	function()
+						settings_window:ToggleVisibility()
+					end
+					},
+	}
+	button_settings_image = Image:New {
+		width = "100%",
+		height = "100%",		
+		y=0,
+		x=0,
+		file = SETTINGS_ICON,
+		parent = button_settings,
+	}	
+	
+	---------------------------------------------------- emitters window ------------------------------------------------	
+	
+	window_emitters = Window:New {
+		x = '25%',
+		y = '25%',	
+		--dockable = false,
+		parent = screen0,
+		caption = "Ambient Sound Editor",
+		draggable = true,
+		resizable = false,
+		dragUseGrip = true,
+		clientWidth = 300,
+		clientHeight = 540,
+		backgroundColor = {0.8,0.8,0.8,0.9},		
+	}
+	label_emitters = Label:New {
+		x = 0,
+		y = 20,
+		clientWidth = 260,
+		parent = window_emitters,
+		align = 'center',
+		caption = '-Emitters-',
+		textColor = {1,1,0,0.9},		
+	}
+	scroll_emitters = ScrollPanel:New {
+		x = 0,
+		y = 40,
+		clientWidth = 300,
+		clientHeight = 420,
+		parent = window_emitters,
+		scrollPosX = -16,
+		horizontalScrollbar = false,
+		verticalScrollbar = true,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+		padding = {5,10,5,10},
+		
+	}	
+	
+	
+	
+	---------------------------------------------------- log window ------------------------------------------------	
+	consoleWindow = Window:New {
+		x = "20%",
+		y = "7%",
+		parent = screen0,
+		caption = "Message Log",
+		draggable = true,
+		resizable = false,
+		dragUseGrip = true,
+		clientWidth = 640,
+		clientHeight = 140,
+		backgroundColor = {0.8,0.8,0.8,0.9},				
+	}
+	consoleScroll = ScrollPanel:New {
+		x = 0,
+		y = 12,
+		clientWidth = 640,
+		clientHeight = 126,
+		parent = consoleWindow,
+		scrollPosX = -16,
+		horizontalScrollbar = false,
+		verticalScrollbar = true,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+		resizable = true,
+		autosize = true,
+	}
+	consoleText = TextBox:New {
+		x = 4,
+		y = 0,
+		autosize = true,
+		parent = consoleScroll,
+		align = 'left',
+		textColor = {0.9,0.9,0.0,0.9},
+		backgroundColor = {0.2,0.2,0.2,0.5},
+		borderColor = {0.3,0.3,0.3,0.5},
+		text = logfile,	
+	}
+	
+	---------------------------------------------------- help window ------------------------------------------------
+
+	help_window = Window:New {
+		x = "20%",
+		y = "7%",
+		parent = screen0,
+		caption = "Help",
+		draggable = true,
+		resizable = false,
+		dragUseGrip = true,
+		clientWidth = 400,
+		clientHeight = 490,
+		backgroundColor = {0.8,0.8,0.8,0.9},
+		
+	}
+	help_scroll = ScrollPanel:New {
+		x = 0,
+		y = 12,
+		clientWidth = 400,
+		clientHeight = 384,
+		parent = help_window,
+		scrollPosX = -16,
+		horizontalScrollbar = false,
+		verticalScrollbar = true,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+		resizable = true,
+		autosize = true,
+	}
+	help_text = TextBox:New {
+		x = 4,
+		y = 0,
+		autosize = true,
+		parent = help_scroll,
+		align = 'left',
+		textColor = {0.8,0.8,0.8,0.9},
+		backgroundColor = {0.2,0.2,0.2,0.5},
+		borderColor = {0.3,0.3,0.3,0.5},
+		text = HELPTEXT,
+	}
+	help_window:Hide()
+	
+		---------------------------------------------------- settings window ------------------------------------------------
+	settings_window = Window:New {
+		x = "50%",
+		y = "70%",
+		parent = screen0,
+		caption = "Settings",
+		draggable = true,
+		resizable = false,
+		dragUseGrip = true,
+		clientWidth = 200,
+		clientHeight = 300,
+		backgroundColor = {0.8,0.8,0.8,0.9},
+		
+	}
+	settings_window:Hide()
+	--[[
+	
+	playerControls = Button:New{
+		x = -48,
+		y = '30%',
+		parent = screen0,
+		draggable = true,
+		dragUseGrip = true,
+		tooltip = 'Ambient Sound Player controls',
+		--align = 'right',
+		clientWidth = 32,
+		clientHeight = 32,
+		caption = '',
+		
+	}	
+	playerControls_image = Image:New {
+				width = "100%",
+				height = "100%",
+				--bottom = (isBuild) and 10 or nil;
+				y="5%",
+				x="5%",
+--				color = color;
+				--keepAspect = not isBuild,	--true,	--isState;
+				file = PLAYER_CONTROLS_ICON,
+				parent = playerControls,
+			}
+	]]--
+end
+
+
+
 
 --------------------------------------------------------------------------------
 -- UPDATE/MISC
 --------------------------------------------------------------------------------
 
+function UpdateGUI()
+	for track, params in pairs(tracklist.tracks) do
+		
+			--local name = params.name
+			tracklist_controls['label'..track] = EditBox:New {
+				x = 0,
+				--y = 0,
+				clientWidth = 200,
+				--clientHeight = 16,
+				parent = tracklistLayout,
+				align = 'left',
+				text =  track,
+				fontSize = 10,
+				textColor = {0.9,0.9,0.9,1},
+				backgroundColor = {0.2,0.2,0.2,0.5},
+				borderColor = {0.3,0.3,0.3,0.5},
+				OnMouseOver = { function(self) 
+									local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
+									for param, val in pairs(params) do										
+										if type(val) == 'boolean' then ttip = ttip..param..": "..(val and "true" or "false").."\n" 											
+										else ttip = ttip..param..": "..val.."\n" 
+										end
+									end
+									--self:SetTooltip(ttip)
+									self.tooltip=ttip
+								end
+							},
+				OnChange = {function()
+							params.name = self.text
+							end
+						},
+			}
+			tracklist_controls['length'..track] = EditBox:New {
+				x = 204,
+				clientWidth = 26,
+				parent = tracklistLayout,
+				align = 'right',
+				text = params.length,
+				fontSize = 10,
+				textColor = {0.9,0.9,0.9,1},
+				backgroundColor = {0.2,0.2,0.2,0.5},
+				borderColor = {0.3,0.3,0.3,0.5},
+				tooltip = [[The length of the track in seconds. As this information can't currently be obtained by the Widget, you may want to insert it manually.]]
+			}
+			--[[
+			tracklist_controls['play'..track] = Button:New {
+				x = 240,
+				clientWidth = 1,
+				clientHeight = 1,				
+				parent = tracklistLayout,	
+				tooltip = 'Listen to this sound now',
+				caption = '',				
+				OnClick = {	function()
+								
+							end
+						},
+				
+			}
+			]]--
+			tracklist_controls['play_image'..track] = Image:New {
+				x = 240,
+				y = 0,
+				parent = tracklistLayout,
+				file = PLAYSOUND_ICON,				
+				width = 20,
+				height = 20,
+				tooltip = 'Listen to this sound now',
+				color = {0,0.8,0.2,0.9},
+				--caption = '',
+				OnClick = {	function()
+								--local p = {x,y,z}
+								return DoPlay(track, options.volume.value, nil, nil, nil)		
+							end
+						},
+			}
+		--end	
+	end
+	local nodes = {}
+	local idx = 1
+	for emitter, params in pairs(emitters) do	
+		
+		if emitter ~= 'index' then
+			--Echo (emitter)
+			local pos 
+			if params.pos then pos = params.pos end
+			if pos and not type(pos.x == 'boolean') then 
+				nodes[idx] = emitter.." - "..pos.x..", "..pos.z..", "..pos.y
+				idx = idx + 1
+			else
+				nodes[idx] = emitter				
+				idx = idx + 1
+			end
+			--Echo(nodes[idx] or "skipped entry")
+			local list = params.playlist		
+			if list then 
+				nodes[idx] = {}
+				local i = 1
+				for item, values in pairs(list) do					
+					if item then 
+						nodes[idx][i] = item 
+						--Echo(nodes[idx][i] or "skipped entry in subtable")
+						i = i + 1
+					end
+					
+				end
+				idx = idx + 1
+			end			
+		end	
+	end
+	nodes[idx] = Button:New {
+		caption = 'this is a test',
+		tooltip = 'tooltip',
+		OnClick = {function()
+						Echo("mouse")
+						end
+						},
+	}
+	idx = idx +1
+	nodes[idx] = {}
+	nodes[idx][1] = TextBox:New {
+		text = 'more test',
+		OnClick = {function()
+			Echo("textmouse")
+			end
+			},
+
+	}
+	nodes[idx][2] = Label:New {
+		caption = 'moaaaaaaaaaaaaaaaaaaaar',
+	}
+	idx = idx +1
+	nodes[idx] = Label:New {
+		caption = 'root',
+	}
+	
+	idx = idx +1
+	nodes[idx] = {}
+	nodes[idx][1] = Label:New {
+		caption = 'second',
+	}
+	nodes[idx][2] = {}
+	nodes[idx][2][1] = Label:New {
+		caption = 'last',
+	}
+	
+	treeview_emitters = TreeView:New {
+				x = 0,
+				y = 0,
+				--clientWidth = 160,
+				--clientHeight = 420,
+				parent = scroll_emitters,
+				orientation = 'vertical',
+				--orientation = 'left',
+				selectable = true,		
+				multiSelect = true,
+				--maxWidth = 320,
+				--minWidth = 320,
+				itemPadding = {6,2,6,2},
+				itemMargin = {0,0,0,0},
+				autosize = true,
+				align = 'left',
+				--columns = 3,
+				left = 0,
+				centerItems = false,	
+				nodes = nodes,
+				fontSize = 10,
+	}
+	
+	
+end
+
 function Echo(s)
-	Spring.Echo(s)	
+	--Spring.Echo(s)	
 	logfile = logfile.."\n"..s
+	if consoleText then consoleText:SetText(logfile) end
 end
 
 
 function widget:Update(dt) 	
 	if not (gameStarted) then return end
 	mx,my = Spring.GetMouseState()
-	if (needReload and options.autoreload) then ReloadSoundDefs() needReload = false end		
-	if (secondsToUpdate>0) then	secondsToUpdate=secondsToUpdate-dt return
-	else secondsToUpdate=updateIntervalSeconds
+	if (needReload and options.autoreload.value) then ReloadSoundDefs() needReload = false end		
+	if (secondsToUpdate>0) then	secondsToUpdate = secondsToUpdate-dt return
+	else secondsToUpdate = options.checkrate.value
 	end
 	
-	if not (options.autoplay) then return end
+	if not (options.autoplay.value) then return end
 	for e, t in pairs (emitters) do
 		if not (e == 'index') then		
 			for track, _ in pairs(t.playlist) do				
 				local trk = tracklist.tracks[track]				
 				local tmp = tracklist.tmpvalues[track]
 				if (trk.rnd > 0) then					
-					tmp.timeframe=tmp.timeframe-updateIntervalSeconds
+					tmp.timeframe=tmp.timeframe - options.checkrate.value
 					if (tmp.timeframe < 0) then
 						tmp.timeframe = 0
 						if (random(trk.rnd) == 1) then						
-							DoPlay(track, options.volume, t.pos.x, t.pos.y, t.pos.z)
-							tmp.timeframe=trk.minlooptime
+							DoPlay(track, options.volume.value, t.pos.x, t.pos.y, t.pos.z)
+							tmp.timeframe  = trk.minlooptime
 						end
 					end
 				end
@@ -324,7 +842,7 @@ function DoPlay(track, vol, x, y, z)
 		local tr=track
 		if (tracklist.tracks[tr].generated) then	tr=tracklist.tracks[tr].file	end		
 		if (PlaySound(tr, vol, x or nil, y or nil, z or nil)) then
-			if (options.verbose) then
+			if (options.verbose.value) then
 				Echo("<ambient player>: playing "..track.." at volume: "..string.format("%.2f", vol))
 				if (x) then Echo("at Position: "..x..", "..y..", "..z) end
 			end
@@ -570,13 +1088,13 @@ function Invoke(args)
 		if (args[2]) then			
 			local vol
 			if (args[3]) then vol = tonumber(args[3])	end
-				vol=vol or options.volume							
+				vol=vol or options.volume.value
 				local p = {x,y,z}
 				if (tracklist.tracks[args[2]]) then
 					if (tracklist.tracks[args[2]].emitter) then						
 						p = emitters[tracklist.tracks[args[2]].emitter].pos						
 					end
-				end
+				end				
 				return DoPlay(args[2], vol, p.x, p.y, p.z)							
 		else
 			Echo("<ambient player>: specify a track")
@@ -842,7 +1360,8 @@ function ReloadSoundDefs()
 				--params.timeframe=secondsToUpdate+params.offset
 				--params.generated=false
 		end
-	end		
+	end	
+	UpdateGUI()	
 end
 
 
@@ -883,13 +1402,13 @@ function Save(list, path, file)
 	
 	if (list == 0 or list == 1) then --options
 		file = file or OPTIONS_FILENAME
-		local options = {config = config}
+		local opt = {config = config}
 		local w = {}
 		for k, v in pairs(words) do
 			if not (type(v) == 'table') then w.k = v end
 		end
-		options.words = w
-		if (WriteTable(options, path..file, 'Options', OPTIONS_HEADER)) then Echo("<ambient player>: saved options to "..path..file)
+		opt.words = w
+		if (WriteTable(opt, path..file, 'Options', OPTIONS_HEADER)) then Echo("<ambient player>: saved options to "..path..file)
 		else Echo("<ambient player>: failed to save options") return false end
 		file = nil
 	end	
@@ -940,6 +1459,62 @@ function WriteTable(t, filename, tname, header)
 	Echo("<ambient player>: done!")
 	return true
 end
+
+--[[
+function widget:Initialize()
+	if (not WG.Chili) then
+		widgetHandler:RemoveWidget()
+		return
+	end
+	
+	Chili = WG.Chili
+	Image = Chili.Image
+	Button = Chili.Button
+	Checkbox = Chili.Checkbox
+	Window = Chili.Window
+	Label = Chili.Label
+	screen0 = Chili.Screen0	
+	ScrollPanel = Chili.ScrollPanel
+	StackPanel = Chili.StackPanel
+
+	color2incolor = Chili.color2incolor
+	incolor2color = Chili.incolor2color
+	
+	green 	= color2incolor(0,1,0,1)
+	red 	= color2incolor(1,0,0,1)
+	orange 	= color2incolor(1,0.4,0,1)
+	yellow 	= color2incolor(1,1,0,1)
+	cyan 	= color2incolor(0,1,1,1)
+	white 	= color2incolor(1,1,1,1)
+
+	SetupPanels()
+	
+	Spring.SendCommands({"info 0"})
+	lastSizeX = window_cpl.width
+	lastSizeY = window_cpl.height
+	
+	self:LocalColorRegister()
+end
+
+function widget:Shutdown()
+        self:LocalColorUnregister()
+end
+
+function widget:LocalColorRegister()
+	if WG.LocalColor and WG.LocalColor.RegisterListener then
+		WG.LocalColor.RegisterListener(widget:GetInfo().name, SetupPlayerNames)
+	end
+end
+
+function widget:LocalColorUnregister()
+	if WG.LocalColor and WG.LocalColor.UnregisterListener then
+		WG.LocalColor.UnregisterListener(widget:GetInfo().name)
+	end
+end
+--]]
+
+
+
 
 
 
