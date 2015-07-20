@@ -1,0 +1,817 @@
+--[[
+TODO:
+- add emitters, emitters graphical representation, figure out how tracks and emitters work together
+- restructure?
+- slash words and vars
+- build writable tables for options
+- save options, playlist, emitters support (good target for own file)
+- remake initialize() to account for list files
+- find out how to find out about file sizes and lengths
+- find out how to create folders
+- implement log
+--]]
+
+local versionNum = '0.22'
+
+function widget:GetInfo()
+  return {
+    name      = "Ambient Player",
+    desc      = "v"..(versionNum).." a very basic ambient sound mixer",
+    author    = "Klon",
+    date      = "dez 2014",
+    license   = "GNU GPL, v2 or later",
+    layer     = -1,
+    enabled   = true,
+  }
+end	
+
+local OPTIONS_FILENAME = 'ambient_options.lua'
+local SOUNDDEF_FILENAME = 'ambient_playlist.lua'
+local EMITTERS_FILENAME = 'ambient_emitters.lua'
+local SAVETABLE_FILENAME = 'ambient_savetable.lua'
+local TMP_FILENAME = 'ambient_tmp.lua'
+local LOG_FILENAME = 'ambient_log.txt'
+
+local PATH_LUA = LUAUI_DIRNAME
+local PATH_CONFIG = 'Configs/'
+local PATH_WIDGET = 'Widgets/'
+local PATH_UTIL = 'Utilities/'
+local PATH_SOUNDS = 'Sounds/Ambient/'
+
+local SOUNDDEF_HEADER = ''
+local OPTIONS_HEADER = ''
+local EMITTERS_HEADER = ''
+
+local SOUNDITEM_TEMPLATE = {
+	-- sounditem stats
+	file = "",
+	gain = 1.0,
+	pitch = 1.0,
+	pitchMod = 0.0,
+	gainMod = 0.05,
+	priority = 0,
+	maxconcurrent = 2, 
+	maxdist = math.huge, 
+	preload = true,
+	in3d = true,
+	rolloff = 0,
+	--
+	length = "?",
+	-- 
+	rnd = 0,	
+	minlooptime = 0,
+	onset = 1,
+	
+}
+local TMPVALUES_TEMPLATE = {
+	timeframe = 1,
+	generated=true,	
+}
+local EMITTER_TEMPLATE = {
+	pos = {
+			x = 0,
+			y = 0,
+			z = 0,
+		},
+	playlist = {},
+	
+	--mods = {},	
+}
+
+local readFolder = PATH_SOUNDS
+local mapFolder
+
+local PlaySound= Spring.PlaySoundFile
+--local PlayStream= Spring.PlaySoundStream
+local random=math.random
+
+local updateIntervalSeconds = 1.0
+local secondsToUpdate = 0.1
+local gameStarted = Spring.GetGameFrame() > 0
+local inited = false
+
+local tracklist = {
+	tracks = {}
+	tmpvalues = {}
+	}
+
+local emitters = {
+	index = 0
+	global = {
+		pos = {
+				x=nil,
+				y=nil,
+				z=nil,
+			}
+		playlist = {}
+	}
+}
+
+local ambientVolume = 1.0
+local verbose = true
+local autoplay = false
+local showEmitters = true
+local autosave = true
+local autoreload = true
+local logfile = [[]]
+
+local mx, my
+local needReload = false
+
+local SaveTable, MakeSortedTable, CompareKeys, valueTypes, keyTypes, encloseKey, encloseStr, keyWordSet, keyWords, saveTables, indendtString
+
+local words = {
+		["utl"] = 	{
+						get = function () return PATH_UTIL end,
+						set = function (s) PATH_UTIL = s return true end,
+					},
+		["wdg"] = 	{
+						get = function () return PATH_WIDGET end,
+						set = function (s) PATH_WIDGET = s return true end,
+					},		
+		["cfg"] =	{
+						get = function () return PATH_CONFIG end,
+						set = function (s) PATH_CONFIG = s return true end,
+					},
+		["snd"] =	{
+						get = function () return PATH_SOUNDS end,
+						set = function (s) PATH_SOUNDS = s return true end,
+					},
+		["ui"] =	{
+						get = function () return PATH_LUA end,
+						set = function (s) PATH_LUA = s return true end,
+					},	
+		["map"] =	{
+						get = function () return mapFolder end,
+						set = function (s) mapFolder = s return true end,
+					},
+		["rd"] =	{
+						get = function () return readFolder end,
+						set = function (s) readFolder = s return true end,
+					},
+		}	
+
+		
+words.get = function(wrd)
+	local word = wrd:sub(2) -- cut off the $
+	if (word == "") then return wrd end
+	if (words[word]) then
+		if (words[word].get) then return words[word].get()
+		else return words[word]
+		end
+	else
+		return wrd
+	end
+end		
+
+
+words.set = function(word, s)
+	if (word == "") then return false end
+	if (words[word]) then
+		if (words[word].set) then return words[word].set(s)
+		else words[word]=s return true
+		end
+	else
+		words[word] = s
+		return true
+	end
+end		
+
+
+function widget:Initialize()
+
+	local cpath = PATH_LUA..PATH_CONFIG
+	local upath = PATH_LUA..PATH_UTIL
+
+	--if VFS.FileExists(cpath..LOG_FILENAME, VFS.RAW_FIRST) then
+	--	log = log..VFS.Include(cpath..LOG_FILENAME, nil, VFS.RAW_FIRST)
+
+	
+	if VFS.FileExists(cpath..OPTIONS_FILENAME, VFS.RAW_FIRST) then
+		VFS.Include(cpath..OPTIONS_FILENAME, nil, VFS.RAW_FIRST)
+	else
+		Echo("<ambient player>: no config found, using defaults")
+	end	
+		
+	if VFS.FileExists(cpath..SOUNDDEF_FILENAME, VFS.RAW_FIRST) then
+		if (Spring.LoadSoundDef(cpath..SOUNDDEF_FILENAME)) then
+		else Echo("<ambient player>: failed to load sounddefs")		
+		end
+		
+		local list = VFS.Include(cpath..SOUNDDEF_FILENAME, nil, VFS.RAW_FIRST)			
+		if (list.Sounditems == nil) then Echo("<ambient player>: sounddef file was empty")			
+		else
+			tracklist.tracks=list.Sounditems
+			for track, params in pairs (tracklist.tracks) do
+				tracklist.tmpvalues[track] = {timeframe = params.onset, generated = false}
+				--params.timeframe=secondsToUpdate+params.offset
+				--params.generated=false
+			end
+		end		
+	else
+		Echo("<ambient player>: no sounddefs found")
+		tracks = {}		
+	end
+	
+	if VFS.FileExists(cpath..EMITTERS_FILENAME, VFS.RAW_FIRST) then
+		emitters = VFS.Include(cpath..EMITTERS_FILENAME, VFS.RAW_FIRST) or emitters
+	end	
+	
+	if VFS.FileExists(upath..SAVETABLE_FILENAME, VFS.RAW_FIRST) then			
+		SaveTable, MakeSortedTable, CompareKeys, valueTypes, keyTypes, encloseKey, encloseStr, keyWordSet, keyWords, saveTables, indendtString
+			= VFS.Include(upath..SAVETABLE_FILENAME, nil, VFS.RAW_FIRST)		
+		Echo("<ambient player>: loaded savetable.lua")
+	else Echo("<ambient player>: failed to load savetable.lua")
+	end
+	
+	inited=true
+end
+
+
+function widget:Shutdown()	
+	if (autosave) then Save() end
+end
+
+
+function ReloadSoundDefs()	
+	local cpath = mapFolder..PATH_LUA..PATH_CONFIG
+	if VFS.FileExists(cpath..TMP_FILENAME, VFS.RAW_FIRST) then
+		Save(2, cpath, TMP_FILENAME)
+		if (Spring.LoadSoundDef(cpath..TMP_FILENAME)) then
+		else Echo("<ambient player>: failed to load sounddefs")		
+		end		
+		list = VFS.Include(cpath..TMP_FILENAME, nil, VFS.RAW_FIRST)			
+		if (list.Sounditems == nil) then Echo("<ambient player>: sounddef file was empty")			
+		else
+			tracklist.tracks=list.Sounditems
+			for track, params in pairs (tracklist.tracks) do
+				if not (tracklist.tmpvalues[track]) then 
+					tracklist.tmpvalues[track] = {timeframe = params.onset, generated = false} --should never happen
+					Echo("THIS SHALL NEVER HAPPEN!")
+				end
+				--params.timeframe=secondsToUpdate+params.offset
+				--params.generated=false
+			end
+		end	
+	end
+	
+end
+
+
+function widget:GameStart()
+	gameStarted = true
+	
+	if not (mapFolder) then	mapFolder= 'maps/'..Game.mapName..'.sdd/' end
+	Echo ("The map directory is assumed to be "..mapFolder.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")	
+end
+
+
+function widget:Update(dt) 	
+	if not (gameStarted) then return end
+	mx,my = Spring.GetMouseState()
+	if (needReload and autoreload) then Reload() end		
+	if (secondsToUpdate>0) then	secondsToUpdate=secondsToUpdate-dt return
+	else secondsToUpdate=updateIntervalSeconds
+	end
+	
+	if not (autoplay) then return end
+	for emit, _ in pairs (emitters) do
+		for track, _ in pairs(emitters.playlist) do
+			local trk = tracklist.tracks[track]
+			local tmp = tracklist.tmpvalues[track]
+			if (trk.rnd > 0) then
+				tmp.timeframe=tmp.timeframe-updateIntervalSeconds
+				if (tmp.timeframe < 0) then
+					tmp.timeframe = 0
+					if (random(trk.rnd) == 1) then						
+						DoPlay(trk, ambientVolume, emit.pos[1], emit.pos[2], emit.pos[3])
+						tmp.timeframe=tmp.minlooptime
+					end
+				end
+			end
+		end
+	end
+end	--[[
+	for track, params in pairs (tracks) do		
+		if (params.rnd > 0) then --skip disabled tracks entirely
+			params.timeframe=params.timeframe-updateIntervalSeconds	
+			if (params.timeframe < 0) then
+				params.timeframe=0			
+				if (random(params.rnd)==1) then
+					DoPlay(track,ambientVolume)
+					params.timeframe=params.length+params.offset				
+				end
+			end	
+		end	
+	end	
+end--]]
+
+
+function DoPlay(track, vol, x, y, z) 
+	if not (tracks[track]) then Echo("<ambient player>: track not found!") return false
+	else
+		local tr=track
+		if (tracks[tr].generated) then	tr=tracks[tr].file	end
+		if (PlaySound(tr, vol, x, y, z)) then
+			if (verbose) then
+				Echo("<ambient player>: playing "..track.." at volume: "..string.format("%.2f", vol))
+			end
+			return true		
+		end	
+		Echo("<ambient player>: playback of "..track.." failed, not an audio file?")
+		return false
+	end
+end
+
+
+function Echo(s)
+	Spring.Echo(s)	
+	logfile = logfile.."\n"..s
+end
+
+
+function widget:TextCommand(command)		
+	if (command:sub(1,3)== "ap.") then	
+		local args = ParseInput(" "..command:sub(4))
+		if (args) then
+			for k, v in pairs(args) do
+				Echo(k.."> "..v)
+			end
+		Invoke(args)
+		end		
+	end			
+end
+
+
+function ParseInput(s)	
+	local i = 1
+	local args = {}
+	
+	s = string.gsub (s, "(%$%w+)", words.get) -- words encapsulated in other words will not get resolved	
+	
+	repeat
+		local sq, eq = string.find (s, "[%{].-[%}]")  --supercede other brackets & quotes
+		if not  (sq or eq) then
+		sq, eq = string.find (s, "[%(%[].-[%)%]]")	--supercedes quote block
+		end
+		if not (sq or eq) then
+			sq, eq = string.find (s, "[\"\'].-[\"\']")	-- is a block :)
+		end
+		if (sq or eq) then --<< never happens
+			if (sq and eq) then
+				--while (s:sub(sq,sq) == " ") do sq = sq + 1 end
+				local ss = s:sub(1, sq - 1)	-- get all arguments before the block
+				for a in string.gmatch(ss, "%s+(%S+)") do 
+					args[i] = a
+					i = i + 1
+				end
+				args[i] = s:sub(sq + 1 , eq -1) -- get the argument in the block
+				i = i + 1
+				s = s:sub(eq + 1)
+				--sq = string.find (s, "[\'\"%(%[]")	 
+			else
+				Echo("<ambient player>: illegal argument(s) - lone bracket")
+				return {}
+			end
+		else break end	
+	until (false)
+	
+	for a in string.gmatch(s, "%s+(%S+)") do
+		Echo(a)
+		args[i] = a
+		i = i +1
+	end
+	return args
+end	
+
+
+function Invoke(args)
+	
+	-- needs adaption to emitters etc
+	if (args[1] == "set") then
+
+		if (args[2]) then 
+		-- disallow editing non-existant items, to avoid creating bogus items
+		
+			if not (SOUNDITEM_TEMPLATE[args[2]]) then
+				Echo("<ambient player>: unrecognized property")
+				return false
+			else
+			
+				if (args[3]) then
+								
+					if not (tracks[args[3]]) then
+						Echo("<ambient player>: cannot find target!")
+						return false
+					end
+					
+					if (args[4]) then
+					
+						--local tipe = type(tracks[args[3]][args[2]])
+						local tipe = type(SOUNDITEM_TEMPLATE[args[2]]) --read from the template instead
+						--Echo("parameter of type: "..tipe)						
+						if (tipe == "string") then
+							tracks[args[3]][args[2]]=tostring(args[4])
+							
+						elseif (tipe == "boolean") then
+							if (args[4] == "true") then 
+								tracks[args[3]][args[2]]=true
+							elseif (args[4] == "false") then
+								tracks[args[3]][args[2]]=false
+							else
+								Echo("<ambient player>: only true/false allowed for this value")
+								return false
+							end
+							
+						elseif (tipe == "number") then
+							local number = tonumber(args[4])
+							if (number) then
+								tracks[args[3]][args[2]]=number
+							else
+								Echo("<ambient player>: not a number")
+								return false
+							end							
+						end						
+						Echo("param: "..args[2].." target: "..args[3].." set to: "..tostring(tracks[args[3]][args[2]]))
+						return true
+						
+					else
+						Echo("<ambient player>: no value specified")
+						Echo("param: "..args[2].." target: "..args[3].." is: "..tostring(tracks[args[3]][args[2]]))
+						return false
+					end
+					
+				else
+					Echo("<ambient player>: no target specified")
+					return false
+				end
+				
+			end	
+			
+		else
+			Echo("<ambient player>: no arguments specified")
+			return false
+		end
+		return false
+	end
+	
+	-- play a sounditem, by name
+	if (args[1] == "play") then								
+		if (args[2]) then			
+			local vol
+			if (args[3]) then vol = tonumber(args[3])	end
+				vol=vol or ambientVolume			
+			return DoPlay(args[2], vol)							
+		else
+			Echo("<ambient player>: specify a track")
+			return false
+		end
+	end
+	
+	-- load a single sound file from the read folder and generate a table entry for it
+	-- if no name for the entry was specified, it will use that files name after a '$'
+	-- file can then by accessed by that name, and that name only
+	-- arguments:
+	-- file: mandatory
+	-- name to use in the playlist: optional, defaults to filename
+	-- length in seconds: optional: optional, defaults to 10
+	-- offset in seconds: optional, defaults to 0
+	-- rnd as play once per <rnd>seconds on average: optional, defaults to 0 (disabled)
+	-- timeframe(seconds to next playback): optional, defaults to 1
+	if (args[1] == "load") then		
+		if (args[2]) then
+			if (args[3]) then
+				if (tonumber(args[3])) then -- skip name if none was supplied, but numbers
+					return LoadFromFile(readFolder, args[2], nil, args[3], args[4], args[5], args[6])
+				end
+			end
+			return LoadFromFile(readFolder, args[2], args[3], args[4], args[5], args[6], args[7])			
+		else
+			Echo("<ambient player>: specify a file in "..readFolder)
+			return false
+		end		
+	end
+	
+	
+	-- if the player will announce titles when playing
+	if (args[1] == "verbose") then
+		verbose = not (verbose)
+		if (verbose) then
+			Echo("<ambient player>: verbose on")
+		else 
+			Echo("<ambient player>: verbose off")
+		end
+		return true
+	end
+	
+	-- general volume control
+	if (args[1] == "vol") then	
+		local number = tonumber(args[2])
+		if (number) then			
+			if (number < 0) then ambientVolume = 0
+			elseif (number > 2) then ambientVolume = 2
+			else ambientVolume=number
+			end
+			Echo("<ambient player>: set ambient volume "..string.format("%.2f",ambientVolume))
+			return true
+		end
+		Echo("<ambient player>: not a number")
+		return false
+	end	
+	
+	-- echo whole playlist or display single item properities
+	if (args[1] == "list") then
+		
+		i = 2
+		while (args[i]) do
+			if (tracks[args[i]]) then
+				Echo("<ambient player>: ---"..args[i].."---")
+				for param, value in pairs(tracks[args[i]]) do
+					Echo(tostring(param).." : "..tostring(value))
+				end				
+			else			 
+				Echo("<ambient player>: no such track: "..args[i])
+			end	
+			i = i + 1			
+		end	if (i>2) then return true end
+		
+		Echo("<ambient player>: ---playlist---")
+		for track, params in pairs (tracks) do
+			if not (params.rnd) then params.rnd = 0 end -- failsafe
+			if (params.rnd > 1) then
+				Echo("Random "..(params.rnd)..": "..track.." - "..(params.length).."s")
+			elseif (params.rnd == 1) then
+				Echo("Loop: "..track.." - "..(params.length).."s")
+			else 
+				Echo("Disabled: "..track.." - "..(params.length).."s")
+			end
+		end
+		return true
+	end
+	
+	-- pause playlist
+	if (args[1] == "hold") then
+		autoplay = not (autoplay)
+		if (autoplay) then
+			Echo("<ambient player>: play")
+		else 
+			Echo("<ambient player>: hold")
+		end
+		return true
+	end
+
+	-- show contents of a directory
+	-- with no arguments it shows the root of the VFS
+	-- 'read' and 'write' will show read- and write directory variables respectivly
+	-- otherwise the argument will be taken as a path
+	if (args[1] == "dir") then
+		
+		if not (args[2]) then
+			Echo("<ambient player>: you must specify a path")
+			return false
+		end
+		
+		local pattern = "."
+		if (args[3]) then
+				pattern = string.gsub (args[3], "[%.%*]", {["."] = "%.", ["*"] = ".+" })
+				--if (pattern == "%." or pattern == ".+%.") then pattern = "[^%.]" end
+		end
+				
+		local path=args[2]			
+		if not (path:sub(-1) == ('/' or '\\')) then	path=path..'/'	end		
+		
+		local files = VFS.DirList(path)
+		local subdirs = VFS.SubDirs(path)		
+		
+		Echo ("----- "..path.." -----")		
+		for dir, text in pairs(subdirs) do
+			if (pattern == "%." or pattern == ".+%.") then
+				if (string.match(text, "[%.]")) then Echo(text) end
+			else
+				if (string.match(text, pattern)) then Echo(text) end
+			end	
+		end
+		for file, text in pairs(files) do
+			if (pattern == "%." or pattern == ".+%.") then
+				if not (string.match(text, "[%.]")) then Echo(text) end
+			else
+				if (string.match(text, pattern)) then Echo(text) end
+			end	
+		end
+		return true
+	end
+	
+	
+	if (args[1] == "save") then	
+	
+		if (args[2]) then --type
+			if (string.match (args[2], "^[e]")) then
+				Save(3)		
+			elseif (string.match (args[2], "^[o]")) then
+				Save(1)
+			elseif (string.match (args[2], "^[p]")) then
+				Save(2)
+			else
+				Echo("<ambient player>: type must be: e..., p..., o...")
+				Echo("(emitters, playlist, options)")
+			end			
+						
+		else
+			Echo("<ambient player>: saving all to write dir...")
+		end	
+
+		return false	
+	end
+	
+	--defunct
+	if (args[1] == "map") then
+		if (args[2]) then
+			if VFS.MapArchive(args[2]) then
+				Echo("success") 
+				return true
+			end				
+		end
+		Echo("failure")
+		return false
+	end
+	
+	if (args[1] == "env") then
+		if (args[2]) then
+			Echo("\n-------"..args[2].."--------")
+			--local file = io.open("G.txt", "w")
+			---[[
+			local G = getfenv()
+			local i = 0
+			if not (G[args[2]]) then return end
+			for k, v in pairs(G[args[2]]) do
+				--file:write("key: "..k.." str:"..tostring(k).." val"..tostring(v).."\n")
+				--if not (type(k) == 'table') then
+				Echo (tostring(k))
+				--end
+				i=i +1
+				if (i==10000) then break end
+			end
+			--]]
+			--Echo(words.get("$read"))
+			--file:close()
+		end	
+	end
+
+	if (args[1] == "do") then
+		if (args[2]) then
+			loadstring(args[2])()
+		end
+		return
+	end
+		
+	if (args[1] == "def") then
+		if (args[2]) then
+			if (args[3]) then
+				return words.set(args[2], args[3])				
+			end		
+		else
+			Echo ("----- ".."defines".." -----")	
+			for k,v in pairs(words) do 
+				if (type(v) == 'table') then
+					Echo('$'..k.." -> "..v.get())
+				elseif (type(v) ~= 'function') then
+					Echo('$'..k.." -> "..v)
+				end
+				
+			end
+		end
+		return
+	end
+	
+	if (args[1]) == 'adde' then
+		AddEmitter(args[2], tonumber(args[3]))
+	end
+	
+	if (args[1] == "show") then
+		showEmitters = not showEmitters
+		return
+	end
+	Echo("<ambient player>: not a valid command")	
+	
+end
+
+
+function AddEmitter(name, yoffset)
+	local p
+	yoffset = yoffset or 0
+	if (Spring.IsAboveMiniMap(mx, my)) then return 
+	else _, p = Spring.TraceScreenRay(mx,my,true)		
+	end	
+	local pstring = math.floor(p[1])..", "..math.floor(p[3])..", "..math.floor(p[2]).." + "..math.floor(yoffset)	
+	if not (name) then
+		name = emitters.index
+		emitters.index = emitters.index + 1
+	end		
+	
+	if (emitters[name]) then
+		Echo("<ambient player>: that name is already taken")
+		return false	
+	end
+	p[2] = p[2] + yoffset
+
+	local e = {pos = {}, sounds = {}}
+	e.pos = {x=p[1],y=p[2],z=p[3]}
+	e.playlist = {}
+	emitters[name]=e
+	Spring.MarkerAddPoint(p[1],p[2],p[3],"(emitter "..name.."): "..pstring,true)
+
+end
+
+
+function LoadFromFile(folder, file, name)	
+	Echo("<ambient player>: loading "..file.." ...")
+	if VFS.FileExists(folder..file) then
+		local ending=file:sub(-4,-1)
+		if not (ending=='.ogg' or ending =='.wav') then
+				Echo("<ambient player>: must be *.wav or *.ogg file!")
+			return false
+		end
+
+		local shortname = name or ("_"..file:sub(1,-5))
+		
+		if (tracks[shortname] ~= nil) then
+			Echo("<ambient player>: a sounditem with that name already exists!")
+			return false		
+		else 		
+			if not (PlaySound(folder..file, 0)) then -- preload the file and generate sounditem
+					Echo("<ambient player>: unable to load file. not a soundfile?")
+					return false
+			end 		
+			
+			tracklist.tracks[shortname]={}
+			tracklist.tmpvalues[shortname]={}
+			for param, value in pairs (SOUNDITEM_TEMPLATE) do tracklist.tracks[shortname][param] = value end		
+			tracklist.tmpvalues[shortname].timeframe = tracklist.tracks[shortname].onset
+			tracklist.tmpvalues[shortname].generated = true
+			tracklist.tracks[shortname].file=folder..file			
+			Echo("<ambient player>: added playlist entry: "..shortname)
+		end							
+	else 
+		Echo("<ambient player>: file not found!")
+		return false
+	end
+	Echo("<ambient player>: loaded "..file.." successfully!")
+end
+
+
+function Save(list, path, file) 
+	
+	path = path or writeFolder
+	
+	if (list == 0 or list == 1) then --options
+		file = file or OPTIONS_FILENAME
+		WriteTable(options, path..file, 'Options', OPTIONS_HEADER)
+	end	
+	
+	if (list == 0 or list == 2) then --playlist	
+		file = file or SOUNDDEF_FILENAME
+		local gentracks = {}
+		for item, params in pairs(tracks) do
+			if (params.generated) then gentracks[item]=true params.generated=false end
+		end
+	
+		local dumdum = {}
+		dumdum.Sounditems = tracks		
+		WriteTable(dumdum, path..file, 'Sounds', SOUNDDEF_HEADER)
+	
+		for item, params in pairs(tracks) do
+			if (gentracks[item]) then params.generated=true	end
+		end		
+	end	
+	
+	if (list == 0 or list == 3) then --emitters
+		file = file or EMITTERS_FILENAME
+		WriteTable(emitters, path..file, 'Emitters', EMITTERS_HEADER)
+	end
+end
+
+
+function WriteTable(t, filename, tname, header)
+
+	if not (filename) then 
+		Echo("<ambient player>: you must specify a file")
+		return false 
+	end
+	
+	Echo("<ambient player>: saving "..filename.." ...")
+	local file = io.open(filename, 'w')
+	
+	if (file == nil) then 
+		Echo("<ambient player>: failed to open "..filename)
+		return false 
+	end
+	
+	if (header) then file:write(header..'\n') end
+	
+	file:write('local '..tname..' = ')
+	SaveTable(t, file, '')
+	file:write('}\nreturn '..tname)
+	
+	file:close()
+	Echo("<ambient player>: done!")
+end
