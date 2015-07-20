@@ -12,9 +12,13 @@ TODO:
 - find out how to create folders 
 - implement log
 - disallow track names with only numbers
+
+- emit zones
+- mutex groups
+- chili support
 --]]
 
-local versionNum = '0.24'
+local versionNum = '0.25'
 
 function widget:GetInfo()
   return {
@@ -89,12 +93,6 @@ options = {
 	
 
 local config = {
-	--ambientVolume = 1.0,
-	--verbose = true,
-	--autoplay = false,
-	--showEmitters = true,
-	--autosave = true,
-	--autoreload = true,
 	path_sounds = 'Sounds/Ambient/',
 	path_read = 'Sounds/Ambient/',
 	path_map = nil,
@@ -110,7 +108,7 @@ local PlaySound = Spring.PlaySoundFile
 local PlayStream = Spring.PlaySoundStream
 local random=math.random
 
--- except those arent actually constants
+-- except those arent actually constants?
 local OPTIONS_FILENAME = 'ambient_options.lua'
 local SOUNDDEF_FILENAME = 'ambient_sounddefs.lua'
 local EMITTERS_FILENAME = 'ambient_emitters.lua'
@@ -293,12 +291,12 @@ end
 function widget:Update(dt) 	
 	if not (gameStarted) then return end
 	mx,my = Spring.GetMouseState()
-	if (needReload and config.autoreload) then ReloadSoundDefs() needReload = false end		
+	if (needReload and options.autoreload) then ReloadSoundDefs() needReload = false end		
 	if (secondsToUpdate>0) then	secondsToUpdate=secondsToUpdate-dt return
 	else secondsToUpdate=updateIntervalSeconds
 	end
 	
-	if not (config.autoplay) then return end
+	if not (options.autoplay) then return end
 	for e, t in pairs (emitters) do
 		if not (e == 'index') then		
 			for track, _ in pairs(t.playlist) do				
@@ -309,7 +307,7 @@ function widget:Update(dt)
 					if (tmp.timeframe < 0) then
 						tmp.timeframe = 0
 						if (random(trk.rnd) == 1) then						
-							DoPlay(track, config.ambientVolume, t.pos.x, t.pos.y, t.pos.z)
+							DoPlay(track, options.volume, t.pos.x, t.pos.y, t.pos.z)
 							tmp.timeframe=trk.minlooptime
 						end
 					end
@@ -326,7 +324,7 @@ function DoPlay(track, vol, x, y, z)
 		local tr=track
 		if (tracklist.tracks[tr].generated) then	tr=tracklist.tracks[tr].file	end		
 		if (PlaySound(tr, vol, x or nil, y or nil, z or nil)) then
-			if (config.verbose) then
+			if (options.verbose) then
 				Echo("<ambient player>: playing "..track.." at volume: "..string.format("%.2f", vol))
 				if (x) then Echo("at Position: "..x..", "..y..", "..z) end
 			end
@@ -572,7 +570,7 @@ function Invoke(args)
 		if (args[2]) then			
 			local vol
 			if (args[3]) then vol = tonumber(args[3])	end
-				vol=vol or config.ambientVolume							
+				vol=vol or options.volume							
 				local p = {x,y,z}
 				if (tracklist.tracks[args[2]]) then
 					if (tracklist.tracks[args[2]].emitter) then						
@@ -611,33 +609,6 @@ function Invoke(args)
 			return false
 		end		
 	end
-	
-	
-	-- if the player will announce titles when playing
-	if (args[1] == "verbose") then
-		config.verbose = not (config.verbose)
-		if (config.verbose) then
-			Echo("<ambient player>: verbose on")
-		else 
-			Echo("<ambient player>: verbose off")
-		end
-		return true
-	end
-	
-	-- general volume control
-	if (args[1] == "vol") then	
-		local number = tonumber(args[2])
-		if (number) then			
-			if (number < 0) then config.ambientVolume = 0
-			elseif (number > 2) then config.ambientVolume = 2
-			else config.ambientVolume=number
-			end
-			Echo("<ambient player>: set ambient volume "..string.format("%.2f",config.ambientVolume))
-			return true
-		end
-		Echo("<ambient player>: not a number")
-		return false
-	end	
 	
 	-- echo whole playlist or display single item properities
 	if (args[1] == "list") then		
@@ -681,18 +652,6 @@ function Invoke(args)
 		end
 		return true
 	end
-	
-	-- pause playlist
-	if (args[1] == "hold") then
-		config.autoplay = not (config.autoplay)
-		if (config.autoplay) then
-			Echo("<ambient player>: play")
-		else 
-			Echo("<ambient player>: hold")
-		end
-		return true
-	end
-
 	
 	if (args[1] == "dir") then		
 		if not (args[2]) then
@@ -849,12 +808,7 @@ function Invoke(args)
 		end
 		return
 	end
---[[
-	if (args[1] == "show") then
-		config.showEmitters = not config.showEmitters
-		return
-	end
---]]
+	
 	if (args[1] == "reload") then
 		ReloadSoundDefs()
 		return
@@ -986,3 +940,50 @@ function WriteTable(t, filename, tname, header)
 	Echo("<ambient player>: done!")
 	return true
 end
+
+
+
+	--[[
+	-- if the player will announce titles when playing
+	if (args[1] == "verbose") then
+		config.verbose = not (config.verbose)
+		if (config.verbose) then
+			Echo("<ambient player>: verbose on")
+		else 
+			Echo("<ambient player>: verbose off")
+		end
+		return true
+	end
+	
+	-- general volume control
+	if (args[1] == "vol") then	
+		local number = tonumber(args[2])
+		if (number) then			
+			if (number < 0) then config.ambientVolume = 0
+			elseif (number > 2) then config.ambientVolume = 2
+			else config.ambientVolume=number
+			end
+			Echo("<ambient player>: set ambient volume "..string.format("%.2f",config.ambientVolume))
+			return true
+		end
+		Echo("<ambient player>: not a number")
+		return false
+	end	
+
+	-- pause playlist
+	if (args[1] == "hold") then
+		options.autoplay = not (options.autoplay)
+		if (options.autoplay) then
+			Echo("<ambient player>: play")
+		else 
+			Echo("<ambient player>: hold")
+		end
+		return true
+	end
+
+	if (args[1] == "show") then
+		config.showEmitters = not config.showEmitters
+		return
+	end
+
+	--]]
