@@ -93,7 +93,7 @@ options = {
 	
 
 local config = {
-	path_sounds = 'Sounds/Ambient/',
+	path_sound = 'Sounds/Ambient/',
 	path_read = 'Sounds/Ambient/',
 	path_map = nil,
 }
@@ -130,6 +130,7 @@ local SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
 local HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
 local CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
 local PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
+local PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
 
 local HELPTEXT = [[generic info here]]
 
@@ -216,7 +217,7 @@ local emitters = {
 
 
 local logfile = [[]]
-local consoleText
+--local consoleText
 local mx, my
 local needReload = false
 
@@ -231,6 +232,7 @@ local emitters_controls = {}
 
 function widget:Initialize()
 
+	
 	if (not WG.Chili) then
 		widgetHandler:RemoveWidget()
 		return
@@ -333,8 +335,11 @@ end
 
 
 function widget:SetupGUI()
+
+
+
 	---------------------------------------------------- main frame ------------------------------------------------
-	 mainWindow = Window:New {
+	 window_main = Window:New {
 		x = '65%',
 		y = '25%',	
 		--dockable = false,
@@ -343,117 +348,120 @@ function widget:SetupGUI()
 		draggable = true,
 		resizable = true,
 		dragUseGrip = true,
-		clientWidth = 340,
+		clientWidth = 350,
 		clientHeight = 540,
 		backgroundColor = {0.8,0.8,0.8,0.9},		
 	}
-	tracklistLabel = Label:New {
+	label_overview = Label:New {
 		x = 0,
 		y = 20,
 		clientWidth = 260,
-		parent = mainWindow,
+		parent = window_main,
 		align = 'center',
 		caption = '-Track Overview-',
 		textColor = {1,1,0,0.9},		
 	}
-	tracklistScroll = ScrollPanel:New {
+	scroll_overview = ScrollPanel:New {
 		x = 0,
 		y = 40,
-		clientWidth = 308,
+		clientWidth = 340,
 		clientHeight = 420,
-		parent = mainWindow,
+		parent = window_main,
 		scrollPosX = -16,
 		horizontalScrollbar = false,
 		verticalScrollbar = true,
 		verticalSmartScroll = true,	
 		scrollbarSize = 6,
 		padding = {5,10,5,10},
+		--itemPadding = {5,10,5,10},
+		--margin = {20,20,20,20},
 		
 	}	
-	tracklistLayout = LayoutPanel:New {
+	layout_overview = LayoutPanel:New {
 		x = 0,
 		y = 0,
 		--clientWidth = 160,
 		--clientHeight = 420,
-		parent = tracklistScroll,
+		parent = scroll_overview,
 		orientation = 'vertical',
 		--orientation = 'left',
 		selectable = false,		
 		multiSelect = false,
-		maxWidth = 320,
-		minWidth = 320,
+		maxWidth = 340,
+		minWidth = 340,
 		itemPadding = {6,2,6,2},
 		itemMargin = {0,0,0,0},
 		autosize = true,
 		align = 'left',
-		columns = 3,
+		columns = 4,
 		left = 0,
-		centerItems = false,		
+		centerItems = false,	
+		--padding = {20,20,20,20},
+		--margin = {20,20,20,20},		
 	}	
+	
 	button_console = Button:New {
 		x = 0,
 		y = -32,
-		parent = mainWindow,		
+		parent = window_main,		
 		tooltip = 'Message Log',
 		clientWidth = 12,
 		clientHeight = 12,
 		caption = '',
 		OnClick = {	function()
-						consoleWindow:ToggleVisibility()
+						window_console:ToggleVisibility()
 					end
 					},
-	}
-	button_console_image = Image:New {
-		width = "100%",
-		height = "100%",		
-		y=0,
-		x=0,
-		file = CONSOLE_ICON,
-		parent = button_console,
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",				
+				file = CONSOLE_ICON,
+			},
 		}
+	}
+	
 	button_help = Button:New {
 		x = - 32,
 		y = -32,
-		parent = mainWindow,		
+		parent = window_main,		
 		tooltip = 'Halp!',
 		clientWidth = 12,
 		clientHeight = 12,
 		caption = '',
 		OnClick = {	function()
-						help_window:ToggleVisibility()
+						window_help:ToggleVisibility()
 					end
 					},
-	}
-	button_help_image = Image:New {
-		width = "100%",
-		height = "100%",		
-		y=0,
-		x=0,
-		file = HELP_ICON,
-		parent = button_help,
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",				
+				file = HELP_ICON,
+			},
+		}
 	}
 	
 	button_settings = Button:New {
 		x = - 74,
 		y = -32,
-		parent = mainWindow,		
+		parent = window_main,		
 		tooltip = 'Settings',
 		clientWidth = 12,
 		clientHeight = 12,
 		caption = '',
 		OnClick = {	function()
-						settings_window:ToggleVisibility()
+						window_settings:ToggleVisibility()
 					end
 					},
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",				
+				file = SETTINGS_ICON,
+			}
+		}	
 	}
-	button_settings_image = Image:New {
-		width = "100%",
-		height = "100%",		
-		y=0,
-		x=0,
-		file = SETTINGS_ICON,
-		parent = button_settings,
-	}	
 	
 	---------------------------------------------------- emitters window ------------------------------------------------	
 	
@@ -493,11 +501,11 @@ function widget:SetupGUI()
 		padding = {5,10,5,10},
 		
 	}	
-	
+	--window_emitters:Hide()
 	
 	
 	---------------------------------------------------- log window ------------------------------------------------	
-	consoleWindow = Window:New {
+	window_console = Window:New {
 		x = "20%",
 		y = "7%",
 		parent = screen0,
@@ -509,12 +517,12 @@ function widget:SetupGUI()
 		clientHeight = 140,
 		backgroundColor = {0.8,0.8,0.8,0.9},				
 	}
-	consoleScroll = ScrollPanel:New {
+	scroll_console = ScrollPanel:New {
 		x = 0,
 		y = 12,
 		clientWidth = 640,
 		clientHeight = 126,
-		parent = consoleWindow,
+		parent = window_console,
 		scrollPosX = -16,
 		horizontalScrollbar = false,
 		verticalScrollbar = true,
@@ -523,11 +531,11 @@ function widget:SetupGUI()
 		resizable = true,
 		autosize = true,
 	}
-	consoleText = TextBox:New {
+	textbox_console = TextBox:New {
 		x = 4,
 		y = 0,
 		autosize = true,
-		parent = consoleScroll,
+		parent = scroll_console,
 		align = 'left',
 		textColor = {0.9,0.9,0.0,0.9},
 		backgroundColor = {0.2,0.2,0.2,0.5},
@@ -537,7 +545,7 @@ function widget:SetupGUI()
 	
 	---------------------------------------------------- help window ------------------------------------------------
 
-	help_window = Window:New {
+	window_help = Window:New {
 		x = "20%",
 		y = "7%",
 		parent = screen0,
@@ -550,12 +558,12 @@ function widget:SetupGUI()
 		backgroundColor = {0.8,0.8,0.8,0.9},
 		
 	}
-	help_scroll = ScrollPanel:New {
+	scroll_help = ScrollPanel:New {
 		x = 0,
 		y = 12,
 		clientWidth = 400,
 		clientHeight = 384,
-		parent = help_window,
+		parent = window_help,
 		scrollPosX = -16,
 		horizontalScrollbar = false,
 		verticalScrollbar = true,
@@ -564,34 +572,112 @@ function widget:SetupGUI()
 		resizable = true,
 		autosize = true,
 	}
-	help_text = TextBox:New {
+	textbox_help = TextBox:New {
 		x = 4,
 		y = 0,
 		autosize = true,
-		parent = help_scroll,
+		parent = scroll_help,
 		align = 'left',
 		textColor = {0.8,0.8,0.8,0.9},
 		backgroundColor = {0.2,0.2,0.2,0.5},
 		borderColor = {0.3,0.3,0.3,0.5},
 		text = HELPTEXT,
 	}
-	help_window:Hide()
+	window_help:Hide()
 	
 		---------------------------------------------------- settings window ------------------------------------------------
-	settings_window = Window:New {
-		x = "50%",
-		y = "70%",
+	window_settings = Window:New {
+		x = "25%",
+		y = "25%",
 		parent = screen0,
 		caption = "Settings",
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
-		clientWidth = 200,
-		clientHeight = 300,
+		clientWidth = 450,
+		clientHeight = 250,
 		backgroundColor = {0.8,0.8,0.8,0.9},
-		
+		children = {
+			Label:New {
+				x = 0,
+				y = 30,
+				align = 'left',
+				caption = 'Map folder: $spring/',
+				textColor = {1,1,0,0.9},
+			},
+			Label:New {
+				x = 0,
+				y = 56,
+				align = 'left',
+				caption = 'Sounds folder: $map/',
+				textColor = {1,1,0,0.9},
+			},
+		}
+	}	
+	editbox_mapfolder = EditBox : New {
+		x = 123,
+		y = 26,
+		clientWidth = 297,
+		align = 'left',
+		text = config.path_map,
+		OnChange = 	{	function()
+						config.path_map=text
+						end
+					},
+		parent = window_settings,
+		--fontSize = 10,
+		textColor = {0.9,0.9,0.9,1},
+		borderColor = {0.2,0.2,0.2,0.5},
+		backgroundColor = {0.3,0.3,0.3,0.5},
+		tooltip = [[The .sdd folder this map resides in. By default, the Widget will save all its data in the maps folder structure. If you are running from an archive, ...]],
 	}
-	settings_window:Hide()
+	editbox_soundfolder = EditBox : New {
+		x = 132,
+		y = 52,
+		clientWidth = 288,
+		align = 'left',
+		text = config.path_sound,
+		OnChange = 	{	function()
+						config.path_sound=text
+						end
+					},
+		parent = window_settings,
+		--fontSize = 10,
+		textColor = {0.9,0.9,0.9,1},
+		borderColor = {0.2,0.2,0.2,0.5},
+		backgroundColor = {0.3,0.3,0.3,0.5},
+		tooltip = [[Where our sound files are read from. Note that while you can load sound files from anywhere on your computer, you eventually need to put them here if you wish to incorporate them into your map.]],
+	}
+	buttonimage_mapfolder = Image : New {
+		x = 434,
+		y = 30,
+		parent = window_settings,
+		file = SETTINGS_ICON,				
+		width = 14,
+		height = 14,
+		tooltip = 'Reset to default',
+		--color = {0,0.8,0.2,0.9},		
+		OnClick = {	function()		
+					config.path_map = 'maps/'..Game.mapName..'.sdd/'					
+					end
+				},				
+	}
+	buttonimage_soundfolder = Image : New {
+		x = 434,
+		y = 56,
+		parent = window_settings,
+		file = SETTINGS_ICON,				
+		width = 14,
+		height = 14,
+		tooltip = 'Reset to default',
+		--color = {0,0.8,0.2,0.9},		
+		OnClick = {	function()		
+					config.path_sound = 'Sounds/Ambient/'					
+					end
+				},				
+	}		
+	
+	window_settings:Hide()
 	--[[
 	
 	playerControls = Button:New{
@@ -629,6 +715,9 @@ end
 --------------------------------------------------------------------------------
 
 function UpdateGUI()
+	editbox_mapfolder.text = config.path_map
+	editbox_soundfolder.text = config.path_sound
+	
 	for track, params in pairs(tracklist.tracks) do
 		
 			--local name = params.name
@@ -637,7 +726,7 @@ function UpdateGUI()
 				--y = 0,
 				clientWidth = 200,
 				--clientHeight = 16,
-				parent = tracklistLayout,
+				parent = layout_overview,
 				align = 'left',
 				text =  track,
 				fontSize = 10,
@@ -663,7 +752,7 @@ function UpdateGUI()
 			tracklist_controls['length'..track] = EditBox:New {
 				x = 204,
 				clientWidth = 26,
-				parent = tracklistLayout,
+				parent = layout_overview,
 				align = 'right',
 				text = params.length,
 				fontSize = 10,
@@ -677,7 +766,7 @@ function UpdateGUI()
 				x = 240,
 				clientWidth = 1,
 				clientHeight = 1,				
-				parent = tracklistLayout,	
+				parent = layout_overview,	
 				tooltip = 'Listen to this sound now',
 				caption = '',				
 				OnClick = {	function()
@@ -687,16 +776,39 @@ function UpdateGUI()
 				
 			}
 			]]--
+			
+			tracklist_controls['edit_image'..track] = Image:New {
+				--x = 250,
+				--y = 8,
+				parent = layout_overview,
+				file = PROPERTIES_ICON,				
+				width = 20,
+				height = 20,
+				--margin = {0,0,0,-6},
+				--padding = {0,0,0,-4},
+				--clientWidth = 32,
+				--clientHeight = 32,
+				tooltip = 'Sounditem Properties',
+				color = {0.8,0.7,0.9,0.9},
+				--margin = {0,2,0,0},
+				--caption = '',
+				OnClick = {	function()
+								--local p = {x,y,z}
+								--return DoPlay(track, options.volume.value, nil, nil, nil)		
+							end
+						},
+			}
 			tracklist_controls['play_image'..track] = Image:New {
-				x = 240,
-				y = 0,
-				parent = tracklistLayout,
+				--x = 240,
+				--y = 0,
+				parent = layout_overview,
 				file = PLAYSOUND_ICON,				
 				width = 20,
 				height = 20,
-				tooltip = 'Listen to this sound now',
+				tooltip = 'Play Sounditem',
 				color = {0,0.8,0.2,0.9},
 				--caption = '',
+				margin = {-6,0,0,0},
 				OnClick = {	function()
 								--local p = {x,y,z}
 								return DoPlay(track, options.volume.value, nil, nil, nil)		
@@ -737,9 +849,14 @@ function UpdateGUI()
 			end			
 		end	
 	end
-	nodes[idx] = Button:New {
+	nodes[idx] = Image:New {
 		caption = 'this is a test',
+		keepAspect = false,
+		width = 100,
+		height = 10,
 		tooltip = 'tooltip',
+		align = 'left',
+		file = SETTINGS_ICON,
 		OnClick = {function()
 						Echo("mouse")
 						end
@@ -802,12 +919,13 @@ end
 function Echo(s)
 	--Spring.Echo(s)	
 	logfile = logfile.."\n"..s
-	if consoleText then consoleText:SetText(logfile) end
+	if textbox_console then textbox_console:SetText(logfile) end
 end
 
 
 function widget:Update(dt) 	
 	if not (gameStarted) then return end
+	--UpdateGUI()
 	mx,my = Spring.GetMouseState()
 	if (needReload and options.autoreload.value) then ReloadSoundDefs() needReload = false end		
 	if (secondsToUpdate>0) then	secondsToUpdate = secondsToUpdate-dt return
@@ -914,8 +1032,8 @@ local words = {
 						set = function (s) PATH_CONFIG = s return true end,
 					},
 		["snd"] =	{
-						get = function () return config.path_sounds end,
-						set = function (s) config.path_sounds = s return true end,
+						get = function () return config.path_sound end,
+						set = function (s) config.path_sound = s return true end,
 					},
 		["ui"] =	{
 						get = function () return PATH_LUA end,
