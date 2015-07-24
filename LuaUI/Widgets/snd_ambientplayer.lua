@@ -1,6 +1,6 @@
 --[[
 TODO:
-- add emitters, emitters graphical representation, figure out how tracks and emitters work together VvV
+- add emitters, emitters graphical representation, figure out how tracks and emitters work together VVV
 - implement adding sound items to emitters v
 - implement batch loading, adding, editing vv-
 - restructure? v
@@ -10,15 +10,15 @@ TODO:
 - remake initialize() to account for list files v?
 - find out how to find out about file sizes and lengths
 - find out how to create folders 
-- implement log
-- disallow track names with only numbers
+- implement log V
+- disallow track names with only numbers ?
 
 - emit zones
 - mutex groups
-- chili support
+- chili support v
 --]]
 
-local versionNum = '0.30'
+local versionNum = '0.32'
 
 function widget:GetInfo()
   return {
@@ -32,13 +32,15 @@ function widget:GetInfo()
   }
 end	
 
+--include(LUAUI_DIRNAME .."guitest.lua")
+--VFS.Include(LUAUI_DIRNAME .. 'guitest.lua', nil, VFS.RAW_FIRST)
 --------------------------------------------------------------------------------
 -- Epic Menu Options
 --------------------------------------------------------------------------------
 
 options_path = 'Settings/Audio/Ambient Sound'
-options_order = {'verbose', 'autosave', 'autoreload', 'showemitters', 'emitter_highlight_treshold', 'emitter_radius', 
-					'color_red', 'color_green', 'color_blue', 'color_alpha_inner', 'color_alpha_outer', 'color_highlightfactor', 
+options_order = {'color_red', 'color_green', 'color_blue', 'color_alpha_inner', 'color_alpha_outer', 'color_highlightfactor',
+					'verbose', 'autosave', 'autoreload', 'showemitters', 'emitter_highlight_treshold', 'emitter_radius', 'dragtime', 					 
 						'checkrate', 'volume', 'autoplay'}
 options = {
 	--settingslabel = {name = "settingslabel", type = 'label', value = "General Settings", path = options_path},
@@ -54,7 +56,7 @@ options = {
 	volume = {
 		name = "Volume",
         type = 'number',
-        value = 1,
+		value = 1,
         min = 0.1,
         max = 2,
         step = 0.1,
@@ -99,6 +101,15 @@ options = {
 		step = 25,
 		path = "Settings/Audio/Ambient Sound/Editor",		
 	},
+	dragtime = {
+		name = "Seconds until drag starts",
+        type = 'number',
+        value = 0.5,
+        min = 0.1,
+		max = 2,
+		step = 1,
+		path = "Settings/Audio/Ambient Sound/Editor",		
+	},	
 	emitter_radius = {
 		name = "Radius of Emitter Aura",
         type = 'number',
@@ -115,7 +126,7 @@ options = {
         min = 0.0,
 		max = 1,
 		step = 0.1,
-		path = "Settings/Audio/Ambient Sound/Editor",	
+		path = "Settings/Audio/Ambient Sound/Editor/Colors",	
 		OnChange = function() UpdateMarkerList() end,	
 	},
 	color_green = {
@@ -125,7 +136,7 @@ options = {
         min = 0.0,
 		max = 1,
 		step = 0.1,
-		path = "Settings/Audio/Ambient Sound/Editor",		
+		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
 		OnChange = function() UpdateMarkerList() end,
 					
 	},
@@ -136,7 +147,7 @@ options = {
         min = 0.0,
 		max = 1,
 		step = 0.1,
-		path = "Settings/Audio/Ambient Sound/Editor",		
+		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
 		OnChange = function() UpdateMarkerList() end,
 	},
 	color_alpha_inner = {
@@ -146,7 +157,7 @@ options = {
         min = 0.0,
 		max = 1,
 		step = 0.05,
-		path = "Settings/Audio/Ambient Sound/Editor",		
+		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
 		OnChange = function() UpdateMarkerList() end,
 	},
 	color_alpha_outer = {
@@ -156,24 +167,24 @@ options = {
         min = 0.0,
 		max = 1,
 		step = 0.05,
-		path = "Settings/Audio/Ambient Sound/Editor",		
+		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
 		OnChange = function() UpdateMarkerList() end,
 	},
 	color_highlightfactor = {
-		name = "Selected emitter occupancy",
+		name = "Emitter highlight factor",
         type = 'number',
         value = 1.5,
         min = 0.1,
 		max = 5,
 		step = 0.1,
-		path = "Settings/Audio/Ambient Sound/Editor",		
+		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
 		OnChange = function() UpdateMarkerList() end,
 	},
 }	
 
 	
 
-local config = {
+config = {
 	path_sound = 'Sounds/Ambient/',
 	path_read = 'Sounds/Ambient/',
 	path_map = nil,
@@ -182,14 +193,13 @@ local config = {
 
 
 --------------------------------------------------------------------------------
--- CONSTANTS,SHORTCUTS&TEMPLATES
+-- CONSTANTS, SHORTCUTS & TEMPLATES
 --------------------------------------------------------------------------------
 
 local PlaySound = Spring.PlaySoundFile
 local PlayStream = Spring.PlaySoundStream
 local random=math.random
 
--- except those arent actually constants?
 local OPTIONS_FILENAME = 'ambient_options.lua'
 local SOUNDDEF_FILENAME = 'ambient_sounddefs.lua'
 local EMITTERS_FILENAME = 'ambient_emitters.lua'
@@ -197,23 +207,25 @@ local SAVETABLE_FILENAME = 'ambient_savetable.lua'
 local TMP_FILENAME = 'ambient_tmp.lua'
 local LOG_FILENAME = 'ambient_log.txt'
 
-local PATH_LUA = LUAUI_DIRNAME
-local PATH_CONFIG = 'Configs/'
-local PATH_WIDGET = 'Widgets/'
-local PATH_UTIL = 'Utilities/'
+PATH_LUA = LUAUI_DIRNAME
+PATH_CONFIG = 'Configs/'
+PATH_WIDGET = 'Widgets/'
+PATH_UTIL = 'Utilities/'
 
 local SOUNDDEF_HEADER = [[--Sounditem definitions in the format of gamedata sounds.lua plus some additional parameters used by the widget.]].."\n"
 local OPTIONS_HEADER = [[--Config file. Words contains user-defined string variables]].."\n"
 local EMITTERS_HEADER = [[--Emitters for positional sounds. Each sounditem will be unique for every emitter, if created by the widget.]].."\n"
 
 --local PLAYER_CONTROLS_ICON = PATH_LUA..'Images/Commands/Bold/'..'drop_beacon.png'
-local SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
-local HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
-local CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
-local PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
-local PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
+SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
+HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
+CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
+PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
+PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
 
-local HELPTEXT = [[generic info here]]
+HELPTEXT = [[generic info here]]
+
+
 
 
 local SOUNDITEM_TEMPLATE = {
@@ -272,16 +284,27 @@ local screen0
 local color2incolor
 local incolor2color
 
-local GL_LINE_LOOP           = GL.LINE_LOOP
-local GL_TRIANGLE_FAN        = GL.TRIANGLE_FAN
+--local GL_LINE_LOOP           = GL.LINE_LOOP
+--local GL_TRIANGLE_FAN        = GL.TRIANGLE_FAN
+local GLTRIANGLES 			 = GL.TRIANGLES
+local GLQUADS				 = GL.QUADS
+local GLLINES				 = GL.LINES
+
 local glBeginEnd             = gl.BeginEnd
+local glPush				 = gl.PushMatrix
+local glPop					 = gl.PopMatrix
 local glColor                = gl.Color
 local glCreateList           = gl.CreateList
 local glDeleteList           = gl.DeleteList
+local glCallList			 = gl.CallList
 local glDepthTest            = gl.DepthTest
+local glDepthMask            = gl.DepthMask
 local glLineWidth            = gl.LineWidth
 local glPolygonOffset        = gl.PolygonOffset
 local glVertex               = gl.Vertex
+local glTranslate			 = gl.Translate
+local glScale				 = gl.Scale
+
 
 --local glDrawListAtUnit       = gl.DrawListAtUnit
 --local spDiffTimers           = Spring.DiffTimers
@@ -307,12 +330,12 @@ local secondsToUpdate = 0.1
 local gameStarted = Spring.GetGameFrame() > 0
 local inited = false
 
-local tracklist = {
+ tracklist = {
 	tracks = {},
 	tmpvalues = {},
 	}
 
-local emitters = {
+emitters = {
 	index = 1,
 	global = {
 		pos = {
@@ -330,15 +353,23 @@ local logfile = [[]]
 local mx, mz
 local needReload = false
 local highlightEmitter
+local dragEmitter
+local dragTimer = 0
+local dragStarted = false
 
 local SaveTable, MakeSortedTable, CompareKeys, valueTypes, keyTypes, encloseKey, encloseStr, keyWordSet, keyWords, saveTables, indendtString
 
 local tracklist_controls = {}
 local emitters_controls = {}
 
+
 --------------------------------------------------------------------------------
 -- INIT
 --------------------------------------------------------------------------------
+
+function tf()
+end
+
 
 function widget:Initialize()
 
@@ -373,9 +404,23 @@ function widget:Initialize()
 
 	--if VFS.FileExists(cpath..LOG_FILENAME, VFS.RAW_FIRST) then
 	--	log = log..VFS.Include(cpath..LOG_FILENAME, nil, VFS.RAW_FIRST)
-
-	SetupGUI()
+	--WG.TESTVAR = "var"
+	--for k, v in pairs(widget) do
+	--	Echo(k)
+	--end
+	--local function SetupGUI(config)
+	--local SetupGUI = loadstring(VFS.LoadFile(PATH_LUA..PATH_UTIL..'guitest.lua', VFS.RAW_FIRST))
+	--local env = getfenv()
+	VFS.Include(PATH_LUA..PATH_UTIL..'guitest.lua', widget, VFS.RAW_FIRST)
+	--include('./LuaUI/Utilities/'..'guitest.lua')	
+	--Spring.Echo(SetupGUI)
+	--local env = widget
 	
+	--env.SETTINGS_ICON = SETTINGS_ICON
+	--setfenv(SetupGUI, env)
+	SetupGUI()	
+		
+		
 	if VFS.FileExists(cpath..OPTIONS_FILENAME, VFS.RAW_FIRST) then
 		local opt = VFS.Include(cpath..OPTIONS_FILENAME, nil, VFS.RAW_FIRST)
 		if (opt.config) then
@@ -446,399 +491,9 @@ end
 --end
 
 
-function widget:SetupGUI()
-
-
-
-	---------------------------------------------------- main frame ------------------------------------------------
-	 window_main = Window:New {
-		x = '65%',
-		y = '25%',	
-		--dockable = false,
-		parent = screen0,
-		caption = "Ambient Sound Editor",
-		draggable = true,
-		resizable = true,
-		dragUseGrip = true,
-		clientWidth = 350,
-		clientHeight = 540,
-		backgroundColor = {0.8,0.8,0.8,0.9},		
-	}
-	label_overview = Label:New {
-		x = 0,
-		y = 20,
-		clientWidth = 260,
-		parent = window_main,
-		align = 'center',
-		caption = '-Track Overview-',
-		textColor = {1,1,0,0.9},		
-	}
-	scroll_overview = ScrollPanel:New {
-		x = 0,
-		y = 40,
-		clientWidth = 340,
-		clientHeight = 420,
-		parent = window_main,
-		scrollPosX = -16,
-		horizontalScrollbar = false,
-		verticalScrollbar = true,
-		verticalSmartScroll = true,	
-		scrollbarSize = 6,
-		padding = {5,10,5,10},
-		--itemPadding = {5,10,5,10},
-		--margin = {20,20,20,20},
-		
-	}	
-	layout_overview = LayoutPanel:New {
-		x = 0,
-		y = 0,
-		--clientWidth = 160,
-		--clientHeight = 420,
-		parent = scroll_overview,
-		orientation = 'vertical',
-		--orientation = 'left',
-		selectable = false,		
-		multiSelect = false,
-		maxWidth = 340,
-		minWidth = 340,
-		itemPadding = {6,2,6,2},
-		itemMargin = {0,0,0,0},
-		autosize = true,
-		align = 'left',
-		columns = 4,
-		left = 0,
-		centerItems = false,	
-		--padding = {20,20,20,20},
-		--margin = {20,20,20,20},		
-	}	
-	
-	button_console = Button:New {
-		x = 0,
-		y = -32,
-		parent = window_main,		
-		tooltip = 'Message Log',
-		clientWidth = 12,
-		clientHeight = 12,
-		caption = '',
-		OnClick = {	function()
-						window_console:ToggleVisibility()
-					end
-					},
-		children = {
-			Image:New {
-				width = "100%",
-				height = "100%",				
-				file = CONSOLE_ICON,
-			},
-		}
-	}
-	
-	button_help = Button:New {
-		x = - 32,
-		y = -32,
-		parent = window_main,		
-		tooltip = 'Halp!',
-		clientWidth = 12,
-		clientHeight = 12,
-		caption = '',
-		OnClick = {	function()
-						window_help:ToggleVisibility()
-					end
-					},
-		children = {
-			Image:New {
-				width = "100%",
-				height = "100%",				
-				file = HELP_ICON,
-			},
-		}
-	}
-	
-	button_settings = Button:New {
-		x = - 74,
-		y = -32,
-		parent = window_main,		
-		tooltip = 'Settings',
-		clientWidth = 12,
-		clientHeight = 12,
-		caption = '',
-		OnClick = {	function()
-						window_settings:ToggleVisibility()
-					end
-					},
-		children = {
-			Image:New {
-				width = "100%",
-				height = "100%",				
-				file = SETTINGS_ICON,
-			}
-		}	
-	}
-	
-	---------------------------------------------------- emitters window ------------------------------------------------	
-	
-	window_emitters = Window:New {
-		x = '25%',
-		y = '25%',	
-		--dockable = false,
-		parent = screen0,
-		caption = "Ambient Sound Editor",
-		draggable = true,
-		resizable = false,
-		dragUseGrip = true,
-		clientWidth = 300,
-		clientHeight = 540,
-		backgroundColor = {0.8,0.8,0.8,0.9},		
-	}
-	label_emitters = Label:New {
-		x = 0,
-		y = 20,
-		clientWidth = 260,
-		parent = window_emitters,
-		align = 'center',
-		caption = '-Emitters-',
-		textColor = {1,1,0,0.9},		
-	}
-	scroll_emitters = ScrollPanel:New {
-		x = 0,
-		y = 40,
-		clientWidth = 300,
-		clientHeight = 420,
-		parent = window_emitters,
-		scrollPosX = -16,
-		horizontalScrollbar = false,
-		verticalScrollbar = true,
-		verticalSmartScroll = true,	
-		scrollbarSize = 6,
-		padding = {5,10,5,10},
-		
-	}	
-	window_emitters:Hide()
-	
-	
-	---------------------------------------------------- log window ------------------------------------------------	
-	window_console = Window:New {
-		x = "20%",
-		y = "7%",
-		parent = screen0,
-		caption = "Message Log",
-		draggable = true,
-		resizable = false,
-		dragUseGrip = true,
-		clientWidth = 640,
-		clientHeight = 140,
-		backgroundColor = {0.8,0.8,0.8,0.9},				
-	}
-	scroll_console = ScrollPanel:New {
-		x = 0,
-		y = 12,
-		clientWidth = 640,
-		clientHeight = 126,
-		parent = window_console,
-		scrollPosX = -16,
-		horizontalScrollbar = false,
-		verticalScrollbar = true,
-		verticalSmartScroll = true,	
-		scrollbarSize = 6,
-		resizable = true,
-		autosize = true,
-	}
-	textbox_console = TextBox:New {
-		x = 4,
-		y = 0,
-		autosize = true,
-		parent = scroll_console,
-		align = 'left',
-		textColor = {0.9,0.9,0.0,0.9},
-		backgroundColor = {0.2,0.2,0.2,0.5},
-		borderColor = {0.3,0.3,0.3,0.5},
-		text = logfile,	
-	}
-	
-	---------------------------------------------------- help window ------------------------------------------------
-
-	window_help = Window:New {
-		x = "20%",
-		y = "7%",
-		parent = screen0,
-		caption = "Help",
-		draggable = true,
-		resizable = false,
-		dragUseGrip = true,
-		clientWidth = 400,
-		clientHeight = 490,
-		backgroundColor = {0.8,0.8,0.8,0.9},
-		
-	}
-	scroll_help = ScrollPanel:New {
-		x = 0,
-		y = 12,
-		clientWidth = 400,
-		clientHeight = 384,
-		parent = window_help,
-		scrollPosX = -16,
-		horizontalScrollbar = false,
-		verticalScrollbar = true,
-		verticalSmartScroll = true,	
-		scrollbarSize = 6,
-		resizable = true,
-		autosize = true,
-	}
-	textbox_help = TextBox:New {
-		x = 4,
-		y = 0,
-		autosize = true,
-		parent = scroll_help,
-		align = 'left',
-		textColor = {0.8,0.8,0.8,0.9},
-		backgroundColor = {0.2,0.2,0.2,0.5},
-		borderColor = {0.3,0.3,0.3,0.5},
-		text = HELPTEXT,
-	}
-	window_help:Hide()
-	
-		---------------------------------------------------- settings window ------------------------------------------------
-	window_settings = Window:New {
-		x = "25%",
-		y = "25%",
-		parent = screen0,
-		caption = "Settings",
-		draggable = true,
-		resizable = false,
-		dragUseGrip = true,
-		clientWidth = 450,
-		clientHeight = 250,
-		backgroundColor = {0.8,0.8,0.8,0.9},
-		children = {
-			Label:New {
-				x = 0,
-				y = 30,
-				align = 'left',
-				caption = 'Map folder: $spring/',
-				textColor = {1,1,0,0.9},
-			},
-			Label:New {
-				x = 0,
-				y = 56,
-				align = 'left',
-				caption = 'Sounds folder: $map/',
-				textColor = {1,1,0,0.9},
-			},
-		}
-	}	
-	editbox_mapfolder = EditBox : New {
-		x = 123,
-		y = 26,
-		clientWidth = 297,
-		align = 'left',
-		text = config.path_map,
-		OnChange = 	{	function()
-						config.path_map=text
-						end
-					},
-		parent = window_settings,
-		--fontSize = 10,
-		textColor = {0.9,0.9,0.9,1},
-		borderColor = {0.2,0.2,0.2,0.5},
-		backgroundColor = {0.3,0.3,0.3,0.5},
-		tooltip = [[The .sdd folder this map resides in. By default, the Widget will save all its data in the maps folder structure. If you are running from an archive, ...]],
-	}
-	editbox_soundfolder = EditBox : New {
-		x = 132,
-		y = 52,
-		clientWidth = 288,
-		align = 'left',
-		text = config.path_sound,
-		OnChange = 	{	function()
-						config.path_sound=text
-						end
-					},
-		parent = window_settings,
-		--fontSize = 10,
-		textColor = {0.9,0.9,0.9,1},
-		borderColor = {0.2,0.2,0.2,0.5},
-		backgroundColor = {0.3,0.3,0.3,0.5},
-		tooltip = [[Where our sound files are read from. Note that while you can load sound files from anywhere on your computer, you eventually need to put them here if you wish to incorporate them into your map.]],
-	}
-	buttonimage_mapfolder = Image : New {
-		x = 434,
-		y = 30,
-		parent = window_settings,
-		file = SETTINGS_ICON,				
-		width = 14,
-		height = 14,
-		tooltip = 'Reset to default',
-		--color = {0,0.8,0.2,0.9},		
-		OnClick = {	function()		
-					config.path_map = 'maps/'..Game.mapName..'.sdd/'					
-					end
-				},				
-	}
-	buttonimage_soundfolder = Image : New {
-		x = 434,
-		y = 56,
-		parent = window_settings,
-		file = SETTINGS_ICON,				
-		width = 14,
-		height = 14,
-		tooltip = 'Reset to default',
-		--color = {0,0.8,0.2,0.9},		
-		OnClick = {	function()		
-					config.path_sound = 'Sounds/Ambient/'					
-					end
-				},				
-	}		
-	
-	window_settings:Hide()
-	
-	---------------------------------------------------- inspect emitter window ------------------------------------------------
-	window_inspect_emitter = Window:New {
-		x = "50%",
-		y = "50%",
-		parent = screen0,
-		caption = "Emitter Details",
-		draggable = true,
-		resizable = false,
-		dragUseGrip = true,
-		clientWidth = 200,
-		clientHeight = 250,
-		backgroundColor = {0.8,0.8,0.8,0.9},
-	}
-	window_inspect_emitter:Hide()
-	--[[	
-	
-	playerControls = Button:New{
-		x = -48,
-		y = '30%',
-		parent = screen0,
-		draggable = true,
-		dragUseGrip = true,
-		tooltip = 'Ambient Sound Player controls',
-		--align = 'right',
-		clientWidth = 32,
-		clientHeight = 32,
-		caption = '',
-		
-	}	
-	playerControls_image = Image:New {
-				width = "100%",
-				height = "100%",
-				--bottom = (isBuild) and 10 or nil;
-				y="5%",
-				x="5%",
---				color = color;
-				--keepAspect = not isBuild,	--true,	--isState;
-				file = PLAYER_CONTROLS_ICON,
-				parent = playerControls,
-			}
-	]]--
-end
-
-
-
 
 --------------------------------------------------------------------------------
--- UPDATE/MISC
+-- GUI
 --------------------------------------------------------------------------------
 
 function UpdateGUI()
@@ -888,22 +543,7 @@ function UpdateGUI()
 				borderColor = {0.3,0.3,0.3,0.5},
 				tooltip = [[The length of the track in seconds. As this information can't currently be obtained by the Widget, you may want to insert it manually.]]
 			}
-			--[[
-			tracklist_controls['play'..track] = Button:New {
-				x = 240,
-				clientWidth = 1,
-				clientHeight = 1,				
-				parent = layout_overview,	
-				tooltip = 'Listen to this sound now',
-				caption = '',				
-				OnClick = {	function()
-								
-							end
-						},
-				
-			}
-			]]--
-			
+						
 			tracklist_controls['edit_image'..track] = Image:New {
 				--x = 250,
 				--y = 8,
@@ -920,6 +560,7 @@ function UpdateGUI()
 				--margin = {0,2,0,0},
 				--caption = '',
 				OnClick = {	function()
+								
 								--local p = {x,y,z}
 								--return DoPlay(track, options.volume.value, nil, nil, nil)		
 							end
@@ -938,6 +579,7 @@ function UpdateGUI()
 				margin = {-6,0,0,0},
 				OnClick = {	function()
 								--local p = {x,y,z}
+								
 								return DoPlay(track, options.volume.value, nil, nil, nil)		
 							end
 						},
@@ -1090,18 +732,157 @@ function UpdateGUI()
 	
 end
 
-function Echo(s)
-	--Spring.Echo(s)	
-	logfile = logfile.."\n"..s
-	if textbox_console then textbox_console:SetText(logfile) end
+
+function UpdateInspectionWindow(object)	
+	--Echo("call with "..object)
+		
+	if window_inspect.currentInspect and (window_inspect.currentInspect ~= object) then		
+		Echo(window_inspect.currentInspect.." and "..object)
+		window_inspect.panel:Dispose()
+		window_inspect:Invalidate()
+	end
+	
+	if emitters[object] then
+		local e = emitters[object]
+		window_inspect.currentInspect = object		
+		label_inspect:SetCaption(object)
+		window_inspect.panel = ScrollPanel:New {
+			x = 0,
+			y = 40,
+			clientWidth = window_inspect.width - 38,
+			clientHeight = window_inspect.height - 90,
+			parent = window_inspect,
+			scrollPosX = -16,
+			horizontalScrollbar = false,
+			verticalScrollbar = true,
+			verticalSmartScroll = false,	
+			scrollbarSize = 6,
+			padding = {5,10,5,10},
+			--autosize = true,
+			--itemPadding = {5,10,5,10},
+			--margin = {20,20,20,20},			
+		}
+		window_inspect.panel.layout = LayoutPanel:New {
+			x = 0,
+			y = 0,
+			clientWidth = window_inspect.panel.width-20,
+			clientHeight = window_inspect.panel.width-20,
+			parent = window_inspect.panel,
+			orientation = 'vertical',
+			--orientation = 'left',
+			selectable = false,		
+			multiSelect = false,
+			maxWidth = window_inspect.panel.width,
+			minWidth = window_inspect.panel.width,
+			itemPadding = {6,2,6,2},
+			itemMargin = {0,0,0,0},
+			autosize = true,
+			align = 'left',
+			columns = 3,
+			left = 0,
+			centerItems = false,	
+		}		
+		
+		for track, params in pairs(e.playlist) do
+			namebox = EditBox:New {
+				--x = 0,				
+				--autosize = true,
+				width = window_inspect.panel.layout.width-86,
+				--height = 12,
+				parent = window_inspect.panel.layout,
+				align = 'left',
+				text =  track,
+				fontSize = 10,
+				textColor = {0.9,0.9,0.9,1},
+				backgroundColor = {0.2,0.2,0.2,0.5},
+				borderColor = {0.3,0.3,0.3,0.5},
+				OnMouseOver = { function(self) 
+									--local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
+									--for param, val in pairs(params) do										
+									--	if type(val) == 'boolean' then ttip = ttip..param..": "..(val and "true" or "false").."\n" 											
+									--	else ttip = ttip..param..": "..val.."\n" 
+									--	end
+									--end
+									--self:SetTooltip(ttip)
+									--self.tooltip=ttip
+								end
+				},
+			}					
+			propsicon = Image:New {				
+				parent = window_inspect.panel.layout,
+				file = PROPERTIES_ICON,				
+				width = 20,
+				height = 20,				
+				tooltip = 'Track Properties',
+				color = {0.8,0.7,0.9,0.9},				
+				OnClick = {	function()
+								--local p = {x,y,z}
+								--return DoPlay(track, options.volume.value, nil, nil, nil)		
+							end
+				},
+			}
+			playicon = Image:New {
+				parent = window_inspect.panel.layout,
+				file = PLAYSOUND_ICON,				
+				width = 20,
+				height = 20,
+				tooltip = 'Play at Location',
+				color = {0,0.8,0.2,0.9},				
+				margin = {-6,0,0,0},
+				OnClick = {	function()
+								local px, py, pz = e.pos.x, e.pos.y, e.pos.z
+								Echo(px.." "..py.." "..pz)
+								return DoPlay(track, options.volume.value, px or nil, py or nil, pz or nil) -- pos is false for global emitter, for some silly reason. needs change
+							end
+				},
+			}
+		end
+		
+	end
+	--window_inspect:Invalidate()
 end
 
-function distance(sx, sz, tx, tz)
-	local dx = sx - tx
-	local dz = sz - tz
-	--Spring.Echo (dx.." - "..dz)
-	return math.sqrt(dx*dx + dz*dz)
+
+function widget:MousePress(x, y, button)
+	if highlightEmitter then
+		if button == 3 then return true end
+		if button == 2 then 			
+		end		
+	end	
+	
 end
+
+
+function widget:MouseRelease(x, y, button)
+	--Echo("release")
+	if button == 3 then		
+		if highlightEmitter then			
+			if window_inspect.currentInspect == highlightEmitter then
+				--Echo("hide "..window_inspect.currentInspect)
+				window_inspect:Hide()
+				window_inspect.panel:Dispose()
+				window_inspect:Invalidate()
+				window_inspect.currentInspect = nil
+			else
+				--Echo("show "..highlightEmitter)
+				UpdateInspectionWindow(highlightEmitter)
+				window_inspect:Show()
+				local xp = mx > (screen0.width / 2) and (mx - window_inspect.width) or mx
+				local mz_inv = math.abs(screen0.height- mz) 
+				local yp = mz_inv > (screen0.height / 2) and (mz_inv - window_inspect.height) or mz_inv		
+				window_inspect:SetPos(xp, yp)		
+			end		
+		end
+	end
+	
+	dragStarted = false
+end
+
+
+
+--------------------------------------------------------------------------------
+-- UPDATE/MISC
+--------------------------------------------------------------------------------
 
 function widget:Update(dt) 	
 	if not (gameStarted) then return end
@@ -1158,20 +939,6 @@ function widget:Update(dt)
 		end	
 	end
 end	
-
-function widget:MousePress(x, y, button)
-	if highlightEmitter and button == 3 then return true end
-end
-
-function widget:MouseRelease(x, y, button)
-	if highlightEmitter and button == 3 then
-		window_inspect_emitter:ToggleVisibility()
-		local xp = mx > (screen0.width / 2) and (mx - window_inspect_emitter.width) or mx
-		local mz_inv = math.abs(screen0.height- mz) 
-		local yp = mz_inv > (screen0.height / 2) and (mz_inv - window_inspect_emitter.height) or mz_inv		
-		window_inspect_emitter:SetPos(xp, yp)		
-	end
-end
 
 
 function DoPlay(track, vol, x, y, z) 
@@ -1232,6 +999,18 @@ function SpawnEmitter(name, yoffset)
 end
 
 
+function Echo(s)
+	Spring.Echo(s)	
+	logfile = logfile.."\n"..s
+	if textbox_console then textbox_console:SetText(logfile) end
+end
+
+function distance(sx, sz, tx, tz)
+	local dx = sx - tx
+	local dz = sz - tz
+	--Spring.Echo (dx.." - "..dz)
+	return math.sqrt(dx*dx + dz*dz)
+end
 
 
 --------------------------------------------------------------------------------
@@ -1580,6 +1359,8 @@ function Invoke(args)
 	end
 	
 	if (args[1] == "env") then
+		
+		
 		if (args[2]) then
 			Echo("\n-------"..args[2].."--------")
 			--local file = io.open("G.txt", "w")
@@ -1598,7 +1379,11 @@ function Invoke(args)
 			--]]
 			--Echo(words.get("$read"))
 			--file:close()
-		end	
+		else
+			for k, v in pairs(getfenv()) do
+			Spring.Echo(tostring(k))
+		end
+		end
 	end
 
 	if (args[1] == "do") then
@@ -1811,7 +1596,7 @@ local emitMarker
 local emitMarker_Highlight
 
 
-function widget:DrawWorldPreUnit()
+function widget:DrawWorldPreUnit() --?
 	
 	if not emitMarker then UpdateMarkerList() end
 	
@@ -1820,7 +1605,7 @@ function widget:DrawWorldPreUnit()
 			if e~='index' then
 				local pos = params.pos
 				if pos.x then
-					local list, linealpha -- should be options alpa value
+					local list, linealpha -- should be options.alpha_*
 					if highlightEmitter == e then
 						list = emitMarker_Highlight
 						linealpha = 1
@@ -1828,29 +1613,29 @@ function widget:DrawWorldPreUnit()
 						list = emitMarker
 						linealpha = 0.5
 					end
-					gl.Color(1,1,1,1)
-					gl.DepthTest(true)										
-					gl.PushMatrix()					
-						gl.Translate(pos.x,pos.y,pos.z)
+					glColor(1,1,1,1)
+					glDepthTest(true)										
+					glPush()					
+						glTranslate(pos.x,pos.y,pos.z)
 						glPolygonOffset(-10000, -2)
-						gl.Scale(options.emitter_radius.value, 1, options.emitter_radius.value)						
-						gl.CallList(list)
-					gl.PopMatrix()
+						glScale(options.emitter_radius.value, 1, options.emitter_radius.value)						
+						glCallList(list)
+					glPop()
 					local gy =	Spring.GetGroundHeight(pos.x, pos.z)		
 					if pos.y >  gy then							
-						gl.DepthMask(true)
-						gl.PushMatrix()						
-						glBeginEnd(GL.LINES, function()
-							gl.Color(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
-							--gl.Translate(pos.x,pos.y,pos.z)
-							gl.Vertex(pos.x, pos.y, pos.z)
-							gl.Vertex(pos.x, gy, pos.z)
-						end)
-						gl.PopMatrix()
-						gl.Color(1,1,1,1)
-						gl.DepthMask(false)						
+						glDepthMask(true)
+						glPush()						
+							glBeginEnd(GLLINES, function()
+								glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
+								--gl.Translate(pos.x,pos.y,pos.z)
+								glVertex(pos.x, pos.y, pos.z)
+								glVertex(pos.x, gy, pos.z)
+							end)
+						glPop()
+						glColor(1,1,1,1)
+						glDepthMask(false)						
 					end					
-					gl.DepthTest(false)					
+					glDepthTest(false)					
 				end
 			end
 		end
@@ -1869,10 +1654,10 @@ end
 MakeEmitterMarkerList = function(red, green, blue, alpha_inner, alpha_outer)
 	local r, g, b = red, green, blue		
 	local alpha, fadealpha = alpha_inner, alpha_outer	
-		
+	-- body 	
 	local circlePoly = glCreateList(function()
 		-- inner:
-		glBeginEnd(GL.TRIANGLES, function()
+		glBeginEnd(GLTRIANGLES, function()
 			local radstep = (2.0 * math.pi) / circleDivs
 			for i = 1, circleDivs do
 				local a1 = (i * radstep)
@@ -1885,7 +1670,7 @@ MakeEmitterMarkerList = function(red, green, blue, alpha_inner, alpha_outer)
 			end
 		end)
 		-- outer edge:
-		glBeginEnd(GL.QUADS, function()
+		glBeginEnd(GLQUADS, function()
 			local radstep = (2.0 * math.pi) / circleDivs
 			for i = 1, circleDivs do
 				local a1 = (i * radstep)
@@ -1898,25 +1683,30 @@ MakeEmitterMarkerList = function(red, green, blue, alpha_inner, alpha_outer)
 				glVertex(math.sin(a1) * outersize, 0, math.cos(a1) * outersize)
 			end
 		end)
-		-- 'enemy spotter' red-yellow 'rainbow' part
-		if true then
-			-- inner:
-			glBeginEnd(GL.QUADS, function()
-				local radstep = (2.0 * math.pi) / (circleDivs - 1)
-				
-				for fade = 0.1,0.7,0.1 do				
-					for i = 1, circleDivs-1 do
-						local a1 = (i * radstep)
-						local a2 = ((i+1) * radstep)
-						local r = (fade * -1.5) + 1.6
-						glColor(r, g, b, fade)
-						glVertex(math.sin(a1) * (r), 0, math.cos(a1) * (r))
-						glVertex(math.sin(a2) * (r), 0, math.cos(a2) * (r))
-						glVertex(math.sin(a2) * (r + 0.02), 0, math.cos(a2) * (r + 0.02))
-						glVertex(math.sin(a1) * (r + 0.02), 0, math.cos(a1) * (r + 0.02))
-					end
+	
+	-- rings
+		glBeginEnd(GLQUADS, function()
+			local radstep = (2.0 * math.pi) / (circleDivs - 1)
+			
+			for fade = 0.1,0.7,0.1 do				
+				for i = 1, circleDivs-1 do
+					local a1 = (i * radstep)
+					local a2 = ((i+1) * radstep)
+					local r = (fade * -1.5) + 1.6
+					glColor(r, g, b, fade)
+					glVertex(math.sin(a1) * (r), 0, math.cos(a1) * (r))
+					glVertex(math.sin(a2) * (r), 0, math.cos(a2) * (r))
+					glVertex(math.sin(a2) * (r + 0.02), 0, math.cos(a2) * (r + 0.02))
+					glVertex(math.sin(a1) * (r + 0.02), 0, math.cos(a1) * (r + 0.02))
 				end
-			end)--[[
+			end
+		end)		
+	end)
+	return circlePoly
+end
+
+
+--[[
 			-- outer edge:
 			glBeginEnd(GL.QUADS, function()
 				local radstep = (2.0 * math.pi) / circleDivs
@@ -1944,10 +1734,6 @@ MakeEmitterMarkerList = function(red, green, blue, alpha_inner, alpha_outer)
 					glVertex(math.sin(a1) * (outersize + 1.1), 0, math.cos(a1) * (outersize + 1.1))
 				end
 			end)--]]
-		end
-	end)
-	return circlePoly
-end
 
 --[[
 					gl.DepthMask(true)
