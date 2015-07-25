@@ -3,7 +3,9 @@
 local Emitters = {
 	index = 1,
 	center = {
-		playlist = {			
+		playlist = {
+			center_wind_mighty_1 = true,
+			center_wind_mighty_2 = true,
 		},
 		pos = {
 			x = 4631,
@@ -12,8 +14,7 @@ local Emitters = {
 		},
 	},
 	center2 = {
-		playlist = {			
-		},
+		playlist = {},
 		pos = {
 			x = 4688,
 			y = -4,
@@ -21,8 +22,7 @@ local Emitters = {
 		},
 	},
 	center3 = {
-		playlist = {			
-		},
+		playlist = {},
 		pos = {
 			x = 4786,
 			y = 1498,
@@ -94,7 +94,9 @@ local Emitters = {
 		},
 	},
 	rn1 = {
-		playlist = {},
+		playlist = {
+			rn1_brook_3 = true,
+		},
 		pos = {
 			x = 3446,
 			y = -84,
@@ -102,7 +104,9 @@ local Emitters = {
 		},
 	},
 	rn2 = {
-		playlist = {},
+		playlist = {
+			rn2_brook_2 = true,
+		},
 		pos = {
 			x = 2987,
 			y = -56,
@@ -110,7 +114,9 @@ local Emitters = {
 		},
 	},
 	rn3 = {
-		playlist = {},
+		playlist = {
+			rn3_brook_4 = true,
+		},
 		pos = {
 			x = 2252,
 			y = -80,
@@ -158,8 +164,8 @@ local Emitters = {
 		},
 	},
 	sw1 = {
-		playlist = {	
-			sw1_pigeon_1_mono = true,		
+		playlist = {
+			sw1_pigeon_1_mono = true,
 		},
 		pos = {
 			x = 3604,
@@ -176,7 +182,19 @@ local Emitters = {
 		},
 	},
 	sw3 = {
-		playlist = {},
+		playlist = {
+			sw3_brook_1 = true,
+			sw3_brook_2 = true,
+			sw3_brook_3 = true,
+			sw3_brook_4 = true,
+			sw3_owls_3_mono = true,
+			sw3_owls_4_mono = true,
+			sw3_pigeon_1_mono = true,
+			sw3_wind_mighty_1 = true,
+			sw3_wind_mighty_2 = true,
+			sw3_wind_soft_1 = true,
+			sw3_wind_soft_2 = true,
+		},
 		pos = {
 			x = 2483,
 			y = 408,
@@ -216,8 +234,7 @@ local Emitters = {
 		},
 	},
 	test = {
-		playlist = {						
-		},
+		playlist = {},
 		pos = {
 			x = 3197,
 			y = 1017,

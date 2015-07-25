@@ -1,4 +1,5 @@
---Sounditem definitions in the format of gamedata sounds.lua plus some additional parameters used by the widget.
+-- Sounditem definitions. same format as gamedata/sounds.lua 
+-- these are templates used by the editor. for the table of sound items being used by emitters, see ambient_sounds_inuse.lua
 
 local Sounds = {
 	Sounditems = {
@@ -77,7 +78,7 @@ local Sounds = {
 			priority = 0,
 			rnd = 0,
 			rolloff = 0,
-		},		
+		},
 		coyotes_crickets_concert_1 = {
 			dopplerscale = 0,
 			emitter = false,
@@ -268,25 +269,7 @@ local Sounds = {
 			rnd = 0,
 			rolloff = 0,
 		},
-		sw1_pigeon_1_mono = {
-			dopplerscale = 0,
-			emitter = "sw1",
-			file = "maps/white_rabbit_v30.sdd/Sounds/Ambient/pigeon_1_mono.ogg",
-			gain = 1,
-			gainMod = 0.050000000745058,
-			in3d = true,
-			length = "?",
-			maxconcurrent = 2,
-			maxdist = math.huge,
-			minlooptime = 10,
-			onset = 1,
-			pitch = 1,
-			pitchMod = 0,
-			preload = true,
-			priority = 0,
-			rnd = 1,
-			rolloff = 0.30000001192093,
-		},
+
 		wind_mighty_1 = {
 			dopplerscale = 0,
 			emitter = false,

@@ -12,18 +12,19 @@ TODO:
 - find out how to create folders 
 - implement log V
 - disallow track names with only numbers ?
+- split vv
 
 - emit zones
 - mutex groups
 - chili support v
 --]]
 
-local versionNum = '0.32'
+local versionNum = '0.39'
 
 function widget:GetInfo()
   return {
-    name      = "Ambient Player",
-    desc      = "v"..(versionNum).." a very basic ambient sound mixer",
+    name      = "Ambient Sound Player & Editor",
+    desc      = "v"..(versionNum)",
     author    = "Klon",
     date      = "dez 2014",
     license   = "GNU GPL, v2 or later",
@@ -31,164 +32,6 @@ function widget:GetInfo()
     enabled   = true,
   }
 end	
-
---include(LUAUI_DIRNAME .."guitest.lua")
---VFS.Include(LUAUI_DIRNAME .. 'guitest.lua', nil, VFS.RAW_FIRST)
---------------------------------------------------------------------------------
--- Epic Menu Options
---------------------------------------------------------------------------------
-
-options_path = 'Settings/Audio/Ambient Sound'
-options_order = {'color_red', 'color_green', 'color_blue', 'color_alpha_inner', 'color_alpha_outer', 'color_highlightfactor',
-					'verbose', 'autosave', 'autoreload', 'showemitters', 'emitter_highlight_treshold', 'emitter_radius', 'dragtime', 					 
-						'checkrate', 'volume', 'autoplay'}
-options = {
-	--settingslabel = {name = "settingslabel", type = 'label', value = "General Settings", path = options_path},
-	checkrate = {
-		name = "Update frequency",
-        type = 'number',
-        value = 1,
-        min = 1,
-        max = 30,
-        step = 1,
-        path = "Settings/Audio/Ambient Sound",
-	},
-	volume = {
-		name = "Volume",
-        type = 'number',
-		value = 1,
-        min = 0.1,
-        max = 2,
-        step = 0.1,
-        path = "Settings/Audio/Ambient Sound",
-	},
-	autoplay = {
-		name = "Autoplay",
-        type = 'bool',
-        value = true,
-        path = "Settings/Audio/Ambient Sound",
-	},
-	verbose = {
-		name = "Verbose",
-        type = 'bool',
-        value = true,
-        path = "Settings/Audio/Ambient Sound/Editor",
-	},
-	autosave = {
-		name = "Autosave",
-        type = 'bool',
-        value = true,
-        path = "Settings/Audio/Ambient Sound/Editor",
-	},
-	autoreload = {
-		name = "Auto Reload",
-        type = 'bool',
-        value = true,
-        path = "Settings/Audio/Ambient Sound/Editor",
-	},
-	showemitters = {
-		name = "Show Emitters",
-        type = 'bool',
-        value = true,
-        path = "Settings/Audio/Ambient Sound/Editor",
-	},
-	emitter_highlight_treshold = {
-		name = "Emitter selection radius",
-        type = 'number',
-        value = 150,
-        min = 50,
-		max = 500,
-		step = 25,
-		path = "Settings/Audio/Ambient Sound/Editor",		
-	},
-	dragtime = {
-		name = "Seconds until drag starts",
-        type = 'number',
-        value = 0.5,
-        min = 0.1,
-		max = 2,
-		step = 1,
-		path = "Settings/Audio/Ambient Sound/Editor",		
-	},	
-	emitter_radius = {
-		name = "Radius of Emitter Aura",
-        type = 'number',
-        value = 5,
-        min = 25,
-		max = 100,
-		step = 1,
-		path = "Settings/Audio/Ambient Sound/Editor",		
-	},
-	color_red = {
-		name = "Red",
-        type = 'number',
-        value = 1,
-        min = 0.0,
-		max = 1,
-		step = 0.1,
-		path = "Settings/Audio/Ambient Sound/Editor/Colors",	
-		OnChange = function() UpdateMarkerList() end,	
-	},
-	color_green = {
-		name = "Green",
-        type = 'number',
-        value = 1,
-        min = 0.0,
-		max = 1,
-		step = 0.1,
-		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
-		OnChange = function() UpdateMarkerList() end,
-					
-	},
-	color_blue = {
-		name = "Blue",
-        type = 'number',
-        value = 1,
-        min = 0.0,
-		max = 1,
-		step = 0.1,
-		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
-		OnChange = function() UpdateMarkerList() end,
-	},
-	color_alpha_inner = {
-		name = "Alpha inner circle",
-        type = 'number',
-        value = 0.65,
-        min = 0.0,
-		max = 1,
-		step = 0.05,
-		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
-		OnChange = function() UpdateMarkerList() end,
-	},
-	color_alpha_outer = {
-		name = "Alpha outer circle",
-        type = 'number',
-        value = 0.25,
-        min = 0.0,
-		max = 1,
-		step = 0.05,
-		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
-		OnChange = function() UpdateMarkerList() end,
-	},
-	color_highlightfactor = {
-		name = "Emitter highlight factor",
-        type = 'number',
-        value = 1.5,
-        min = 0.1,
-		max = 5,
-		step = 0.1,
-		path = "Settings/Audio/Ambient Sound/Editor/Colors",		
-		OnChange = function() UpdateMarkerList() end,
-	},
-}	
-
-	
-
-config = {
-	path_sound = 'Sounds/Ambient/',
-	path_read = 'Sounds/Ambient/',
-	path_map = nil,
-}
 
 
 
@@ -198,34 +41,11 @@ config = {
 
 local PlaySound = Spring.PlaySoundFile
 local PlayStream = Spring.PlaySoundStream
+local GetMouse = Spring.GetMouseState 
+local TraceRay = Spring.TraceScreenRay
+local IsMouseMinimap = Spring.IsAboveMinimap
+
 local random=math.random
-
-local OPTIONS_FILENAME = 'ambient_options.lua'
-local SOUNDDEF_FILENAME = 'ambient_sounddefs.lua'
-local EMITTERS_FILENAME = 'ambient_emitters.lua'
-local SAVETABLE_FILENAME = 'ambient_savetable.lua'
-local TMP_FILENAME = 'ambient_tmp.lua'
-local LOG_FILENAME = 'ambient_log.txt'
-
-PATH_LUA = LUAUI_DIRNAME
-PATH_CONFIG = 'Configs/'
-PATH_WIDGET = 'Widgets/'
-PATH_UTIL = 'Utilities/'
-
-local SOUNDDEF_HEADER = [[--Sounditem definitions in the format of gamedata sounds.lua plus some additional parameters used by the widget.]].."\n"
-local OPTIONS_HEADER = [[--Config file. Words contains user-defined string variables]].."\n"
-local EMITTERS_HEADER = [[--Emitters for positional sounds. Each sounditem will be unique for every emitter, if created by the widget.]].."\n"
-
---local PLAYER_CONTROLS_ICON = PATH_LUA..'Images/Commands/Bold/'..'drop_beacon.png'
-SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
-HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
-CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
-PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
-PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
-
-HELPTEXT = [[generic info here]]
-
-
 
 
 local SOUNDITEM_TEMPLATE = {
@@ -250,77 +70,291 @@ local SOUNDITEM_TEMPLATE = {
 	onset = 1,
 	
 }
-local TMPVALUES_TEMPLATE = {
-	timeframe = 1,
-	generated=true,	
+
+local vfsInclude = VFS.Include
+local vfsExist = VFS.FileExists
+local spLoadSoundDefs = Spring.LoadSoundDef
+
+local VFSMODE = VFS.RAW_FIRST
+
+local PATH_LUA = LUAUI_DIRNAME
+local PATH_CONFIG = 'Configs/'
+local PATH_WIDGET = 'Widgets/'
+local PATH_UTIL = 'Utilities/'
+local PATH_MODULE = 'Modules/'
+
+local FILE_MODULE_IO = 'snd_ambientplayer_io.lua'
+local FILE_MODULE_GUI = 'snd_ambientplayer_gui.lua'
+local FILE_MODULE_DRAW = 'snd_ambientplayer_draw.lua'
+
+local MAPCONFIG_FILENAME = 'ambient_mapconfig.lua'
+local SOUNDS_ITEMS_DEF_FILENAME = 'ambient_sounds_templates.lua'
+local SOUNDS_INUSE_DEF_FILENAMEE = 'ambient_sounds_inuse.lua'
+local EMITTERS_FILENAME = 'ambient_emitters.lua'
+local TMP_ITEMS_FILENAME = 'ambient_tmp_items.lua'
+local TMP_INUSE_FILENAME = 'aambient_tmp_inuse.lua'
+local LOG_FILENAME = 'ambient_log.txt'
+
+
+
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-- PACKAGE GLOBALS
+-------------------------------------------------------------------------------------------------------------------------
+
+local logfile = [[]]
+local spEcho = Spring.Echo
+
+function Echo(s)
+	spEcho('<ape>:'..s)	
+	logfile = logfile.."\n"..s
+	if textbox_console then textbox_console:SetText(logfile) end
+end
+
+local config = {}
+config.path_sound = 'Sounds/Ambient/'
+config.path_read = 'Sounds/Ambient/'
+config.path_map = nil
+
+local sounditems = {
+	[templates] = {},
+	[inuse] = {},	
 }
-local EMITTER_TEMPLATE = {	
-	pos = {
-			x = 0,
-			y = 0,
-			z = 0,
-		},
-	playlist = {}, -- this would actually be a great place to store timeframe
 	
-	--mods = {},	
+-- are these used?
+local tracklist_controls = {}
+local emitters_controls = {}
+
+local emitters = {
+	--	e[i] = {
+	--		pos = {x, y, z},
+	--		sounds = {
+	--			[j] = {	
+	--				item = <sounditem>
+	--				generated = <boolean>
+	--				timer = <number>
+	--				...
+	--			},
+	-- 		},
+	--	},	
 }
 
-local Chili
-local Image
-local Button
-local Checkbox
-local Window
-local ScrollPanel
-local LayoutPanel
-local Grid
-local StackPanel
-local TreeView
-local Node
-local Label
-local Line
-local EditBox
-local TextBox
-local screen0
-local color2incolor
-local incolor2color
+-- look up sounds by name or reference
+setmetatable(emitters, {
+	__newindex = function(t, new)
+		t.new = {pos = {}, sounds = {}}
+		setmetatable(t.new.sounds, {
+			__index = function(st, item)
+				if type(item) == 'table' then
+					for i = 1, #st do
+						if st.item == item then return st.item end
+					end
+				end
+				elseif type(item) == 'string' then
+					for i = 1, #st do
+						if tostring(st.item) == item then return st.item end
+					end
+				end
+				return nil
+			end
+		})
+	end
+})
 
---local GL_LINE_LOOP           = GL.LINE_LOOP
---local GL_TRIANGLE_FAN        = GL.TRIANGLE_FAN
-local GLTRIANGLES 			 = GL.TRIANGLES
-local GLQUADS				 = GL.QUADS
-local GLLINES				 = GL.LINES
+emitters.global = {pos = {}, sounds = {}}
 
-local glBeginEnd             = gl.BeginEnd
-local glPush				 = gl.PushMatrix
-local glPop					 = gl.PopMatrix
-local glColor                = gl.Color
-local glCreateList           = gl.CreateList
-local glDeleteList           = gl.DeleteList
-local glCallList			 = gl.CallList
-local glDepthTest            = gl.DepthTest
-local glDepthMask            = gl.DepthMask
-local glLineWidth            = gl.LineWidth
-local glPolygonOffset        = gl.PolygonOffset
-local glVertex               = gl.Vertex
-local glTranslate			 = gl.Translate
-local glScale				 = gl.Scale
+options = {}
 
 
---local glDrawListAtUnit       = gl.DrawListAtUnit
---local spDiffTimers           = Spring.DiffTimers
---local spGetAllUnits          = Spring.GetAllUnits
---local spGetGroundNormal      = Spring.GetGroundNormal
---local spGetSelectedUnits     = Spring.GetSelectedUnits
---local spGetTeamColor         = Spring.GetTeamColor
---local spGetTimer             = Spring.GetTimer
---local spGetUnitDefDimensions = Spring.GetUnitDefDimensions
---local spGetUnitDefID         = Spring.GetUnitDefID
---local spGetUnitRadius        = Spring.GetUnitRadius
---local spGetUnitTeam          = Spring.GetUnitTeam
---local spGetUnitViewPosition  = Spring.GetUnitViewPosition
---local spIsUnitSelected       = Spring.IsUnitSelected
---local spIsUnitVisible        = Spring.IsUnitVisible
---local spSendCommands         = Spring.SendCommands
+
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-- INCLUDES
+-------------------------------------------------------------------------------------------------------------------------
+
+-- can import tables here?
+Echo ("Loading modules...")	
+
+local i_o = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters}
+do				
+	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_IO
+	if vfsExist(file, VFSMODE) and vfsInclude(file, i_o, VFSMODE) then
+		Echo("i/o module successfully loaded")
+	else
+		Echo("failed to load i/o module")
+	end
+end
+
+local gui = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
+				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls}
+do				
+	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
+	if vfsExist(file, VFSMODE) and vfsInclude(file, gui, VFSMODE) then
+		Echo("gui module successfully loaded")
+	else
+		Echo("failed to load gui module")
+	end
+end
+
+local draw = {widget = widget, Echo = Echo, options = options, emitters = emitters}
+do				
+	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_DRAW
+	if vfsExist(file, VFSMODE) and vfsInclude(file, draw, VFSMODE) then
+		Echo("draw module successfully loaded")
+	else
+		Echo("failed to load draw module")
+	end
+end
+
+
+
+--------------------------------------------------------------------------------
+-- Epic Menu Options
+--------------------------------------------------------------------------------
+
+options_path = 'Settings/Audio/Ambient Sound'
+options_order = {'color_red', 'color_green', 'color_blue', 'color_alpha_inner', 'color_alpha_outer', 'color_highlightfactor',
+					'verbose', 'autosave', 'autoreload', 'showemitters', 'emitter_highlight_treshold', 'emitter_radius', 'dragtime', 					 
+						'checkrate', 'volume', 'autoplay'}
+
+options.checkrate = {
+	name = "Update frequency",
+	type = 'number',
+	value = 1,
+	min = 1,
+	max = 30,
+	step = 1,
+	path = "Settings/Audio/Ambient Sound",
+}
+options.volume = {
+	name = "Volume",
+	type = 'number',
+	value = 1,
+	min = 0.1,
+	max = 2,
+	step = 0.1,
+	path = "Settings/Audio/Ambient Sound",
+}
+options.autoplay = {
+	name = "Autoplay",
+	type = 'bool',
+	value = true,
+	path = "Settings/Audio/Ambient Sound",
+}
+options.verbose = {
+	name = "Verbose",
+	type = 'bool',
+	value = true,
+	path = "Settings/Audio/Ambient Sound/Editor",
+}
+options.autosave = {
+	name = "Autosave",
+	type = 'bool',
+	value = true,
+	path = "Settings/Audio/Ambient Sound/Editor",
+}
+options.autoreload = {
+	name = "Auto Reload",
+	type = 'bool',
+	value = true,
+	path = "Settings/Audio/Ambient Sound/Editor",
+}
+options.showemitters = {
+	name = "Show Emitters",
+	type = 'bool',
+	value = true,
+	path = "Settings/Audio/Ambient Sound/Editor",
+}
+options.emitter_highlight_treshold = {
+	name = "Emitter selection radius",
+	type = 'number',
+	value = 150,
+	min = 50,
+	max = 500,
+	step = 25,
+	path = "Settings/Audio/Ambient Sound/Editor",		
+}
+options.dragtime = {
+	name = "Seconds until drag starts",
+	type = 'number',
+	value = 0.5,
+	min = 0.1,
+	max = 2,
+	step = 1,
+	path = "Settings/Audio/Ambient Sound/Editor",		
+}	
+options.emitter_radius = {
+	name = "Radius of Emitter Aura",
+	type = 'number',
+	value = 5,
+	min = 25,
+	max = 100,
+	step = 1,
+	path = "Settings/Audio/Ambient Sound/Editor",		
+}
+options.color_red = {
+	name = "Red",
+	type = 'number',
+	value = 1,
+	min = 0.0,
+	max = 1,
+	step = 0.1,
+	path = "Settings/Audio/Ambient Sound/Editor/Colors",	
+	OnChange = function() UpdateMarkerList() end,	
+}
+options.color_green = {
+	name = "Green",
+	type = 'number',
+	value = 1,
+	min = 0.0,
+	max = 1,
+	step = 0.1,
+	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	OnChange = function() UpdateMarkerList() end,
+				
+}
+options.color_blue = {
+	name = "Blue",
+	type = 'number',
+	value = 1,
+	min = 0.0,
+	max = 1,
+	step = 0.1,
+	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	OnChange = function() UpdateMarkerList() end,
+}
+options.color_alpha_inner = {
+	name = "Alpha inner circle",
+	type = 'number',
+	value = 0.65,
+	min = 0.0,
+	max = 1,
+	step = 0.05,
+	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	OnChange = function() UpdateMarkerList() end,
+}
+options.color_alpha_outer = {
+	name = "Alpha outer circle",
+	type = 'number',
+	value = 0.25,
+	min = 0.0,
+	max = 1,
+	step = 0.05,
+	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	OnChange = function() UpdateMarkerList() end,
+}
+options.color_highlightfactor = {
+	name = "Emitter highlight factor",
+	type = 'number',
+	value = 1.5,
+	min = 0.1,
+	max = 5,
+	step = 0.1,
+	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	OnChange = function() UpdateMarkerList() end,
+}
+
+
 
 --------------------------------------------------------------------------------
 -- VARS
@@ -330,26 +364,6 @@ local secondsToUpdate = 0.1
 local gameStarted = Spring.GetGameFrame() > 0
 local inited = false
 
- tracklist = {
-	tracks = {},
-	tmpvalues = {},
-	}
-
-emitters = {
-	index = 1,
-	global = {
-		pos = {
-			x=false,
-			y=false,
-			z=false,
-			},
-		playlist = {},
-	},
-}
-
-
-local logfile = [[]]
---local consoleText
 local mx, mz
 local needReload = false
 local highlightEmitter
@@ -357,132 +371,89 @@ local dragEmitter
 local dragTimer = 0
 local dragStarted = false
 
-local SaveTable, MakeSortedTable, CompareKeys, valueTypes, keyTypes, encloseKey, encloseStr, keyWordSet, keyWords, saveTables, indendtString
-
-local tracklist_controls = {}
-local emitters_controls = {}
 
 
 --------------------------------------------------------------------------------
 -- INIT
 --------------------------------------------------------------------------------
 
-function tf()
-end
-
-
 function widget:Initialize()
 
+	--gui.DoPlay = DoPlay
 	
-	if (not WG.Chili) then
-		widgetHandler:RemoveWidget()
-		return
-	end
-	
-	Chili = WG.Chili
-	Image = Chili.Image
-	Button = Chili.Button
-	Checkbox = Chili.Checkbox
-	Window = Chili.Window
-	Label = Chili.Label
-	Line = Chili.Line
-	EditBox = Chili.EditBox
-	TextBox = Chili.TextBox
-	screen0 = Chili.Screen0	
-	ScrollPanel = Chili.ScrollPanel
-	LayoutPanel = Chili.LayoutPanel
-	Grid = Chili.Grid
-	StackPanel = Chili.StackPanel
-	TreeView = Chili.TreeView
-	Node = Chili.TreeViewNode
-	color2incolor = Chili.color2incolor
-	incolor2color = Chili.incolor2color
-	
-
 	local cpath = PATH_LUA..PATH_CONFIG
 	local upath = PATH_LUA..PATH_UTIL
 
-	--if VFS.FileExists(cpath..LOG_FILENAME, VFS.RAW_FIRST) then
-	--	log = log..VFS.Include(cpath..LOG_FILENAME, nil, VFS.RAW_FIRST)
-	--WG.TESTVAR = "var"
-	--for k, v in pairs(widget) do
-	--	Echo(k)
-	--end
-	--local function SetupGUI(config)
-	--local SetupGUI = loadstring(VFS.LoadFile(PATH_LUA..PATH_UTIL..'guitest.lua', VFS.RAW_FIRST))
-	--local env = getfenv()
-	VFS.Include(PATH_LUA..PATH_UTIL..'guitest.lua', widget, VFS.RAW_FIRST)
-	--include('./LuaUI/Utilities/'..'guitest.lua')	
-	--Spring.Echo(SetupGUI)
-	--local env = widget
-	
-	--env.SETTINGS_ICON = SETTINGS_ICON
-	--setfenv(SetupGUI, env)
-	SetupGUI()	
-		
-		
-	if VFS.FileExists(cpath..OPTIONS_FILENAME, VFS.RAW_FIRST) then
-		local opt = VFS.Include(cpath..OPTIONS_FILENAME, nil, VFS.RAW_FIRST)
-		if (opt.config) then
-			for k, v in pairs(opt.config) do config[k] = v or config[k]	end
+	--setfenv(SetupGUI, gui)
+	gui.SetupGUI()	
+
+	for k, v in pairs(gui) do widget[k] = widget[k] or v end
+	for k, v in pairs(draw) do widget[k] = widget[k] or v end
+
+	Echo ("Loading local config...")
+	if vfsExists(cpath..MAPCONFIG_FILENAME, VFSMODE) then
+		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
+		if opt.config then
+			for k, v in pairs(opt.config) do config[k] = v or config[k]	end			
 		end
-		if (opt.words) then	
-			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
-		end
-	else Echo("<ambient player>: no config found, using defaults")
+--		if (opt.words) then	
+--			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
+--		end
+	else Echo("could not open config file, using defaults")
 	end	
-		
-	if VFS.FileExists(cpath..SOUNDDEF_FILENAME, VFS.RAW_FIRST) then
-		if (Spring.LoadSoundDef(cpath..SOUNDDEF_FILENAME)) then
-		else Echo("<ambient player>: failed to load sounddefs")		
-		end
-		
-		local list = VFS.Include(cpath..SOUNDDEF_FILENAME, nil, VFS.RAW_FIRST)			
-		if (list.Sounditems == nil) then Echo("<ambient player>: sounddef file was empty")			
+	
+	Echo ("Loading templates...")	
+	if vfsExists(cpath..SOUNDS_ITEMS_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_ITEMS_DEF_FILENAME) then
+			Echo("failed to load templates, check format\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
+		end		
+		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)			
+		if not list.Sounditems then 
+			Echo("templates file was empty")
 		else
-			tracklist.tracks=list.Sounditems
-			for track, params in pairs (tracklist.tracks) do
-				tracklist.tmpvalues[track] = {timeframe = params.onset, generated = false}
-				--params.timeframe=secondsToUpdate+params.offset
-				--params.generated=false
-			end
+			sounditems.templates = list.Sounditems			
+			Echo ("found "..#souditems.templates.." sounditems")			
 		end		
 	else
-		Echo("<ambient player>: no sounddefs found")
-		tracks = {}		
+		Echo("file not found\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
 	end
 	
-	if VFS.FileExists(cpath..EMITTERS_FILENAME, VFS.RAW_FIRST) then
-		emitters = VFS.Include(cpath..EMITTERS_FILENAME, nil, VFS.RAW_FIRST) or emitters
-		--[[
-		-- if editmode
-		Spring.SendCommands("clearmapmarks")
-		for e, t in pairs(emitters) do
-			if not(e == 'index') then
-				if (t.pos.x) then
-					pstring = t.pos.x..", "..t.pos.z..", "..t.pos.y
-					Spring.MarkerAddPoint(t.pos.x,t.pos.y,t.pos.z,"(emitter "..e.."): "..pstring,true)
-				end
-			end			
-		end
-		--]]
+	Echo ("Loading sounds...")	
+	if vfsExists(cpath..SOUNDS_INUSE_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_INUSE_DEF_FILENAME) then
+			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
+		end		
+		local list = vfsInclude(cpath..SOUNDS_INUSE_DEF_FILENAME, nil, VFSMODE)			
+		if (list.Sounditems == nil) then 
+			Echo("sounds file was empty")
+		else
+			sounditems.inuse = list.Sounditems			
+			Echo ("found "..#souditems.inuse.." sounds")			
+		end		
+	else
+		Echo("file not found\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
+	end
+	
+	Echo ("Loading emitters...")	
+	if vfsFileExists(cpath..EMITTERS_FILENAME, VFSMODE) then
+		tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
+		if tmp then
+			for e, params in pairs(tmp) do
+				emitters[e] = params
+			end	
+			Echo ("found "..#tmp.." emitters")
+		else Echo ("emitters file was empty")
+		end	
 	end	
-	
-	if VFS.FileExists(upath..SAVETABLE_FILENAME, VFS.RAW_FIRST) then			
-		SaveTable, MakeSortedTable, CompareKeys, valueTypes, keyTypes, encloseKey, encloseStr, keyWordSet, keyWords, saveTables, indendtString
-			= VFS.Include(upath..SAVETABLE_FILENAME, nil, VFS.RAW_FIRST)		
-		Echo("<ambient player>: loaded savetable.lua")
-	else Echo("<ambient player>: failed to load savetable.lua")
-	end
-	
-	if not (config.path_map) then	config.path_map= 'maps/'..Game.mapName..'.sdd/' end
+			
+	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end	
 	inited=true --?
 	UpdateGUI()
 end
 
 
 function widget:GameStart()
-	gameStarted = true	
+	gameStarted = true
 	Echo ("The map directory is assumed to be "..config.path_map.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")	
 end
 
@@ -493,355 +464,8 @@ end
 
 
 --------------------------------------------------------------------------------
--- GUI
+-- LISTENERS
 --------------------------------------------------------------------------------
-
-function UpdateGUI()
-	editbox_mapfolder.text = config.path_map
-	editbox_soundfolder.text = config.path_sound
-	
-	for track, params in pairs(tracklist.tracks) do
-		
-			--local name = params.name
-			tracklist_controls['label'..track] = EditBox:New {
-				x = 0,
-				--y = 0,
-				clientWidth = 200,
-				--clientHeight = 16,
-				parent = layout_overview,
-				align = 'left',
-				text =  track,
-				fontSize = 10,
-				textColor = {0.9,0.9,0.9,1},
-				backgroundColor = {0.2,0.2,0.2,0.5},
-				borderColor = {0.3,0.3,0.3,0.5},
-				OnMouseOver = { function(self) 
-									local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
-									for param, val in pairs(params) do										
-										if type(val) == 'boolean' then ttip = ttip..param..": "..(val and "true" or "false").."\n" 											
-										else ttip = ttip..param..": "..val.."\n" 
-										end
-									end
-									--self:SetTooltip(ttip)
-									self.tooltip=ttip
-								end
-							},
-				OnChange = {function()
-							params.name = self.text
-							end
-						},
-			}
-			tracklist_controls['length'..track] = EditBox:New {
-				x = 204,
-				clientWidth = 26,
-				parent = layout_overview,
-				align = 'right',
-				text = params.length,
-				fontSize = 10,
-				textColor = {0.9,0.9,0.9,1},
-				backgroundColor = {0.2,0.2,0.2,0.5},
-				borderColor = {0.3,0.3,0.3,0.5},
-				tooltip = [[The length of the track in seconds. As this information can't currently be obtained by the Widget, you may want to insert it manually.]]
-			}
-						
-			tracklist_controls['edit_image'..track] = Image:New {
-				--x = 250,
-				--y = 8,
-				parent = layout_overview,
-				file = PROPERTIES_ICON,				
-				width = 20,
-				height = 20,
-				--margin = {0,0,0,-6},
-				--padding = {0,0,0,-4},
-				--clientWidth = 32,
-				--clientHeight = 32,
-				tooltip = 'Sounditem Properties',
-				color = {0.8,0.7,0.9,0.9},
-				--margin = {0,2,0,0},
-				--caption = '',
-				OnClick = {	function()
-								
-								--local p = {x,y,z}
-								--return DoPlay(track, options.volume.value, nil, nil, nil)		
-							end
-						},
-			}
-			tracklist_controls['play_image'..track] = Image:New {
-				--x = 240,
-				--y = 0,
-				parent = layout_overview,
-				file = PLAYSOUND_ICON,				
-				width = 20,
-				height = 20,
-				tooltip = 'Play Sounditem',
-				color = {0,0.8,0.2,0.9},
-				--caption = '',
-				margin = {-6,0,0,0},
-				OnClick = {	function()
-								--local p = {x,y,z}
-								
-								return DoPlay(track, options.volume.value, nil, nil, nil)		
-							end
-						},
-			}
-		--end	
-	end
-	local nodes = {}
-	local idx = 1
-	for emitter, params in pairs(emitters) do	
-		
-		if emitter ~= 'index' then
-			--Echo (emitter)
-			local pos 
-			if params.pos then pos = params.pos end
-			if pos and not type(pos.x == 'boolean') then 
-				nodes[idx] = emitter.." - "..pos.x..", "..pos.z..", "..pos.y
-				idx = idx + 1
-			else
-				nodes[idx] = emitter				
-				idx = idx + 1
-			end
-			--Echo(nodes[idx] or "skipped entry")
-			local list = params.playlist		
-			if list then 
-				nodes[idx] = {}
-				local i = 1
-				for item, values in pairs(list) do					
-					if item then 
-						nodes[idx][i] = item 
-						--Echo(nodes[idx][i] or "skipped entry in subtable")
-						i = i + 1
-					end
-					
-				end
-				idx = idx + 1
-			end			
-		end	
-	end
-	--[[
-		x = 0,
-		y = 0,
-		--clientWidth = 160,
-		--clientHeight = 420,
-		parent = scroll_overview,
-		orientation = 'vertical',
-		--orientation = 'left',
-		selectable = false,		
-		multiSelect = false,
-		maxWidth = 340,
-		minWidth = 340,
-		itemPadding = {6,2,6,2},
-		itemMargin = {0,0,0,0},
-		autosize = true,
-		align = 'left',
-		columns = 4,
-		left = 0,
-		centerItems = false,	
-	--]]	
-	nodes[idx] = LayoutPanel:New {
-		--caption = 'this is a test',		
-		--width = 200,
-		--height = 20,
-		--maxWidth = 340,
-		--minWidth = 340,
-		orientation = 'vertical',
-		selectable = true,		
-		multiSelect = false,
-		itemPadding = {6,2,6,2},
-		itemMargin = {0,0,0,0},
-		autosize = true,
-		left = 0,		
-		children = {
-			Label:New {
-				width = 60,
-				height = 20,				
-				caption = 'long text is long',
-			},
-			Image:New {
-			parent = layout_overview,
-				file = PROPERTIES_ICON,
-				width = 20,
-				height = 20,
-				tooltip = 'Sounditem Properties',
-				color = {0.8,0.7,0.9,0.9},
-			},
-			Image:New {
-				file = PLAYSOUND_ICON,
-				width = 20,
-				height = 20,
-				tooltip = 'Play Sounditem',
-				color = {0,0.8,0.2,0.9},
-			},
-		}
-		--tooltip = 'tooltip',
-		--align = 'left',
-		--file = SETTINGS_ICON,
-	}
-	idx = idx +1
-	nodes[idx] = {}
-	nodes[idx][1] = TextBox:New {
-		text = 'more test',
-		OnClick = {function()
-			Echo("textmouse")
-			end
-			},
-
-	}
-	nodes[idx][2] = Label:New {
-		caption = 'moaaaaaaaaaaaaaaaaaaaar',
-	}
-	idx = idx +1
-	nodes[idx] = Label:New {
-		caption = 'root',
-	}
-	
-	idx = idx +1
-	nodes[idx] = {}
-	nodes[idx][1] = Label:New {
-		caption = 'second',
-	}
-	nodes[idx][2] = {}
-	nodes[idx][2][1] = Label:New {
-		caption = 'last',
-	}
-	
-	treeview_emitters = TreeView:New {
-				x = 0,
-				y = 0,
-				--clientWidth = 160,
-				--clientHeight = 420,
-				parent = scroll_emitters,
-				orientation = 'vertical',
-				--orientation = 'left',
-				selectable = false,		
-				multiSelect = false,
-				--maxWidth = 320,
-				--minWidth = 320,
-				itemPadding = {6,2,6,2},
-				itemMargin = {0,0,0,0},
-				autosize = true,
-				align = 'left',
-				--columns = 3,
-				left = 0,
-				centerItems = false,	
-				nodes = nodes,
-				fontSize = 10,
-				
-	}
-	
-	
-end
-
-
-function UpdateInspectionWindow(object)	
-	--Echo("call with "..object)
-		
-	if window_inspect.currentInspect and (window_inspect.currentInspect ~= object) then		
-		Echo(window_inspect.currentInspect.." and "..object)
-		window_inspect.panel:Dispose()
-		window_inspect:Invalidate()
-	end
-	
-	if emitters[object] then
-		local e = emitters[object]
-		window_inspect.currentInspect = object		
-		label_inspect:SetCaption(object)
-		window_inspect.panel = ScrollPanel:New {
-			x = 0,
-			y = 40,
-			clientWidth = window_inspect.width - 38,
-			clientHeight = window_inspect.height - 90,
-			parent = window_inspect,
-			scrollPosX = -16,
-			horizontalScrollbar = false,
-			verticalScrollbar = true,
-			verticalSmartScroll = false,	
-			scrollbarSize = 6,
-			padding = {5,10,5,10},
-			--autosize = true,
-			--itemPadding = {5,10,5,10},
-			--margin = {20,20,20,20},			
-		}
-		window_inspect.panel.layout = LayoutPanel:New {
-			x = 0,
-			y = 0,
-			clientWidth = window_inspect.panel.width-20,
-			clientHeight = window_inspect.panel.width-20,
-			parent = window_inspect.panel,
-			orientation = 'vertical',
-			--orientation = 'left',
-			selectable = false,		
-			multiSelect = false,
-			maxWidth = window_inspect.panel.width,
-			minWidth = window_inspect.panel.width,
-			itemPadding = {6,2,6,2},
-			itemMargin = {0,0,0,0},
-			autosize = true,
-			align = 'left',
-			columns = 3,
-			left = 0,
-			centerItems = false,	
-		}		
-		
-		for track, params in pairs(e.playlist) do
-			namebox = EditBox:New {
-				--x = 0,				
-				--autosize = true,
-				width = window_inspect.panel.layout.width-86,
-				--height = 12,
-				parent = window_inspect.panel.layout,
-				align = 'left',
-				text =  track,
-				fontSize = 10,
-				textColor = {0.9,0.9,0.9,1},
-				backgroundColor = {0.2,0.2,0.2,0.5},
-				borderColor = {0.3,0.3,0.3,0.5},
-				OnMouseOver = { function(self) 
-									--local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
-									--for param, val in pairs(params) do										
-									--	if type(val) == 'boolean' then ttip = ttip..param..": "..(val and "true" or "false").."\n" 											
-									--	else ttip = ttip..param..": "..val.."\n" 
-									--	end
-									--end
-									--self:SetTooltip(ttip)
-									--self.tooltip=ttip
-								end
-				},
-			}					
-			propsicon = Image:New {				
-				parent = window_inspect.panel.layout,
-				file = PROPERTIES_ICON,				
-				width = 20,
-				height = 20,				
-				tooltip = 'Track Properties',
-				color = {0.8,0.7,0.9,0.9},				
-				OnClick = {	function()
-								--local p = {x,y,z}
-								--return DoPlay(track, options.volume.value, nil, nil, nil)		
-							end
-				},
-			}
-			playicon = Image:New {
-				parent = window_inspect.panel.layout,
-				file = PLAYSOUND_ICON,				
-				width = 20,
-				height = 20,
-				tooltip = 'Play at Location',
-				color = {0,0.8,0.2,0.9},				
-				margin = {-6,0,0,0},
-				OnClick = {	function()
-								local px, py, pz = e.pos.x, e.pos.y, e.pos.z
-								Echo(px.." "..py.." "..pz)
-								return DoPlay(track, options.volume.value, px or nil, py or nil, pz or nil) -- pos is false for global emitter, for some silly reason. needs change
-							end
-				},
-			}
-		end
-		
-	end
-	--window_inspect:Invalidate()
-end
-
 
 function widget:MousePress(x, y, button)
 	if highlightEmitter then
@@ -888,21 +512,19 @@ function widget:Update(dt)
 	if not (gameStarted) then return end
 	
 	--UpdateGUI()
-	mx, mz = Spring.GetMouseState() --?	
-	if options.showemitters.value and not screen0.hoveredControl then -- we dont want emitters to highlight if we are moving in the gui
-		_, mcoords = Spring.TraceScreenRay(mx, mz, true)	
+	mx, mz = GetMouse() --?	
+	if options.showemitters.value and not MouseOnGUI then -- we dont want emitters to highlight if we are moving in the gui
+		_, mcoords = TraceRay(mx, mz, true)	
 		local dist = 100000000
 		local nearest
 		for e, params in pairs(emitters) do		
-			if e~='index' then -- this shit needs to go
-				if params.pos.x then
-					if mcoords then					
-						local dst = distance(mcoords[1], mcoords[3], params.pos.x, params.pos.z)
-						if dst < dist then								
-							dist = dst
-							nearest = e
-						end
-					end
+			if params.pos.x then
+				if mcoords then					
+					local dst = distance(mcoords[1], mcoords[3], params.pos.x, params.pos.z)
+					if dst < dist then								
+						dist = dst
+						nearest = e
+					end			
 				end
 			end
 		end	
@@ -914,102 +536,129 @@ function widget:Update(dt)
 	else
 		highlightEmitter = nil
 	end
+	
 	if (needReload and options.autoreload.value) then ReloadSoundDefs() needReload = false end		
 	if (secondsToUpdate>0) then	secondsToUpdate = secondsToUpdate-dt return
 	else secondsToUpdate = options.checkrate.value
 	end
 	
 	if not (options.autoplay.value) then return end
-	for e, t in pairs (emitters) do
-		if not (e == 'index') then		
-			for track, _ in pairs(t.playlist) do				
-				local trk = tracklist.tracks[track]				
-				local tmp = tracklist.tmpvalues[track]
-				if (trk.rnd > 0) then					
-					tmp.timeframe=tmp.timeframe - options.checkrate.value
-					if (tmp.timeframe < 0) then
-						tmp.timeframe = 0
-						if (random(trk.rnd) == 1) then						
-							DoPlay(track, options.volume.value, t.pos.x, t.pos.y, t.pos.z)
-							tmp.timeframe  = trk.minlooptime
-						end
+	for e, params in pairs (emitters) do		
+		for i = 1, #params.sounds do		
+		local trk = params.sounds[i]
+		local item = trk.item 
+			if (item.rnd > 0) then
+				trk.timer = trk.timer - options.checkrate.value -- this seems inaccurate				
+				if (trk.timer < 0) then
+					trk.timer = 0
+					if (random(item.rnd) == 1) then
+						DoPlay(item, options.volume.value, params.pos.x, params.pos.y, params.pos.z) --< this should pass nils if pos.* doesnt exist
+						trk.timer  = item.minlooptime
 					end
 				end
-			end
+			end	
 		end	
 	end
 end	
 
 
-function DoPlay(track, vol, x, y, z) 
-	if not (tracklist.tracks[track]) then Echo("<ambient player>: track "..tostring(track).." not found!") return false
+local function DoPlay(item, vol, x, y, z) 
+	if not (sounditems.templates[item] or sounditems.inuse[item]) then 
+		Echo("item "..tostring(track).." not found!") 
+		return false	
 	else
-		local tr=track
-		if (tracklist.tracks[tr].generated) then	tr=tracklist.tracks[tr].file	end		
-		if (PlaySound(tr, vol, x or nil, y or nil, z or nil)) then
+		local tr = item
+		-- if (tracklist.tracks[tr].generated) then	tr = tracklist.tracks[tr].file	end	 -- is this used?
+		if (PlaySound(tr, vol, x, y, z)) then
 			if (options.verbose.value) then
-				Echo("<ambient player>: playing "..track.." at volume: "..string.format("%.2f", vol))
-				if (x) then Echo("at Position: "..x..", "..y..", "..z) end
+				Echo("playing "..track.." at volume: "..string.format("%.2f", vol))
+				if (x) then Echo("at Position: "..x..", "..y..", "..z) end -- should format this looks bad with decimals
 			end
 			return true		
 		end	
-		Echo("<ambient player>: playback of "..track.." failed, not an audio file?")
+		Echo("playback of "..track.." failed, not an audio file?")
 		return false
 	end
 end
 
-
-function AddItemToEmitter(e, item)
-	local name = tostring(e).."_"..tostring(item)
-	tracklist.tracks[name]={}	
-	tracklist.tmpvalues[name]={}	
-	for k, v in pairs(tracklist.tracks[item]) do
-		tracklist.tracks[name][k] = v		
+-- need to pass actual item not just name
+local function AddItemToEmitter(e, item)
+	assert type(item) == 'table'
+	local name = tostring(e)..":"..tostring(item)
+	if sounditems.inuse[name] then 
+		Echo("a sounditem with that name already exists at this emitter")
+		return false 
 	end
-	tracklist.tmpvalues[name].generated = true
-	tracklist.tmpvalues[name].timeframe = tracklist.tracks[name].onset
-	tracklist.tracks[name].emitter=e --this could produce some trouble along the way for numbers#
-	tracklist.tracks[name].maxdist=100000 --this is required to be less than +inf for positional audio
-	emitters[e].playlist[name] = true
+	
+	local newItem = sounditems.inuse[name] = {}	
+	local eS = emitters[e].sounds[#emitters[e].sounds + 1] = {}	
+		
+	for k, v in pairs(item) do
+		newItem[k] = v		
+	end
+	
+	eS.item = newItem
+	eS.generated = true
+	eS.timer = newItem.onset
+	
+	-- newItem.maxdist = newItem.maxdist < 100000 and newItem.maxdist or 100000 -- this is bad, should not have to set it here	
+	-- newItem.emitter = e -- needed?
+	
 	needReload = true
 	return true
 end
 
 
-function SpawnEmitter(name, yoffset)
-	local p
-	yoffset = yoffset or 0
-	if (Spring.IsAboveMiniMap(mx, mz)) then return 
-	else _, p = Spring.TraceScreenRay(mx,mz,true)		
-	end	
-	local pstring = math.floor(p[1])..", "..math.floor(p[3])..", "..math.floor(p[2]).." + "..math.floor(yoffset)	
-	if not (name) then
-		name = tostring(emitters.index)
-		emitters.index = emitters.index + 1
-	end		
+local function RemoveItemFromEmitter(e, item)
+	if not sounditems.inuse[item] then 
+		Echo("a sounditem with that name is not in use")
+		return false 
+	end
 	
-	if (emitters[name]) then Echo("<ambient player>: that name is already taken") return false end
-	p[2] = p[2] + yoffset
-
-	local e = {}
-	e.pos = {x = math.floor(p[1]), y = math.floor(p[2]), z = math.floor(p[3])}
-	e.playlist = {}
-	emitters[name]=e
-	--Spring.MarkerAddPoint(p[1],p[2],p[3],"(emitter "..name.."): "..pstring,true)
+	assert sounditems.inuse[item] and emitters[e].sounds[item] -- to make sure we didnt fuck up earlier when adding
+	
+	sounditems.inuse[item} = nil
+	emitters[e].sounds[item] = nil
 end
 
 
-function Echo(s)
-	Spring.Echo(s)	
-	logfile = logfile.."\n"..s
-	if textbox_console then textbox_console:SetText(logfile) end
+local function RemoveItemFromList(item)
+	if not sounditems.templates[item] then
+		Echo("a sounditem with that name is not registered")
+		return false
+	end
+		
+	sounditems.inuse[item} = nil
+	for e = 1, #emitters do
+		emitters[e].sounds[item] = nil
+	end	
 end
 
-function distance(sx, sz, tx, tz)
+
+local function SpawnEmitter(name, yoffset)
+	local p
+	if not MouseOnGUI then _, p = Spring.TraceScreenRay(mx,mz,true)
+	else return end
+	if (emitters[name]) then Echo("an emitter with that name already exists") return false end
+	
+	yoffset = yoffset or 0
+	p[2] = p[2] + yoffset	
+	if not (name) then name = (#emitters + 1).." - "..p[1]..", "..p[3]..", "..p[2] end		
+
+	-- __newindex should build our tables
+	emitters[name].pos = {x = math.floor(p[1]), y = math.floor(p[2]), z = math.floor(p[3])}	
+end
+
+
+local function distance(sx, sz, tx, tz)
 	local dx = sx - tx
 	local dz = sz - tz
 	--Spring.Echo (dx.." - "..dz)
 	return math.sqrt(dx*dx + dz*dz)
+end
+
+local function MouseOnGUI
+	return IsMouseMinimap(mx, mz) or screen0.hoveredControl
 end
 
 
@@ -1115,7 +764,7 @@ function ParseInput(s)
 				s = s:sub(eq + 1)
 				--sq = string.find (s, "[\'\"%(%[]")	 
 			else
-				Echo("<ambient player>: illegal argument(s) - lone bracket")
+				Echo("illegal argument(s) - lone bracket")
 				return {}
 			end
 		else break end	
@@ -1139,14 +788,14 @@ function Invoke(args)
 		-- disallow editing non-existant items, to avoid creating bogus items
 		
 			if not (SOUNDITEM_TEMPLATE[args[2]]) then
-				Echo("<ambient player>: unrecognized property")
+				Echo("unrecognized property")
 				return false
 			else
 			
 				if (args[3]) then
 								
 					if not (tracklist.tracks[args[3]]) then
-						Echo("<ambient player>: cannot find target!")
+						Echo("cannot find target!")
 						return false
 					end
 					
@@ -1164,7 +813,7 @@ function Invoke(args)
 							elseif (args[4] == "false") then
 								tracklist.tracks[args[3]][args[2]]=false
 							else
-								Echo("<ambient player>: only true/false allowed for this value")
+								Echo("only true/false allowed for this value")
 								return false
 							end
 							
@@ -1173,7 +822,7 @@ function Invoke(args)
 							if (number) then
 								tracklist.tracks[args[3]][args[2]]=number
 							else
-								Echo("<ambient player>: not a number")
+								Echo("not a number")
 								return false
 							end							
 						end						
@@ -1181,20 +830,20 @@ function Invoke(args)
 						return true
 						
 					else
-						Echo("<ambient player>: no value specified")
+						Echo("no value specified")
 						Echo("param: "..args[2].." target: "..args[3].." is: "..tostring(tracklist.tracks[args[3]][args[2]]))
 						return false
 					end
 					
 				else
-					Echo("<ambient player>: no target specified")
+					Echo("no target specified")
 					return false
 				end
 				
 			end	
 			
 		else
-			Echo("<ambient player>: no arguments specified")
+			Echo("no arguments specified")
 			return false
 		end
 		return false
@@ -1214,7 +863,7 @@ function Invoke(args)
 				end				
 				return DoPlay(args[2], vol, p.x, p.y, p.z)							
 		else
-			Echo("<ambient player>: specify a track")
+			Echo("specify a track")
 			return false
 		end
 	end
@@ -1240,7 +889,7 @@ function Invoke(args)
 			if (args[3]) then return LoadFromFile(config.path_read, args[2], args[3])			
 			end	
 		else
-			Echo("<ambient player>: specify a file in "..config.path_read)
+			Echo("specify a file in "..config.path_read)
 			return false
 		end		
 	end
@@ -1251,7 +900,7 @@ function Invoke(args)
 		while (args[i]) do
 			local n = tonumber(args[i]) or args[i] --Echo(type(n))
 			if (tracklist.tracks[n]) then
-				Echo("<ambient player>: ---"..args[i].."---")
+				Echo("---"..args[i].."---")
 				for param, value in pairs(tracklist.tracks[n]) do
 					Echo(tostring(param).." : "..tostring(value))
 				end
@@ -1267,16 +916,16 @@ function Invoke(args)
 					Echo("Index: ".. emitters.index)
 				end
 			else			 
-				Echo("<ambient player>: no such item or emitter: "..args[i])
+				Echo("no such item or emitter: "..args[i])
 			end	
 			i = i + 1			
 		end	if (i>2) then return true end
 		
-		Echo("<ambient player>: -----sounditems-----")
+		Echo("-----sounditems-----")
 		for track, params in pairs (tracklist.tracks) do
 			if not (params.emitter)	then Echo(track.." - "..(params.length).."s") end			
 		end
-		Echo("<ambient player>: -----emitters-----")
+		Echo("-----emitters-----")
 		for e, tab in pairs (emitters) do
 			if not (e == "index") then
 				Echo(tostring(e)..": "..(tab.pos.x or "none")..", "..(tab.pos.y or "none")..", "..(tab.pos.z or "none"))
@@ -1290,7 +939,7 @@ function Invoke(args)
 	
 	if (args[1] == "dir") then		
 		if not (args[2]) then
-			Echo("<ambient player>: you must specify a path")
+			Echo("you must specify a path")
 			return false
 		end
 		
@@ -1334,13 +983,13 @@ function Invoke(args)
 			elseif (string.match (args[2], "^[p]")) then
 				Save(2)
 			else
-				Echo("<ambient player>: type must be: e..., p..., o...")
+				Echo("type must be: e..., p..., o...")
 				Echo("(emitters, playlist, options)")
 				return false
 			end			
 			return true			
 		else
-			Echo("<ambient player>: saving all to write dir...")
+			Echo("saving all to write dir...")
 			Save(0)
 		end	
 		return false	
@@ -1436,15 +1085,15 @@ function Invoke(args)
 						if not (emitters[n].playlist[args[i]]) then
 							AddItemToEmitter(n, args[i])							
 						else
-							Echo ("<ambient player>: track "..args[i].." already present in "..args[2])
+							Echo ("track "..args[i].." already present in "..args[2])
 						end
 					else
-						Echo ("<ambient player>: no such track: "..args[i])
+						Echo ("no such track: "..args[i])
 					end
 				i = i + 1	
 				end				
 			else
-				Echo ("<ambient player>: no such emitter")
+				Echo ("no such emitter")
 			end
 		end
 		return
@@ -1454,7 +1103,7 @@ function Invoke(args)
 		ReloadSoundDefs()
 		return
 	end
-	Echo("<ambient player>: not a valid command")	
+	Echo("not a valid command")	
 	
 end
 
@@ -1464,246 +1113,38 @@ end
 -- I/O
 --------------------------------------------------------------------------------
 
-function ReloadSoundDefs()	
-	local rpath = PATH_LUA..PATH_CONFIG
-	local wpath = config.path_map..rpath	
-	
-	if not (Save(2, wpath, TMP_FILENAME)) then return end
-	if not (Spring.LoadSoundDef(rpath..TMP_FILENAME)) then Echo("<ambient player>: failed to load sounddefs") return false end
-	
-	list = VFS.Include(rpath..TMP_FILENAME, nil, VFS.RAW_FIRST)			
-	if (list.Sounditems == nil) then Echo("<ambient player>: sounddef file was empty")			
-	else
-		tracklist.tracks=list.Sounditems
-		for track, params in pairs (tracklist.tracks) do			
-			if not (tracklist.tmpvalues[track]) then 
-				tracklist.tmpvalues[track] = {timeframe = params.onset, generated = false} --should never happen
-				Echo("THIS SHALL NEVER HAPPEN!")
-			end
-				--params.timeframe=secondsToUpdate+params.offset
-				--params.generated=false
-		end
-	end	
-	UpdateGUI()	
-end
-
-
-function LoadFromFile(folder, file, name, nametag)		
-	Echo("<ambient player>: loading "..folder..file.." ...")
-	if VFS.FileExists(folder..file) then
-		local ending=file:sub(-4,-1)
-		if not (ending=='.ogg' or ending =='.wav') then	Echo("<ambient player>: must be *.wav or *.ogg file!") return false	end
-
-		local shortname = name or (file:sub(1,-5))
-		
-		if (tracklist.tracks[shortname] ~= nil) then Echo("<ambient player>: a sounditem with that name already exists!") return false		
-		else 		
-			if not (PlaySound(folder..file, 0)) then -- preload the file and generate sounditem?
-					-- should just force reload instead i would think
-					Echo("<ambient player>: unable to load file. not a soundfile?")
-					return false
-			end 		
-			
-			tracklist.tracks[shortname]={}
-			tracklist.tmpvalues[shortname]={}
-			for param, value in pairs (SOUNDITEM_TEMPLATE) do tracklist.tracks[shortname][param] = value end		
-			tracklist.tmpvalues[shortname].timeframe = tracklist.tracks[shortname].onset
-			tracklist.tmpvalues[shortname].generated = true
-			tracklist.tracks[shortname].file=folder..file			
-			Echo("<ambient player>: added playlist entry: "..shortname)
-		end							
-	else Echo("<ambient player>: file not found!") return false end
-	Echo("<ambient player>: loaded "..file.." successfully!")
-	needReload = true
-end
-
-
-function Save(list, path, file) 
-	
-	path = path or config.path_map..PATH_LUA..PATH_CONFIG
-	list = list or 0
-	
-	if (list == 0 or list == 1) then --options
-		file = file or OPTIONS_FILENAME
-		local opt = {config = config}
-		local w = {}
-		for k, v in pairs(words) do
-			if not (type(v) == 'table') then w.k = v end
-		end
-		opt.words = w
-		if (WriteTable(opt, path..file, 'Options', OPTIONS_HEADER)) then Echo("<ambient player>: saved options to "..path..file)
-		else Echo("<ambient player>: failed to save options") return false end
-		file = nil
-	end	
-	
-	if (list == 0 or list == 2) then --playlist	
-		file = file or SOUNDDEF_FILENAME
-		local gentracks = {}
-		for item, params in pairs(tracklist.tmpvalues) do
-			if (params.generated) then gentracks[item]=true params.generated=false end
-		end
-	
-		local dumdum = {}
-		dumdum.Sounditems = tracklist.tracks		
-		if (WriteTable(dumdum, path..file, 'Sounds', SOUNDDEF_HEADER)) then	Echo("<ambient player>: saved sounddefs to "..path..file)
-		else Echo("<ambient player>: failed to save sounddefs") return false end
-		for item, params in pairs(tracklist.tmpvalues) do
-			if (gentracks[item]) then params.generated=true	end
-		end
-		file = nil		
-	end	
-	
-	if (list == 0 or list == 3) then --emitters
-		file = file or EMITTERS_FILENAME
-		if (WriteTable(emitters, path..file, 'Emitters', EMITTERS_HEADER)) then	Echo("<ambient player>: saved emitters to "..path..file)
-		else Echo("<ambient player>: failed to save emitters") return false	end
-		file = nil
-	end
-	return true
-end
-
-
-function WriteTable(t, filename, tname, header)
-
-	if not (filename) then Echo("<ambient player>: you must specify a file") return false end
-	
-	Echo("<ambient player>: saving "..filename.." ...")
-	local file = io.open(filename, 'w')
-	
-	if (file == nil) then Echo("<ambient player>: failed to open "..filename) return false end
-	
-	if (header) then file:write(header..'\n') end
-	
-	file:write('local '..tname..' = ')
-	SaveTable(t, file, '')
-	file:write('}\nreturn '..tname)
-	
-	file:close()
-	Echo("<ambient player>: done!")
-	return true
-end
-
 
 --------------------------------------------------------------------------------
 -- DRAW
 --------------------------------------------------------------------------------
 
-local circleDivs = 65 -- how precise circle? octagon by default
-local innersize = 0.8 -- circle scale compared to unit radius
-local outersize = 2.0 -- outer fade size compared to circle scale (1 = no outer fade)
-
-local emitMarker
-local emitMarker_Highlight
-
-
-function widget:DrawWorldPreUnit() --?
-	
-	if not emitMarker then UpdateMarkerList() end
-	
-	if options.showemitters.value then
-		for e, params in pairs(emitters) do
-			if e~='index' then
-				local pos = params.pos
-				if pos.x then
-					local list, linealpha -- should be options.alpha_*
-					if highlightEmitter == e then
-						list = emitMarker_Highlight
-						linealpha = 1
-					else
-						list = emitMarker
-						linealpha = 0.5
-					end
-					glColor(1,1,1,1)
-					glDepthTest(true)										
-					glPush()					
-						glTranslate(pos.x,pos.y,pos.z)
-						glPolygonOffset(-10000, -2)
-						glScale(options.emitter_radius.value, 1, options.emitter_radius.value)						
-						glCallList(list)
-					glPop()
-					local gy =	Spring.GetGroundHeight(pos.x, pos.z)		
-					if pos.y >  gy then							
-						glDepthMask(true)
-						glPush()						
-							glBeginEnd(GLLINES, function()
-								glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
-								--gl.Translate(pos.x,pos.y,pos.z)
-								glVertex(pos.x, pos.y, pos.z)
-								glVertex(pos.x, gy, pos.z)
-							end)
-						glPop()
-						glColor(1,1,1,1)
-						glDepthMask(false)						
-					end					
-					glDepthTest(false)					
-				end
-			end
-		end
-	end
-end
-
-function UpdateMarkerList()
-	emitMarker = MakeEmitterMarkerList(options.color_red.value, options.color_green.value, options.color_blue.value,
-		options.color_alpha_inner.value, options.color_alpha_outer.value)
-	emitMarker_Highlight = MakeEmitterMarkerList(options.color_red.value, options.color_green.value, options.color_blue.value, 
-		options.color_alpha_inner.value * options.color_highlightfactor.value,
-			options.color_alpha_outer.value * options.color_highlightfactor.value)		
+function widget:DrawWorldPreUnit() --?		
+	DrawEmitters(highlightEmitter)
 end
 
 
-MakeEmitterMarkerList = function(red, green, blue, alpha_inner, alpha_outer)
-	local r, g, b = red, green, blue		
-	local alpha, fadealpha = alpha_inner, alpha_outer	
-	-- body 	
-	local circlePoly = glCreateList(function()
-		-- inner:
-		glBeginEnd(GLTRIANGLES, function()
-			local radstep = (2.0 * math.pi) / circleDivs
-			for i = 1, circleDivs do
-				local a1 = (i * radstep)
-				local a2 = ((i+1) * radstep)
-				glColor(r, g, b, alpha)
-				glVertex(0, 0, 0)
-				glColor(r, g, b, fadealpha)
-				glVertex(math.sin(a1), 0, math.cos(a1))
-				glVertex(math.sin(a2), 0, math.cos(a2))
-			end
-		end)
-		-- outer edge:
-		glBeginEnd(GLQUADS, function()
-			local radstep = (2.0 * math.pi) / circleDivs
-			for i = 1, circleDivs do
-				local a1 = (i * radstep)
-				local a2 = ((i+1) * radstep)
-				glColor(r, g, b, fadealpha)
-				glVertex(math.sin(a1), 0, math.cos(a1))
-				glVertex(math.sin(a2), 0, math.cos(a2))
-				glColor(r, g, b, 0.0)
-				glVertex(math.sin(a2) * outersize, 0, math.cos(a2) * outersize)
-				glVertex(math.sin(a1) * outersize, 0, math.cos(a1) * outersize)
-			end
-		end)
-	
-	-- rings
-		glBeginEnd(GLQUADS, function()
-			local radstep = (2.0 * math.pi) / (circleDivs - 1)
-			
-			for fade = 0.1,0.7,0.1 do				
-				for i = 1, circleDivs-1 do
-					local a1 = (i * radstep)
-					local a2 = ((i+1) * radstep)
-					local r = (fade * -1.5) + 1.6
-					glColor(r, g, b, fade)
-					glVertex(math.sin(a1) * (r), 0, math.cos(a1) * (r))
-					glVertex(math.sin(a2) * (r), 0, math.cos(a2) * (r))
-					glVertex(math.sin(a2) * (r + 0.02), 0, math.cos(a2) * (r + 0.02))
-					glVertex(math.sin(a1) * (r + 0.02), 0, math.cos(a1) * (r + 0.02))
-				end
-			end
-		end)		
-	end)
-	return circlePoly
-end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 --[[
@@ -2036,9 +1477,9 @@ end
 	if (args[1] == "verbose") then
 		config.verbose = not (config.verbose)
 		if (config.verbose) then
-			Echo("<ambient player>: verbose on")
+			Echo("verbose on")
 		else 
-			Echo("<ambient player>: verbose off")
+			Echo("verbose off")
 		end
 		return true
 	end
@@ -2051,10 +1492,10 @@ end
 			elseif (number > 2) then config.ambientVolume = 2
 			else config.ambientVolume=number
 			end
-			Echo("<ambient player>: set ambient volume "..string.format("%.2f",config.ambientVolume))
+			Echo("set ambient volume "..string.format("%.2f",config.ambientVolume))
 			return true
 		end
-		Echo("<ambient player>: not a number")
+		Echo("not a number")
 		return false
 	end	
 
@@ -2062,9 +1503,9 @@ end
 	if (args[1] == "hold") then
 		options.autoplay = not (options.autoplay)
 		if (options.autoplay) then
-			Echo("<ambient player>: play")
+			Echo("play")
 		else 
-			Echo("<ambient player>: hold")
+			Echo("hold")
 		end
 		return true
 	end
