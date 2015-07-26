@@ -11,6 +11,12 @@
 local io = widget.io
 local pairs = widget.pairs
 local ipairs = widget.ipairs
+local math = widget.math
+local error = widget.error
+local table = widget.table
+local next = widget.next
+local string = widget.string
+local tostring = widget.tostring
 
 local VFSMODE = widget.VFSMODE
 
@@ -48,13 +54,16 @@ local config = config
 local emitters = emitters
 local sounditems = sounditems
 
+-- stuff never gets called atm
+
 -- do i have to load all of them if only one or a few need updating? tho its not a lot to do so i guess it doesnt matter?
 function ReloadSoundDefs()
 	-- not sure they have to be different?
 	local rpath = PATH_LUA..PATH_CONFIG
 	local wpath = config.path_map..PATH_LUA..PATH_CONFIG
 	
-	if not (WriteSoundDefs(wpath, TMP_ITEMS_FILENAME, TMP_INUSE_FILENAME)) then 
+	Echo("caching...")
+	if not (WriteSoundDefs(wpath, TMP_ITEMS_FILENAME, TMP_INUSE_FILENAME, true)) then 
 		Echo("failed to write temp files:\n "..wpath) return false end
 	if not (spLoadSoundDef(rpath..TMP_ITEMS_FILENAME)) then
 		Echo("failed to load temp file:\n "..rpath..TMP_ITEMS_FILENAME) return false end
@@ -63,7 +72,7 @@ function ReloadSoundDefs()
 
 	return true
 	-- update should get called on frame/draw update. also not accessible from here
-	UpdateGUI()	
+	--UpdateGUI()	
 end
 
 
@@ -82,11 +91,11 @@ function LoadSoundFile(folder, file, name)
 			while sounditems.templates[shortname] do
 				shortname='_'..shortname
 			end	
-			Echo("entry will be named "..shortname			
+			Echo("entry will be named "..shortname)
 		end		
 		
 		sounditems.templates[shortname] = {} -- meta table can handle defaults					
-		sounditems.templates[shortname] = file = folder..file
+		sounditems.templates[shortname].file = file
 		Echo("added sounditem: "..shortname)
 							
 	else Echo("file not found!") return false end
@@ -95,21 +104,21 @@ function LoadSoundFile(folder, file, name)
 end
 
 
-function WriteSoundDefs(path, itemsfile, inusefile)
+function WriteSoundDefs(path, itemsfile, inusefile, silent)
 	local Sounds = {Sounditems = Sounditems.templates}		
-	if (WriteTable(Sounds, path..itemsfile, SOUNDS_ITEMS_HEADER)) then
+	if (WriteTable(Sounds, path..itemsfile, SOUNDS_ITEMS_HEADER)) and not silent then
 		Echo("saved sounditem definitions to "..path..file)
 	else Echo("failed to save sounddefs :(") return false end
 	
 	Sounds = {Sounditems = Sounditems.inuse}		
-	if (WriteTable(Sounds, path..inusefile, SOUNDS_INUSE_HEADER)) then
+	if (WriteTable(Sounds, path..inusefile, SOUNDS_INUSE_HEADER)) and not silent then
 		Echo("saved sounds to "..path..file)
 	else Echo("failed to save sounds :(") return false end	
 end
 
 
 -- will this save sounditems as sounditems?
-function WriteEmittersDef(path, file)		
+function WriteEmittersDef(path, file)
 	if (WriteTable(emitters, path..file, EMITTERS_HEADER)) then
 		Echo("saved emitters to "..path..file)
 	else Echo("failed to save emitters :(") return false	end	
@@ -152,7 +161,7 @@ end
 
 local function WriteTable(t, filename, header, tname)
 	local tname = tname or tostring(t)
-	if not (filename) then Echo("<ape>:file not found") return false end	
+	if not (filename) then Echo("file not found") return false end	
 	Echo("writing "..filename.." ...")
 	
 	local file = io.open(filename, 'w')	

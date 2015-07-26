@@ -10,6 +10,7 @@
 
 local pairs = widget.pairs
 local type = widget.type
+local tostring = widget.tostring
 
 local PATH_LUA = widget.LUAUI_DIRNAME
 
@@ -45,8 +46,8 @@ local PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
 local HELPTEXT = [[generic info here]]
 
 
-function SetupGUI()
-
+function SetupGUI()	
+		
 	Chili = widget.WG.Chili
 	
 	if (not Chili) then		
@@ -120,8 +121,8 @@ function SetupGUI()
 		parent = scroll_overview,
 		orientation = 'vertical',
 		--orientation = 'left',
-		selectable = false,		
-		multiSelect = false,
+		selectable = true,		
+		multiSelect = true,
 		maxWidth = 340,
 		minWidth = 340,
 		itemPadding = {6,2,6,2},
@@ -131,6 +132,11 @@ function SetupGUI()
 		columns = 4,
 		left = 0,
 		centerItems = false,	
+		OnSelectItem = {
+			function(...)
+				Echo("wub")
+			end	
+		},
 		--padding = {20,20,20,20},
 		--margin = {20,20,20,20},		
 	}	
@@ -373,7 +379,7 @@ function SetupGUI()
 		align = 'left',
 		text = config.path_sound,
 		OnChange = 	{	function()
-						config.path_sound=text
+							config.path_sound=text
 						end
 					},
 		parent = window_settings,
@@ -448,7 +454,7 @@ function UpdateGUI()
 	editbox_mapfolder.text = config.path_map
 	editbox_soundfolder.text = config.path_sound
 	
-	for track, params in pairs(tracklist.tracks) do
+	for track, params in pairs(sounditems.templates) do
 		
 			--local name = params.name
 			tracklist_controls['label'..track] = EditBox:New {
@@ -465,10 +471,8 @@ function UpdateGUI()
 				borderColor = {0.3,0.3,0.3,0.5},
 				OnMouseOver = { function(self) 
 									local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
-									for param, val in pairs(params) do										
-										if type(val) == 'boolean' then ttip = ttip..param..": "..(val and "true" or "false").."\n" 											
-										else ttip = ttip..param..": "..val.."\n" 
-										end
+									for key, _ in pairs(sounditems.default) do										
+										ttip = ttip..key..": "..tostring(params[key]).."\n"										
 									end
 									--self:SetTooltip(ttip)
 									self.tooltip=ttip
@@ -484,7 +488,7 @@ function UpdateGUI()
 				clientWidth = 26,
 				parent = layout_overview,
 				align = 'right',
-				text = params.length,
+				text = ''..params.length,
 				fontSize = 10,
 				textColor = {0.9,0.9,0.9,1},
 				backgroundColor = {0.2,0.2,0.2,0.5},
@@ -528,7 +532,7 @@ function UpdateGUI()
 				OnClick = {	function()
 								--local p = {x,y,z}
 								
-								return widget.DoPlay(track, options.volume.value, nil, nil, nil)		
+								return DoPlay(track, options.volume.value, nil, nil, nil)		
 							end
 						},
 			}
@@ -538,7 +542,7 @@ end
 
 
 function UpdateInspectionWindow(object)	
-	--Echo("call with "..object)
+	-- Echo("call with "..object)
 		
 	if window_inspect.currentInspect and (window_inspect.currentInspect ~= object) then		
 		Echo(window_inspect.currentInspect.." and "..object)
@@ -587,7 +591,11 @@ function UpdateInspectionWindow(object)
 			centerItems = false,	
 		}		
 		
-		for track, params in pairs(e.playlist) do
+		for i = 1, #e.sounds do
+			local sound = e.sounds[i]
+			for k, v in pairs(sound) do
+				widget.tostring(v)
+			end
 			namebox = EditBox:New {
 				--x = 0,				
 				--autosize = true,
@@ -595,7 +603,7 @@ function UpdateInspectionWindow(object)
 				--height = 12,
 				parent = window_inspect.panel.layout,
 				align = 'left',
-				text =  track,
+				text =  sound.item or 'error: no item',
 				fontSize = 10,
 				textColor = {0.9,0.9,0.9,1},
 				backgroundColor = {0.2,0.2,0.2,0.5},
@@ -617,7 +625,7 @@ function UpdateInspectionWindow(object)
 				file = PROPERTIES_ICON,				
 				width = 20,
 				height = 20,				
-				tooltip = 'Track Properties',
+				tooltip = 'Sound Properties',
 				color = {0.8,0.7,0.9,0.9},				
 				OnClick = {	function()
 								--local p = {x,y,z}
@@ -636,7 +644,7 @@ function UpdateInspectionWindow(object)
 				OnClick = {	function()
 								local px, py, pz = e.pos.x, e.pos.y, e.pos.z
 								Echo(px.." "..py.." "..pz)
-								return widget.DoPlay(track, options.volume.value, px or nil, py or nil, pz or nil) -- pos is false for global emitter, for some silly reason. needs change
+								return widget.DoPlay(sound.item, options.volume.value, px or nil, py or nil, pz or nil) -- pos is false for global emitter, for some silly reason. needs change
 							end
 				},
 			}

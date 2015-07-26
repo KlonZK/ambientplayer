@@ -44,14 +44,6 @@ local outersize = 2.0 -- outer fade size compared to circle scale (1 = no outer 
 local emitMarker
 local emitMarker_Highlight
 
-local function UpdateMarkerList()	
-	emitMarker = MakeEmitterMarkerList(options.color_red.value, options.color_green.value, options.color_blue.value,
-		options.color_alpha_inner.value, options.color_alpha_outer.value)
-	emitMarker_Highlight = MakeEmitterMarkerList(options.color_red.value, options.color_green.value, options.color_blue.value, 
-		options.color_alpha_inner.value * options.color_highlightfactor.value,
-			options.color_alpha_outer.value * options.color_highlightfactor.value)		
-end
-
 
 local function MakeEmitterMarkerList(red, green, blue, alpha_inner, alpha_outer)
 	local r, g, b = red, green, blue		
@@ -108,47 +100,54 @@ local function MakeEmitterMarkerList(red, green, blue, alpha_inner, alpha_outer)
 end
 
 
+function UpdateMarkerList()	
+	emitMarker = MakeEmitterMarkerList(options.color_red.value, options.color_green.value, options.color_blue.value,
+		options.color_alpha_inner.value, options.color_alpha_outer.value)
+	emitMarker_Highlight = MakeEmitterMarkerList(options.color_red.value, options.color_green.value, options.color_blue.value, 
+		options.color_alpha_inner.value * options.color_highlightfactor.value,
+			options.color_alpha_outer.value * options.color_highlightfactor.value)		
+end
+
+
 function DrawEmitters(highlightEmitter) -- highlightEmitter should be global to the environment
 	if not emitMarker then UpdateMarkerList() end
 	
 	if options.showemitters.value then	
-		for e, params in pairs(emitters) do
-			if e~='index' then
-				local pos = params.pos
-				if pos.x then
-					local list, linealpha -- should be options.alpha_*
-					if highlightEmitter == e then
-						list = emitMarker_Highlight
-						linealpha = 1
-					else
-						list = emitMarker
-						linealpha = 0.5
-					end					
-					glColor(1,1,1,1)
-					glDepthTest(true)										
-					glPush()					
-						glTranslate(pos.x,pos.y,pos.z)
-						glPolygonOffset(-10000, -2)
-						glScale(options.emitter_radius.value, 1, options.emitter_radius.value)						
-						glCallList(list)
+		for e, params in pairs(emitters) do			
+			local pos = params.pos
+			if pos.x then
+				local list, linealpha -- should be options.alpha_*
+				if highlightEmitter == e then
+					list = emitMarker_Highlight
+					linealpha = 1
+				else
+					list = emitMarker
+					linealpha = 0.5
+				end					
+				glColor(1,1,1,1)
+				glDepthTest(true)										
+				glPush()					
+					glTranslate(pos.x,pos.y,pos.z)
+					glPolygonOffset(-10000, -2)
+					glScale(options.emitter_radius.value, 1, options.emitter_radius.value)						
+					glCallList(list)
+				glPop()
+				local gy = GetGroundHeight(pos.x, pos.z)		
+				if pos.y >  gy then							
+					glDepthMask(true)
+					glPush()						
+						glBeginEnd(GLLINES, function()
+							glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
+							--gl.Translate(pos.x,pos.y,pos.z)
+							glVertex(pos.x, pos.y, pos.z)
+							glVertex(pos.x, gy, pos.z)
+						end)
 					glPop()
-					local gy = GetGroundHeight(pos.x, pos.z)		
-					if pos.y >  gy then							
-						glDepthMask(true)
-						glPush()						
-							glBeginEnd(GLLINES, function()
-								glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
-								--gl.Translate(pos.x,pos.y,pos.z)
-								glVertex(pos.x, pos.y, pos.z)
-								glVertex(pos.x, gy, pos.z)
-							end)
-						glPop()
-						glColor(1,1,1,1)
-						glDepthMask(false)						
-					end					
-					glDepthTest(false)					
-				end
-			end
+					glColor(1,1,1,1)
+					glDepthMask(false)						
+				end					
+				glDepthTest(false)					
+			end			
 		end
 	end
 end

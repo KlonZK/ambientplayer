@@ -1,30 +1,33 @@
 --[[
 TODO:
 - add emitters, emitters graphical representation, figure out how tracks and emitters work together VVV
-- implement adding sound items to emitters v
+- implement adding sound items to emitters Vv
 - implement batch loading, adding, editing vv-
-- restructure? v
+- restructure? vv
 - slash words and vars 
-- build writable tables for options v
-- save options, playlist, emitters support (good target for own file) V
-- remake initialize() to account for list files v?
+- build writable tables for options Vv
+- save options, playlist, emitters support (good target for own file) Vv
+- remake initialize() to account for list files Vv
 - find out how to find out about file sizes and lengths
 - find out how to create folders 
 - implement log V
-- disallow track names with only numbers ?
+- disallow track names with only numbers --why?
 - split vv
 
 - emit zones
 - mutex groups
 - chili support v
+- allow emitters to run scripts?
 --]]
+
+--os.getenv("HOME")
 
 local versionNum = '0.39'
 
 function widget:GetInfo()
   return {
     name      = "Ambient Sound Player & Editor",
-    desc      = "v"..(versionNum)",
+    desc      = "v"..(versionNum),
     author    = "Klon",
     date      = "dez 2014",
     license   = "GNU GPL, v2 or later",
@@ -44,32 +47,9 @@ local PlayStream = Spring.PlaySoundStream
 local GetMouse = Spring.GetMouseState 
 local TraceRay = Spring.TraceScreenRay
 local IsMouseMinimap = Spring.IsAboveMinimap
+local GetGroundHeight = Spring.GetGroundHeight
 
 local random=math.random
-
-
-local SOUNDITEM_TEMPLATE = {
-	-- sounditem stats
-	file = "",
-	gain = 1.0,
-	pitch = 1.0,
-	pitchMod = 0.0,
-	gainMod = 0.05,
-	priority = 0,
-	maxconcurrent = 2, 
-	maxdist = math.huge, 
-	preload = true,
-	in3d = true,
-	rolloff = 0,
-	dopplerscale = 0,
-	-- widget stats
-	length = "?",
-	emitter = false, 
-	rnd = 0,	
-	minlooptime = 1,
-	onset = 1,
-	
-}
 
 local vfsInclude = VFS.Include
 local vfsExist = VFS.FileExists
@@ -89,7 +69,7 @@ local FILE_MODULE_DRAW = 'snd_ambientplayer_draw.lua'
 
 local MAPCONFIG_FILENAME = 'ambient_mapconfig.lua'
 local SOUNDS_ITEMS_DEF_FILENAME = 'ambient_sounds_templates.lua'
-local SOUNDS_INUSE_DEF_FILENAMEE = 'ambient_sounds_inuse.lua'
+local SOUNDS_INUSE_DEF_FILENAME = 'ambient_sounds_inuse.lua'
 local EMITTERS_FILENAME = 'ambient_emitters.lua'
 local TMP_ITEMS_FILENAME = 'ambient_tmp_items.lua'
 local TMP_INUSE_FILENAME = 'aambient_tmp_inuse.lua'
@@ -105,8 +85,9 @@ local LOG_FILENAME = 'ambient_log.txt'
 local logfile = [[]]
 local spEcho = Spring.Echo
 
+-- should start dumping if it gets too long
 function Echo(s)
-	spEcho('<ape>:'..s)	
+	spEcho('<ape>: '..s)
 	logfile = logfile.."\n"..s
 	if textbox_console then textbox_console:SetText(logfile) end
 end
@@ -116,17 +97,55 @@ config.path_sound = 'Sounds/Ambient/'
 config.path_read = 'Sounds/Ambient/'
 config.path_map = nil
 
-local sounditems = {
-	[templates] = {},
-	[inuse] = {},	
+
+local SOUNDITEM_PROTOTYPE = {
+	-- sounditem stats
+	file = "",
+	gain = 1.0,
+	pitch = 1.0,
+	pitchMod = 0.0,
+	gainMod = 0.05,
+	priority = 0,
+	maxconcurrent = 2, 
+	maxdist = math.huge, -- not a good default
+	preload = true,
+	in3d = true,
+	rolloff = 0, -- not a good default
+	dopplerscale = 0,
+	-- widget stats
+	length = 0,
+	rnd = 0,
+	minlooptime = 1, -- minlooptime is added? to the length on every loop...
+	onset = 1, -- ...while onset just gets used once at start of game
 }
+
+local sounditems = {
+	templates = {},
+	inuse = {},
+	default = SOUNDITEM_PROTOTYPE,
+}
+
+-- these should automatically fill files with values too
+setmetatable(sounditems.templates, {
+	__newindex = function (t, k, v)		
+		rawset(t, k, v)
+		setmetatable(t[k], {__index = SOUNDITEM_PROTOTYPE})
+	end
+}) 
+		
+setmetatable(sounditems.inuse, {
+	__newindex = function (t, k, v)		
+		rawset(t, k, v)
+		setmetatable(t[k], {__index = SOUNDITEM_PROTOTYPE})
+	end
+}) 
 	
 -- are these used?
 local tracklist_controls = {}
 local emitters_controls = {}
 
 local emitters = {
-	--	e[i] = {
+	--	e = { -- are they indexed now or what?
 	--		pos = {x, y, z},
 	--		sounds = {
 	--			[j] = {	
@@ -141,24 +160,20 @@ local emitters = {
 
 -- look up sounds by name or reference
 setmetatable(emitters, {
-	__newindex = function(t, new)
-		t.new = {pos = {}, sounds = {}}
-		setmetatable(t.new.sounds, {
-			__index = function(st, item)
-				if type(item) == 'table' then
-					for i = 1, #st do
-						if st.item == item then return st.item end
-					end
-				end
-				elseif type(item) == 'string' then
-					for i = 1, #st do
-						if tostring(st.item) == item then return st.item end
+	__newindex = function(t, k, v)				
+		rawset (t, k, v)		
+		if not t[k].sounds then t[k]['sounds'] = {} end		
+		setmetatable(t[k].sounds, {			
+			__index = function(st, item)				
+				if type(item) == 'string' then
+					for i = 1, #st do						
+						if st[i].item == item then return st[i].item end --ill just assume they will both be strings for now
 					end
 				end
 				return nil
-			end
-		})
-	end
+			end			
+		})	
+	end	
 })
 
 emitters.global = {pos = {}, sounds = {}}
@@ -172,7 +187,7 @@ options = {}
 -- INCLUDES
 -------------------------------------------------------------------------------------------------------------------------
 
--- can import tables here?
+-- SetupGUI() builds controls so we can't import keys yet
 Echo ("Loading modules...")	
 
 local i_o = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters}
@@ -365,101 +380,19 @@ local gameStarted = Spring.GetGameFrame() > 0
 local inited = false
 
 local mx, mz
+local mcoords
 local needReload = false
 local highlightEmitter
-local dragEmitter
-local dragTimer = 0
+local drag = {
+	objects = {},
+	_type = {},
+	params = {},
+}
+local dragObject
+local dragType
+local DRAGTIME = 0.25
+local dragTimer = DRAGTIME
 local dragStarted = false
-
-
-
---------------------------------------------------------------------------------
--- INIT
---------------------------------------------------------------------------------
-
-function widget:Initialize()
-
-	--gui.DoPlay = DoPlay
-	
-	local cpath = PATH_LUA..PATH_CONFIG
-	local upath = PATH_LUA..PATH_UTIL
-
-	--setfenv(SetupGUI, gui)
-	gui.SetupGUI()	
-
-	for k, v in pairs(gui) do widget[k] = widget[k] or v end
-	for k, v in pairs(draw) do widget[k] = widget[k] or v end
-
-	Echo ("Loading local config...")
-	if vfsExists(cpath..MAPCONFIG_FILENAME, VFSMODE) then
-		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
-		if opt.config then
-			for k, v in pairs(opt.config) do config[k] = v or config[k]	end			
-		end
---		if (opt.words) then	
---			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
---		end
-	else Echo("could not open config file, using defaults")
-	end	
-	
-	Echo ("Loading templates...")	
-	if vfsExists(cpath..SOUNDS_ITEMS_DEF_FILENAME, VFSMODE) then
-		if not spLoadSoundDefs(cpath..SOUNDS_ITEMS_DEF_FILENAME) then
-			Echo("failed to load templates, check format\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
-		end		
-		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)			
-		if not list.Sounditems then 
-			Echo("templates file was empty")
-		else
-			sounditems.templates = list.Sounditems			
-			Echo ("found "..#souditems.templates.." sounditems")			
-		end		
-	else
-		Echo("file not found\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
-	end
-	
-	Echo ("Loading sounds...")	
-	if vfsExists(cpath..SOUNDS_INUSE_DEF_FILENAME, VFSMODE) then
-		if not spLoadSoundDefs(cpath..SOUNDS_INUSE_DEF_FILENAME) then
-			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
-		end		
-		local list = vfsInclude(cpath..SOUNDS_INUSE_DEF_FILENAME, nil, VFSMODE)			
-		if (list.Sounditems == nil) then 
-			Echo("sounds file was empty")
-		else
-			sounditems.inuse = list.Sounditems			
-			Echo ("found "..#souditems.inuse.." sounds")			
-		end		
-	else
-		Echo("file not found\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
-	end
-	
-	Echo ("Loading emitters...")	
-	if vfsFileExists(cpath..EMITTERS_FILENAME, VFSMODE) then
-		tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
-		if tmp then
-			for e, params in pairs(tmp) do
-				emitters[e] = params
-			end	
-			Echo ("found "..#tmp.." emitters")
-		else Echo ("emitters file was empty")
-		end	
-	end	
-			
-	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end	
-	inited=true --?
-	UpdateGUI()
-end
-
-
-function widget:GameStart()
-	gameStarted = true
-	Echo ("The map directory is assumed to be "..config.path_map.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")	
-end
-
---function widget:Shutdown()	
---	if (config.autosave) then Save() end
---end
 
 
 
@@ -467,13 +400,26 @@ end
 -- LISTENERS
 --------------------------------------------------------------------------------
 
+function widget:IsAbove(x, y)	
+	if dragObject then return true end
+end
+
+
 function widget:MousePress(x, y, button)
 	if highlightEmitter then
 		if button == 3 then return true end
 		if button == 2 then 			
-		end		
+		end	
+		if button == 1 then			
+			local e = emitters[highlightEmitter]
+			drag.objects[1] = e
+			drag._type.emitter = true
+			drag.params.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)			
+			Echo("drag timer started")
+			return true
+		end
+	else		
 	end	
-	
 end
 
 
@@ -499,28 +445,57 @@ function widget:MouseRelease(x, y, button)
 		end
 	end
 	
+	dragTimer = DRAGTIME
+	drag.objects[1] = nil
+	drag._type.emitter = nil	
+	drag.params.hoff = nil
 	dragStarted = false
+	Echo("drag ended")
 end
 
+function widget:MouseMove(x, y, dx, dy, button)	
+	if dragStarted then			
+		if drag._type.emitter and mcoords then		
+			drag.objects[1].pos.x = mcoords[1]
+			drag.objects[1].pos.z = mcoords[3]
+			drag.objects[1].pos.y = mcoords[2] + drag.params.hoff 		
+		end
+	end
+end
 
 
 --------------------------------------------------------------------------------
 -- UPDATE/MISC
 --------------------------------------------------------------------------------
 
+local function Distance(sx, sz, tx, tz)
+	local dx = sx - tx
+	local dz = sz - tz
+	--Spring.Echo (dx.." - "..dz)
+	return math.sqrt(dx*dx + dz*dz)
+end
+
+-- this is actually wasteful
+local function MouseOnGUI()
+	return IsMouseMinimap(mx, mz) or screen0.hoveredControl
+end
+
+
 function widget:Update(dt) 	
 	if not (gameStarted) then return end
 	
 	--UpdateGUI()
-	mx, mz = GetMouse() --?	
-	if options.showemitters.value and not MouseOnGUI then -- we dont want emitters to highlight if we are moving in the gui
-		_, mcoords = TraceRay(mx, mz, true)	
+	mx, mz = GetMouse() --?
+	_, mcoords = TraceRay(mx, mz, true)
+	
+	if options.showemitters.value then --and not MouseOnGUI then -- we dont want emitters to highlight if we are moving in the gui			
 		local dist = 100000000
 		local nearest
-		for e, params in pairs(emitters) do		
-			if params.pos.x then
+		--Echo("check")
+		for e, params in pairs(emitters) do				
+			if params.pos.x then -- they all have that no?				
 				if mcoords then					
-					local dst = distance(mcoords[1], mcoords[3], params.pos.x, params.pos.z)
+					local dst = Distance(mcoords[1], mcoords[3], params.pos.x, params.pos.z)
 					if dst < dist then								
 						dist = dst
 						nearest = e
@@ -530,28 +505,42 @@ function widget:Update(dt)
 		end	
 		if nearest and dist < options.emitter_highlight_treshold.value then		
 			highlightEmitter = nearest
+			--Echo("set")
 		else		
 			highlightEmitter = nil
+			--Echo("nil")
 		end
 	else
 		highlightEmitter = nil
+	end
+	--Echo (tostring(highlightEmitter))
+	
+	if drag.objects[1] and not dragStarted then		
+		dragTimer = dragTimer - dt
+		if dragTimer <= 0 then				
+			dragStarted = true			
+			dragTimer = DRAGTIME
+			Echo("drag started")
+		end
 	end
 	
 	if (needReload and options.autoreload.value) then ReloadSoundDefs() needReload = false end		
 	if (secondsToUpdate>0) then	secondsToUpdate = secondsToUpdate-dt return
 	else secondsToUpdate = options.checkrate.value
 	end
+	--Echo(tostring(MouseOnGUI))
+	--Echo(mx..mz)
 	
 	if not (options.autoplay.value) then return end
 	for e, params in pairs (emitters) do		
 		for i = 1, #params.sounds do		
 		local trk = params.sounds[i]
 		local item = trk.item 
-			if (item.rnd > 0) then
+			if item and trk.rnd and trk.rnd > 0 then -- remove extra nil check eventually
 				trk.timer = trk.timer - options.checkrate.value -- this seems inaccurate				
 				if (trk.timer < 0) then
 					trk.timer = 0
-					if (random(item.rnd) == 1) then
+					if (random(trk.rnd) == 1) then
 						DoPlay(item, options.volume.value, params.pos.x, params.pos.y, params.pos.z) --< this should pass nils if pos.* doesnt exist
 						trk.timer  = item.minlooptime
 					end
@@ -571,27 +560,29 @@ local function DoPlay(item, vol, x, y, z)
 		-- if (tracklist.tracks[tr].generated) then	tr = tracklist.tracks[tr].file	end	 -- is this used?
 		if (PlaySound(tr, vol, x, y, z)) then
 			if (options.verbose.value) then
-				Echo("playing "..track.." at volume: "..string.format("%.2f", vol))
+				Echo("playing "..tr.." at volume: "..string.format("%.2f", vol))
 				if (x) then Echo("at Position: "..x..", "..y..", "..z) end -- should format this looks bad with decimals
 			end
 			return true		
 		end	
-		Echo("playback of "..track.." failed, not an audio file?")
+		Echo("playback of "..tr.." failed, not an audio file?")
 		return false
 	end
 end
 
 -- need to pass actual item not just name
 local function AddItemToEmitter(e, item)
-	assert type(item) == 'table'
+	assert(type(item) == 'table')
 	local name = tostring(e)..":"..tostring(item)
 	if sounditems.inuse[name] then 
 		Echo("a sounditem with that name already exists at this emitter")
 		return false 
 	end
 	
-	local newItem = sounditems.inuse[name] = {}	
-	local eS = emitters[e].sounds[#emitters[e].sounds + 1] = {}	
+	sounditems.inuse[name] = {}	
+	local newItem = sounditems.inuse[name]	
+	emitters[e].sounds[#emitters[e].sounds + 1] = {}
+	local eS = emitters[e].sounds[#emitters[e].sounds + 1]
 		
 	for k, v in pairs(item) do
 		newItem[k] = v		
@@ -615,9 +606,9 @@ local function RemoveItemFromEmitter(e, item)
 		return false 
 	end
 	
-	assert sounditems.inuse[item] and emitters[e].sounds[item] -- to make sure we didnt fuck up earlier when adding
+	assert(sounditems.inuse[item] and emitters[e].sounds[item]) -- to make sure we didnt fuck up earlier when adding
 	
-	sounditems.inuse[item} = nil
+	sounditems.inuse[item] = nil
 	emitters[e].sounds[item] = nil
 end
 
@@ -628,7 +619,7 @@ local function RemoveItemFromList(item)
 		return false
 	end
 		
-	sounditems.inuse[item} = nil
+	sounditems.inuse[item] = nil
 	for e = 1, #emitters do
 		emitters[e].sounds[item] = nil
 	end	
@@ -649,17 +640,6 @@ local function SpawnEmitter(name, yoffset)
 	emitters[name].pos = {x = math.floor(p[1]), y = math.floor(p[2]), z = math.floor(p[3])}	
 end
 
-
-local function distance(sx, sz, tx, tz)
-	local dx = sx - tx
-	local dz = sz - tz
-	--Spring.Echo (dx.." - "..dz)
-	return math.sqrt(dx*dx + dz*dz)
-end
-
-local function MouseOnGUI
-	return IsMouseMinimap(mx, mz) or screen0.hoveredControl
-end
 
 
 --------------------------------------------------------------------------------
@@ -724,20 +704,7 @@ words.set = function(word, s)
 end		
 
 
-function widget:TextCommand(command)		
-	if (command:sub(1,3)== "ap.") then	
-		local args = ParseInput(" "..command:sub(4))
-		if (args) then
-			for k, v in pairs(args) do
-				Echo(k.."> "..v)
-			end
-		Invoke(args)
-		end		
-	end			
-end
-
-
-function ParseInput(s)	
+local function ParseInput(s)	
 	local i = 1
 	local args = {}
 	
@@ -779,7 +746,7 @@ function ParseInput(s)
 end	
 
 
-function Invoke(args)
+local function Invoke(args)
 	
 	-- needs adaption to emitters etc
 	if (args[1] == "set") then
@@ -1108,6 +1075,17 @@ function Invoke(args)
 end
 
 
+function widget:TextCommand(command)		
+	if (command:sub(1,3)== "ap.") then	
+		local args = ParseInput(" "..command:sub(4))
+		if (args) then
+			for k, v in pairs(args) do
+				Echo(k.."> "..v)
+			end
+		Invoke(args)
+		end		
+	end			
+end
 
 --------------------------------------------------------------------------------
 -- I/O
@@ -1124,355 +1102,123 @@ end
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
---[[
-			-- outer edge:
-			glBeginEnd(GL.QUADS, function()
-				local radstep = (2.0 * math.pi) / circleDivs
-				for i = 1, circleDivs do
-					local a1 = (i * radstep)
-					local a2 = ((i+1) * radstep)
-					glColor( 1, 1, 0, 0.33 )
-					glVertex(math.sin(a1) * (outersize + 0.9), 0, math.cos(a1) * (outersize + 0.9))
-					glVertex(math.sin(a2) * (outersize + 0.9), 0, math.cos(a2) * (outersize + 0.9))
-					glColor( 1, 0, 0, 0.33 )
-					glVertex(math.sin(a2) * (outersize + 1.0), 0, math.cos(a2) * (outersize + 1.0))
-					glVertex(math.sin(a1) * (outersize + 1.0), 0, math.cos(a1) * (outersize + 1.0))
-				end
-			end)
-			glBeginEnd(GL.QUADS, function()
-				local radstep = (2.0 * math.pi) / circleDivs
-				for i = 1, circleDivs do
-					local a1 = (i * radstep)
-					local a2 = ((i+1) * radstep)
-					glColor( 1, 0, 0, 0.33 )
-					glVertex(math.sin(a1) * (outersize + 1.0), 0, math.cos(a1) * (outersize + 1.0))
-					glVertex(math.sin(a2) * (outersize + 1.0), 0, math.cos(a2) * (outersize + 1.0))
-					glColor( 1, 0, 0, 0 )
-					glVertex(math.sin(a2) * (outersize + 1.1), 0, math.cos(a2) * (outersize + 1.1))
-					glVertex(math.sin(a1) * (outersize + 1.1), 0, math.cos(a1) * (outersize + 1.1))
-				end
-			end)--]]
-
---[[
-					gl.DepthMask(true)
-					gl.PushMatrix()
-						gl.Translate(pos.x,pos.y,pos.z)
-						gl.UnitShape(UnitDefNames["armarad"].id, Spring.GetMyTeamID())										
-					gl.PopMatrix()
-					gl.DepthMask(false)									
-					--]]
-					--gl.Color(1,1,1,1)		
-
---[[
 --------------------------------------------------------------------------------
---------------------------------------------------------------------------------
---
---  file:    gui_spotter.lua
---  brief:   Draws smoothed polygons under units
---  author:  metuslucidium (Orig. Dave Rodgers (orig. TeamPlatter edited by TradeMark))
---
---  Copyright (C) 2012.
---  Licensed under the terms of the GNU GPL, v2 or later.
---
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-function widget:GetInfo()
-	return {
-		name      = "Spotter",
-		desc      = "Draws smoothed polys using fast glDrawListAtUnit",
-		author    = "Orig. by 'TradeMark' - mod. by 'metuslucidium'", --updated with options for zk (CarRepairer)
-		date      = "01.12.2012",
-		license   = "GNU GPL, v2 or later",
-		layer     = 5,
-		enabled   = false  --  loaded by default?
-	}
-end
-
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-local function UpdateDrawList() end
-
-options_path = 'Settings/Graphics/Unit Visibility/Spotter'
-options = {
-	showEnemyCircle	= {
-		name = 'Show Circle Around Enemies',
-		desc = 'Show a hard circle rround enemy units',
-		type = 'bool',
-		value = true,
-		OnChange = function(self)
-			UpdateDrawList()
-		end
-	}
-}
-
-
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
--- Automatically generated local definitions
-
-local GL_LINE_LOOP           = GL.LINE_LOOP
-local GL_TRIANGLE_FAN        = GL.TRIANGLE_FAN
-local glBeginEnd             = gl.BeginEnd
-local glColor                = gl.Color
-local glCreateList           = gl.CreateList
-local glDeleteList           = gl.DeleteList
-local glDepthTest            = gl.DepthTest
-local glDrawListAtUnit       = gl.DrawListAtUnit
-local glLineWidth            = gl.LineWidth
-local glPolygonOffset        = gl.PolygonOffset
-local glVertex               = gl.Vertex
-local spDiffTimers           = Spring.DiffTimers
-local spGetAllUnits          = Spring.GetAllUnits
-local spGetGroundNormal      = Spring.GetGroundNormal
-local spGetSelectedUnits     = Spring.GetSelectedUnits
-local spGetTeamColor         = Spring.GetTeamColor
-local spGetTimer             = Spring.GetTimer
-local spGetUnitDefDimensions = Spring.GetUnitDefDimensions
-local spGetUnitDefID         = Spring.GetUnitDefID
-local spGetUnitRadius        = Spring.GetUnitRadius
-local spGetUnitTeam          = Spring.GetUnitTeam
-local spGetUnitViewPosition  = Spring.GetUnitViewPosition
-local spIsUnitSelected       = Spring.IsUnitSelected
-local spIsUnitVisible        = Spring.IsUnitVisible
-local spSendCommands         = Spring.SendCommands
-
-
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-local myTeamID = Spring.GetLocalTeamID()
-local realRadii = {}
-
-local circleDivs = 65 -- how precise circle? octagon by default
-local innersize = 0.7 -- circle scale compared to unit radius
-local outersize = 1.4 -- outer fade size compared to circle scale (1 = no outer fade)
-
-local circlePoly = {}
-
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
--- Creating polygons, this is run once widget starts, create quads for each team colour:
-UpdateDrawList = function()
-	for _,team in ipairs(Spring.GetTeamList()) do
-		local r, g, b = spGetTeamColor(team)
-		
-		local alpha = 0.5
-		local fadealpha = 0.2
-		if (r == b) and (r == g) then  -- increased alphas for greys/b/w
-			alpha = 0.7
-			fadealpha = 0.4
-		end
-		
-		--Spring.Echo("Team", team, "R G B", r, g, b, "Alphas", alpha, fadealpha)
-		circlePoly[team] = glCreateList(function()
-			-- inner:
-			glBeginEnd(GL.TRIANGLES, function()
-				local radstep = (2.0 * math.pi) / circleDivs
-				for i = 1, circleDivs do
-					local a1 = (i * radstep)
-					local a2 = ((i+1) * radstep)
-					glColor(r, g, b, alpha)
-					glVertex(0, 0, 0)
-					glColor(r, g, b, fadealpha)
-					glVertex(math.sin(a1), 0, math.cos(a1))
-					glVertex(math.sin(a2), 0, math.cos(a2))
-				end
-			end)
-			-- outer edge:
-			glBeginEnd(GL.QUADS, function()
-				local radstep = (2.0 * math.pi) / circleDivs
-				for i = 1, circleDivs do
-					local a1 = (i * radstep)
-					local a2 = ((i+1) * radstep)
-					glColor(r, g, b, fadealpha)
-					glVertex(math.sin(a1), 0, math.cos(a1))
-					glVertex(math.sin(a2), 0, math.cos(a2))
-					glColor(r, g, b, 0.0)
-					glVertex(math.sin(a2) * outersize, 0, math.cos(a2) * outersize)
-					glVertex(math.sin(a1) * outersize, 0, math.cos(a1) * outersize)
-				end
-			end)
-			-- 'enemy spotter' red-yellow 'rainbow' part
-			if options.showEnemyCircle.value and not ( Spring.AreTeamsAllied(myTeamID, team) ) then
-				-- inner:
-				glBeginEnd(GL.QUADS, function()
-					local radstep = (2.0 * math.pi) / circleDivs
-					for i = 1, circleDivs do
-						local a1 = (i * radstep)
-						local a2 = ((i+1) * radstep)
-						glColor( 1, 1, 0, 0 )
-						glVertex(math.sin(a1) * (outersize + 0.8), 0, math.cos(a1) * (outersize + 0.8))
-						glVertex(math.sin(a2) * (outersize + 0.8), 0, math.cos(a2) * (outersize + 0.8))
-						glColor( 1, 1, 0, 0.33 )
-						glVertex(math.sin(a2) * (outersize + 0.9), 0, math.cos(a2) * (outersize + 0.9))
-						glVertex(math.sin(a1) * (outersize + 0.9), 0, math.cos(a1) * (outersize + 0.9))
-					end
-				end)
-				-- outer edge:
-				glBeginEnd(GL.QUADS, function()
-					local radstep = (2.0 * math.pi) / circleDivs
-					for i = 1, circleDivs do
-						local a1 = (i * radstep)
-						local a2 = ((i+1) * radstep)
-						glColor( 1, 1, 0, 0.33 )
-						glVertex(math.sin(a1) * (outersize + 0.9), 0, math.cos(a1) * (outersize + 0.9))
-						glVertex(math.sin(a2) * (outersize + 0.9), 0, math.cos(a2) * (outersize + 0.9))
-						glColor( 1, 0, 0, 0.33 )
-						glVertex(math.sin(a2) * (outersize + 1.0), 0, math.cos(a2) * (outersize + 1.0))
-						glVertex(math.sin(a1) * (outersize + 1.0), 0, math.cos(a1) * (outersize + 1.0))
-					end
-				end)
-				glBeginEnd(GL.QUADS, function()
-					local radstep = (2.0 * math.pi) / circleDivs
-					for i = 1, circleDivs do
-						local a1 = (i * radstep)
-						local a2 = ((i+1) * radstep)
-						glColor( 1, 0, 0, 0.33 )
-						glVertex(math.sin(a1) * (outersize + 1.0), 0, math.cos(a1) * (outersize + 1.0))
-						glVertex(math.sin(a2) * (outersize + 1.0), 0, math.cos(a2) * (outersize + 1.0))
-						glColor( 1, 0, 0, 0 )
-						glVertex(math.sin(a2) * (outersize + 1.1), 0, math.cos(a2) * (outersize + 1.1))
-						glVertex(math.sin(a1) * (outersize + 1.1), 0, math.cos(a1) * (outersize + 1.1))
-					end
-				end)
-			end
-		end)
-	end
-end
-
-function widget:Shutdown()
-	glDeleteList(circlePolysFoe)
-end
-
-
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
+-- INIT
 --------------------------------------------------------------------------------
 
 function widget:Initialize()
-	UpdateDrawList()
-end
 
-				--if (spIsUnitSelected (unitID)) then -- for debuggin' sizes/colours
-				--Spring.Echo (radius)
-				--end
--- Drawing:
+	gui.DoPlay = DoPlay
+	
+	local cpath = PATH_LUA..PATH_CONFIG
+	local upath = PATH_LUA..PATH_UTIL
 
-function widget:DrawWorldPreUnit()
-	glDepthTest(true)
-	--glPolygonOffset(-10000, -2)  -- draw on top of water/map - sideeffect: will shine through terrain/mountains
-	for _,unitID in ipairs(Spring.GetVisibleUnits()) do
-		local team = spGetUnitTeam(unitID)
-		if (team) then
-			local radius = GetUnitDefRealRadius(spGetUnitDefID(unitID))
-			if (radius) then
-				if radius < 28 then
-					radius = radius + 5
-				end
-				glDrawListAtUnit(unitID, circlePoly[team], false, radius, 1.0, radius)
-			end
+	--setfenv(SetupGUI, gui)
+	gui.SetupGUI()	
+
+	for k, v in pairs(gui) do 
+		--widget[k] = widget[k] or v
+		if not widget[k] then
+			widget[k] = v
+			Echo("added key '"..k.."'to globals")
 		end
 	end
-	glColor(1,1,1,1)
-end
+	for k, v in pairs(draw) do 
+		--widget[k] = widget[k] or v
+		if not widget[k] then
+			widget[k] = v
+			Echo("added key '"..k.."'to globals")
+		end
+	end
+	for k, v in pairs(i_o) do 
+		--widget[k] = widget[k] or v
+		if not widget[k] then
+			widget[k] = v
+			Echo("added key '"..k.."'to globals")
+		end
+	end
 
-
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-
-
-
-
-
-
-function widget:Initialize()
-	if (not WG.Chili) then
-		widgetHandler:RemoveWidget()
-		return
+	-- put this stuff into io
+	
+	Echo ("Loading local config...")
+	if vfsExist(cpath..MAPCONFIG_FILENAME, VFSMODE) then
+		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
+		if opt.config then
+			for k, v in pairs(opt.config) do config[k] = v or config[k]	end			
+		end
+--		if (opt.words) then	
+--			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
+--		end
+	else Echo("could not open config file, using defaults")
+	end	
+	
+	Echo ("Loading templates...")	
+	if vfsExist(cpath..SOUNDS_ITEMS_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_ITEMS_DEF_FILENAME) then
+			Echo("failed to load templates, check format\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
+		end		
+		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)			
+		if not list.Sounditems then 
+			Echo("templates file was empty")
+		else
+			local i = 0
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
+			Echo ("found "..i.." sounditems")
+		end
+	else
+		Echo("file not found\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
 	end
 	
-	Chili = WG.Chili
-	Image = Chili.Image
-	Button = Chili.Button
-	Checkbox = Chili.Checkbox
-	Window = Chili.Window
-	Label = Chili.Label
-	screen0 = Chili.Screen0	
-	ScrollPanel = Chili.ScrollPanel
-	StackPanel = Chili.StackPanel
-
-	color2incolor = Chili.color2incolor
-	incolor2color = Chili.incolor2color
-	
-	green 	= color2incolor(0,1,0,1)
-	red 	= color2incolor(1,0,0,1)
-	orange 	= color2incolor(1,0.4,0,1)
-	yellow 	= color2incolor(1,1,0,1)
-	cyan 	= color2incolor(0,1,1,1)
-	white 	= color2incolor(1,1,1,1)
-
-	SetupPanels()
-	
-	Spring.SendCommands({"info 0"})
-	lastSizeX = window_cpl.width
-	lastSizeY = window_cpl.height
-	
-	self:LocalColorRegister()
-end
-
-function widget:Shutdown()
-        self:LocalColorUnregister()
-end
-
-function widget:LocalColorRegister()
-	if WG.LocalColor and WG.LocalColor.RegisterListener then
-		WG.LocalColor.RegisterListener(widget:GetInfo().name, SetupPlayerNames)
+	Echo ("Loading sounds...")	
+	if vfsExist(cpath..SOUNDS_INUSE_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_INUSE_DEF_FILENAME) then
+			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
+		end		
+		local list = vfsInclude(cpath..SOUNDS_INUSE_DEF_FILENAME, nil, VFSMODE)			
+		if (list.Sounditems == nil) then 
+			Echo("sounds file was empty")
+		else
+			local i = 0
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.inuse[s] = params end			
+			Echo ("found "..i.." sounds")					
+		end		
+	else
+		Echo("file not found\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
 	end
-end
-
-function widget:LocalColorUnregister()
-	if WG.LocalColor and WG.LocalColor.UnregisterListener then
-		WG.LocalColor.UnregisterListener(widget:GetInfo().name)
-	end
-end
-
-
-
-
-
-
-
 	
+	Echo ("Loading emitters...")	
+	if vfsExist(cpath..EMITTERS_FILENAME, VFSMODE) then
+		local tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
+		if tmp then
+			local i = 0
+			for e, params in pairs(tmp) do i = i + 1; emitters[e] = params end					
+			Echo ("found "..i.." emitters")
+		else Echo ("emitters file was empty")
+		end	
+	end	
+		
+	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end
+	config.mapX = Game.mapSizeX
+	config.mapZ = Game.mapSizeZ
+	inited=true --?
+	UpdateGUI()
+end
+
+
+function widget:GameStart()
+	gameStarted = true
+	Echo ("The map directory is assumed to be "..config.path_map.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")	
+end
+
+--function widget:Shutdown()	
+--	if (config.autosave) then Save() end
+--end
+
+
+
+
+
+--[[	
 	-- if the player will announce titles when playing
 	if (args[1] == "verbose") then
 		config.verbose = not (config.verbose)
