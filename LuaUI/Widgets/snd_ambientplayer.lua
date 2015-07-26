@@ -22,7 +22,7 @@ TODO:
 
 --os.getenv("HOME")
 
-local versionNum = '0.39'
+local versionNum = '0.4'
 
 function widget:GetInfo()
   return {
@@ -48,6 +48,7 @@ local GetMouse = Spring.GetMouseState
 local TraceRay = Spring.TraceScreenRay
 local IsMouseMinimap = Spring.IsAboveMinimap
 local GetGroundHeight = Spring.GetGroundHeight
+local GetModKeys = Spring.GetModKeyState
 
 local random=math.random
 
@@ -368,6 +369,23 @@ options.color_highlightfactor = {
 	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
 	OnChange = function() UpdateMarkerList() end,
 }
+options.delay_drag = {
+	name = "Drag Timer",
+	type = 'number',
+	value = 0.15,
+	min = 0,
+	max = 2,
+	step = 0.05,
+}
+options.delay_tooltip = {
+	name = "Tooltip Timer",
+	type = 'number',
+	value = 0.3,
+	min = 0,
+	max = 2,
+	step = 0.05,
+}
+
 
 
 
@@ -390,22 +408,52 @@ local drag = {
 }
 local dragObject
 local dragType
-local DRAGTIME = 0.25
-local dragTimer = DRAGTIME
+--local DELAY_DRAG = 0.2 -- moved to options
+local dragTimer = options.delay_drag.value
 local dragStarted = false
 
+--local DELAY_TOOLTIP = 0.4 -- moved to options
+local tooltipTimer = options.delay_tooltip.value
 
+local worldTooltip
 
 --------------------------------------------------------------------------------
 -- LISTENERS
 --------------------------------------------------------------------------------
 
-function widget:IsAbove(x, y)	
-	if dragObject then return true end
+local function updateTooltip()
+	if highlightEmitter then
+		local e = emitters[highlightEmitter]		
+		worldTooltip = "Emitter: "..highlightEmitter.."\n("..
+			string.format("%.0f", e.pos.x)..", "..
+				string.format("%.0f", e.pos.z)..", "..
+					string.format("%.0f", e.pos.y)..")\n "
+					
+		for i = 1, #e.sounds do					
+			worldTooltip = worldTooltip.."\n"..(e.sounds[i].item)
+		end
+		--worldTooltip:format("%.2f")
+	end
 end
 
+function widget:IsAbove(x, y)	
+	if highlightEmitter then return true end	
+	--if dragObject then return true end
+end
 
-function widget:MousePress(x, y, button)
+function widget:GetTooltip(x, y)
+	if not worldTooltip then
+		if tooltipTimer > 0 then return end
+		updateTooltip()
+		tooltipTimer = options.delay_tooltip.value
+	end
+	
+	--local e = emitters[highlightEmitter]	
+	return worldTooltip
+end
+
+function widget:MousePress(x, y, button)	
+	--if button == 4 or button == 5 then return false end
 	if highlightEmitter then
 		if button == 3 then return true end
 		if button == 2 then 			
@@ -413,13 +461,14 @@ function widget:MousePress(x, y, button)
 		if button == 1 then			
 			local e = emitters[highlightEmitter]
 			drag.objects[1] = e
-			drag._type.emitter = true
-			drag.params.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)			
+			drag._type.emitter = true			
+			drag.params.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)
 			Echo("drag timer started")
 			return true
-		end
+		end			
 	else		
 	end	
+	return false
 end
 
 
@@ -443,14 +492,31 @@ function widget:MouseRelease(x, y, button)
 				window_inspect:SetPos(xp, yp)		
 			end		
 		end
-	end
+	end		
+
+	--if button == 4 or button == 5 then return false end
 	
-	dragTimer = DRAGTIME
+	dragTimer = options.delay_drag.value
 	drag.objects[1] = nil
 	drag._type.emitter = nil	
 	drag.params.hoff = nil
 	dragStarted = false
-	Echo("drag ended")
+	Echo("drag ended")	
+end
+
+-- should rather do this when properities are open
+function widget:MouseWheel(up, value)
+	if not drag.objects[1] and highlightEmitter then
+		local alt,ctrl,_,shift = GetModKeys()
+		if not shift then return false end
+		
+		local e = emitters[highlightEmitter]
+		local gh = GetGroundHeight(e.pos.x, e.pos.z)		
+		local h = e.pos.y + value * (alt and 1 or(ctrl and 100 or 10))
+		e.pos.y = h < gh and gh or h 
+		updateTooltip()
+		return true
+	end
 end
 
 function widget:MouseMove(x, y, dx, dy, button)	
@@ -458,7 +524,9 @@ function widget:MouseMove(x, y, dx, dy, button)
 		if drag._type.emitter and mcoords then		
 			drag.objects[1].pos.x = mcoords[1]
 			drag.objects[1].pos.z = mcoords[3]
-			drag.objects[1].pos.y = mcoords[2] + drag.params.hoff 		
+			drag.objects[1].pos.y = mcoords[2] + drag.params.hoff 	
+			updateTooltip()	
+			return true
 		end
 	end
 end
@@ -502,24 +570,27 @@ function widget:Update(dt)
 					end			
 				end
 			end
-		end	
+		end			
 		if nearest and dist < options.emitter_highlight_treshold.value then		
 			highlightEmitter = nearest
-			--Echo("set")
+			if not worldTooltip then tooltipTimer = tooltipTimer - dt end
 		else		
-			highlightEmitter = nil
-			--Echo("nil")
+			highlightEmitter = nil			
+			worldTooltip = nil
+			tooltipTimer = options.delay_tooltip.value
 		end
 	else
 		highlightEmitter = nil
 	end
 	--Echo (tostring(highlightEmitter))
 	
+	
+	
 	if drag.objects[1] and not dragStarted then		
 		dragTimer = dragTimer - dt
 		if dragTimer <= 0 then				
 			dragStarted = true			
-			dragTimer = DRAGTIME
+			--dragTimer = options.delay_drag
 			Echo("drag started")
 		end
 	end
@@ -1196,6 +1267,7 @@ function widget:Initialize()
 		else Echo ("emitters file was empty")
 		end	
 	end	
+	
 		
 	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end
 	config.mapX = Game.mapSizeX

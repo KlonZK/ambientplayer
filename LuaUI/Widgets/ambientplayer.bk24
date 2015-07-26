@@ -207,16 +207,16 @@ function widget:Initialize()
 			end
 		end
 	else
-		Echo("<ambient player>: no config found, using defaults")
+		Echo("<ape>: no config found, using defaults")
 	end	
 		
 	if VFS.FileExists(cpath..SOUNDDEF_FILENAME, VFS.RAW_FIRST) then
 		if (Spring.LoadSoundDef(cpath..SOUNDDEF_FILENAME)) then
-		else Echo("<ambient player>: failed to load sounddefs")		
+		else Echo("<ape>: failed to load sounddefs")		
 		end
 		
 		local list = VFS.Include(cpath..SOUNDDEF_FILENAME, nil, VFS.RAW_FIRST)			
-		if (list.Sounditems == nil) then Echo("<ambient player>: sounddef file was empty")			
+		if (list.Sounditems == nil) then Echo("<ape>: sounddef file was empty")			
 		else
 			tracklist.tracks=list.Sounditems
 			for track, params in pairs (tracklist.tracks) do
@@ -226,7 +226,7 @@ function widget:Initialize()
 			end
 		end		
 	else
-		Echo("<ambient player>: no sounddefs found")
+		Echo("<ape>: no sounddefs found")
 		tracks = {}		
 	end
 	
@@ -237,8 +237,8 @@ function widget:Initialize()
 	if VFS.FileExists(upath..SAVETABLE_FILENAME, VFS.RAW_FIRST) then			
 		SaveTable, MakeSortedTable, CompareKeys, valueTypes, keyTypes, encloseKey, encloseStr, keyWordSet, keyWords, saveTables, indendtString
 			= VFS.Include(upath..SAVETABLE_FILENAME, nil, VFS.RAW_FIRST)		
-		Echo("<ambient player>: loaded savetable.lua")
-	else Echo("<ambient player>: failed to load savetable.lua")
+		Echo("<ape>: loaded savetable.lua")
+	else Echo("<ape>: failed to load savetable.lua")
 	end
 	
 	if not (config.path_map) then	config.path_map= 'maps/'..Game.mapName..'.sdd/' end
@@ -258,11 +258,11 @@ function ReloadSoundDefs()
 	if not (Save(2, wpath, TMP_FILENAME)) then return end
 	if (Spring.LoadSoundDef(rpath..TMP_FILENAME)) then
 	else 
-		Echo("<ambient player>: failed to load sounddefs")		
+		Echo("<ape>: failed to load sounddefs")		
 		return
 	end		
 	list = VFS.Include(rpath..TMP_FILENAME, nil, VFS.RAW_FIRST)			
-	if (list.Sounditems == nil) then Echo("<ambient player>: sounddef file was empty")			
+	if (list.Sounditems == nil) then Echo("<ape>: sounddef file was empty")			
 	else
 		tracklist.tracks=list.Sounditems
 		for track, params in pairs (tracklist.tracks) do			
@@ -328,18 +328,18 @@ end--]]
 
 
 function DoPlay(track, vol, x, y, z) 
-	if not (tracklist.tracks[track]) then Echo("<ambient player>: track "..tostring(track).." not found!") return false
+	if not (tracklist.tracks[track]) then Echo("<ape>: track "..tostring(track).." not found!") return false
 	else
 		local tr=track
 		if (tracklist.tracks[tr].generated) then	tr=tracklist.tracks[tr].file	end
 		if (PlaySound(tr, vol, x or nil, y or nil, z or nil)) then
 			if (config.verbose) then
-				Echo("<ambient player>: playing "..track.." at volume: "..string.format("%.2f", vol))
+				Echo("<ape>: playing "..track.." at volume: "..string.format("%.2f", vol))
 				if (x) then Echo("at Position: "..x..", "..y..", "..z) end
 			end
 			return true		
 		end	
-		Echo("<ambient player>: playback of "..track.." failed, not an audio file?")
+		Echo("<ape>: playback of "..track.." failed, not an audio file?")
 		return false
 	end
 end
@@ -391,7 +391,7 @@ function ParseInput(s)
 				s = s:sub(eq + 1)
 				--sq = string.find (s, "[\'\"%(%[]")	 
 			else
-				Echo("<ambient player>: illegal argument(s) - lone bracket")
+				Echo("<ape>: illegal argument(s) - lone bracket")
 				return {}
 			end
 		else break end	
@@ -415,14 +415,14 @@ function Invoke(args)
 		-- disallow editing non-existant items, to avoid creating bogus items
 		
 			if not (SOUNDITEM_TEMPLATE[args[2]]) then
-				Echo("<ambient player>: unrecognized property")
+				Echo("<ape>: unrecognized property")
 				return false
 			else
 			
 				if (args[3]) then
 								
 					if not (tracklist.tracks[args[3]]) then
-						Echo("<ambient player>: cannot find target!")
+						Echo("<ape>: cannot find target!")
 						return false
 					end
 					
@@ -440,7 +440,7 @@ function Invoke(args)
 							elseif (args[4] == "false") then
 								tracklist.tracks[args[3]][args[2]]=false
 							else
-								Echo("<ambient player>: only true/false allowed for this value")
+								Echo("<ape>: only true/false allowed for this value")
 								return false
 							end
 							
@@ -449,7 +449,7 @@ function Invoke(args)
 							if (number) then
 								tracklist.tracks[args[3]][args[2]]=number
 							else
-								Echo("<ambient player>: not a number")
+								Echo("<ape>: not a number")
 								return false
 							end							
 						end						
@@ -457,20 +457,20 @@ function Invoke(args)
 						return true
 						
 					else
-						Echo("<ambient player>: no value specified")
+						Echo("<ape>: no value specified")
 						Echo("param: "..args[2].." target: "..args[3].." is: "..tostring(tracklist.tracks[args[3]][args[2]]))
 						return false
 					end
 					
 				else
-					Echo("<ambient player>: no target specified")
+					Echo("<ape>: no target specified")
 					return false
 				end
 				
 			end	
 			
 		else
-			Echo("<ambient player>: no arguments specified")
+			Echo("<ape>: no arguments specified")
 			return false
 		end
 		return false
@@ -490,7 +490,7 @@ function Invoke(args)
 				end
 				return DoPlay(args[2], vol, p.x, p.y, p.z)							
 		else
-			Echo("<ambient player>: specify a track")
+			Echo("<ape>: specify a track")
 			return false
 		end
 	end
@@ -514,7 +514,7 @@ function Invoke(args)
 			end
 			return LoadFromFile(config.path_read, args[2], args[3], args[4], args[5], args[6], args[7])			
 		else
-			Echo("<ambient player>: specify a file in "..config.path_read)
+			Echo("<ape>: specify a file in "..config.path_read)
 			return false
 		end		
 	end
@@ -524,9 +524,9 @@ function Invoke(args)
 	if (args[1] == "verbose") then
 		config.verbose = not (config.verbose)
 		if (config.verbose) then
-			Echo("<ambient player>: verbose on")
+			Echo("<ape>: verbose on")
 		else 
-			Echo("<ambient player>: verbose off")
+			Echo("<ape>: verbose off")
 		end
 		return true
 	end
@@ -539,10 +539,10 @@ function Invoke(args)
 			elseif (number > 2) then config.ambientVolume = 2
 			else config.ambientVolume=number
 			end
-			Echo("<ambient player>: set ambient volume "..string.format("%.2f",config.ambientVolume))
+			Echo("<ape>: set ambient volume "..string.format("%.2f",config.ambientVolume))
 			return true
 		end
-		Echo("<ambient player>: not a number")
+		Echo("<ape>: not a number")
 		return false
 	end	
 	
@@ -551,7 +551,7 @@ function Invoke(args)
 		i = 2
 		while (args[i]) do
 			if (tracklist.tracks[args[i]]) then
-				Echo("<ambient player>: ---"..args[i].."---")
+				Echo("<ape>: ---"..args[i].."---")
 				for param, value in pairs(tracklist.tracks[args[i]]) do
 					Echo(tostring(param).." : "..tostring(value))
 				end
@@ -566,16 +566,16 @@ function Invoke(args)
 					Echo("Index: ".. emitters.index)
 				end
 			else			 
-				Echo("<ambient player>: no such item or emitter: "..args[i])
+				Echo("<ape>: no such item or emitter: "..args[i])
 			end	
 			i = i + 1			
 		end	if (i>2) then return true end
 		
-		Echo("<ambient player>: -----sounditems-----")
+		Echo("<ape>: -----sounditems-----")
 		for track, params in pairs (tracklist.tracks) do
 			if not (params.emitter)	then Echo(track.." - "..(params.length).."s") end			
 		end
-		Echo("<ambient player>: -----emitters-----")
+		Echo("<ape>: -----emitters-----")
 		for e, tab in pairs (emitters) do
 			if not (e == "index") then
 				Echo(tostring(e)..": "..(tab.pos.x or "none")..", "..(tab.pos.y or "none")..", "..(tab.pos.z or "none"))
@@ -591,9 +591,9 @@ function Invoke(args)
 	if (args[1] == "hold") then
 		config.autoplay = not (config.autoplay)
 		if (config.autoplay) then
-			Echo("<ambient player>: play")
+			Echo("<ape>: play")
 		else 
-			Echo("<ambient player>: hold")
+			Echo("<ape>: hold")
 		end
 		return true
 	end
@@ -601,7 +601,7 @@ function Invoke(args)
 	
 	if (args[1] == "dir") then		
 		if not (args[2]) then
-			Echo("<ambient player>: you must specify a path")
+			Echo("<ape>: you must specify a path")
 			return false
 		end
 		
@@ -645,13 +645,13 @@ function Invoke(args)
 			elseif (string.match (args[2], "^[p]")) then
 				Save(2)
 			else
-				Echo("<ambient player>: type must be: e..., p..., o...")
+				Echo("<ape>: type must be: e..., p..., o...")
 				Echo("(emitters, playlist, options)")
 				return false
 			end			
 			return true			
 		else
-			Echo("<ambient player>: saving all to write dir...")
+			Echo("<ape>: saving all to write dir...")
 			Save(0)
 		end	
 		return false	
@@ -740,15 +740,15 @@ function Invoke(args)
 						if not (emitters[args[2]].playlist[args[i]]) then
 							AddItemToEmitter(args[2], args[i])							
 						else
-							Echo ("<ambient player>: track "..args[i].." already present in "..args[2])
+							Echo ("<ape>: track "..args[i].." already present in "..args[2])
 						end
 					else
-						Echo ("<ambient player>: no such track: "..args[i])
+						Echo ("<ape>: no such track: "..args[i])
 					end
 				i = i + 1	
 				end				
 			else
-				Echo ("<ambient player>: no such emitter")
+				Echo ("<ape>: no such emitter")
 			end
 		end
 		return
@@ -763,7 +763,7 @@ function Invoke(args)
 		ReloadSoundDefs()
 		return
 	end
-	Echo("<ambient player>: not a valid command")	
+	Echo("<ape>: not a valid command")	
 	
 end
 
@@ -795,7 +795,7 @@ function SpawnEmitter(name, yoffset)
 	end		
 	
 	if (emitters[name]) then
-		Echo("<ambient player>: that name is already taken")
+		Echo("<ape>: that name is already taken")
 		return false	
 	end
 	p[2] = p[2] + yoffset
@@ -809,22 +809,22 @@ end
 
 
 function LoadFromFile(folder, file, name)	
-	Echo("<ambient player>: loading "..folder..file.." ...")
+	Echo("<ape>: loading "..folder..file.." ...")
 	if VFS.FileExists(folder..file) then
 		local ending=file:sub(-4,-1)
 		if not (ending=='.ogg' or ending =='.wav') then
-				Echo("<ambient player>: must be *.wav or *.ogg file!")
+				Echo("<ape>: must be *.wav or *.ogg file!")
 			return false
 		end
 
 		local shortname = name or ("_"..file:sub(1,-5))
 		
 		if (tracklist.tracks[shortname] ~= nil) then
-			Echo("<ambient player>: a sounditem with that name already exists!")
+			Echo("<ape>: a sounditem with that name already exists!")
 			return false		
 		else 		
 			if not (PlaySound(folder..file, 0)) then -- preload the file and generate sounditem
-					Echo("<ambient player>: unable to load file. not a soundfile?")
+					Echo("<ape>: unable to load file. not a soundfile?")
 					return false
 			end 		
 			
@@ -834,13 +834,13 @@ function LoadFromFile(folder, file, name)
 			tracklist.tmpvalues[shortname].timeframe = tracklist.tracks[shortname].onset
 			tracklist.tmpvalues[shortname].generated = true
 			tracklist.tracks[shortname].file=folder..file			
-			Echo("<ambient player>: added playlist entry: "..shortname)
+			Echo("<ape>: added playlist entry: "..shortname)
 		end							
 	else 
-		Echo("<ambient player>: file not found!")
+		Echo("<ape>: file not found!")
 		return false
 	end
-	Echo("<ambient player>: loaded "..file.." successfully!")
+	Echo("<ape>: loaded "..file.." successfully!")
 	needReload = true
 end
 
@@ -859,9 +859,9 @@ function Save(list, path, file)
 		end
 		options.words = w
 		if (WriteTable(options, path..file, 'Options', OPTIONS_HEADER)) then
-			Echo("<ambient player>: saved options to "..path..file)
+			Echo("<ape>: saved options to "..path..file)
 		else
-			Echo("<ambient player>: failed to save options")
+			Echo("<ape>: failed to save options")
 			return false
 		end
 		file = nil
@@ -877,9 +877,9 @@ function Save(list, path, file)
 		local dumdum = {}
 		dumdum.Sounditems = tracklist.tracks		
 		if (WriteTable(dumdum, path..file, 'Sounds', SOUNDDEF_HEADER)) then
-			Echo("<ambient player>: saved sounddefs to "..path..file)
+			Echo("<ape>: saved sounddefs to "..path..file)
 		else
-			Echo("<ambient player>: failed to save sounddefs")
+			Echo("<ape>: failed to save sounddefs")
 			return false
 		end
 		for item, params in pairs(tracklist.tmpvalues) do
@@ -891,9 +891,9 @@ function Save(list, path, file)
 	if (list == 0 or list == 3) then --emitters
 		file = file or EMITTERS_FILENAME
 		if (WriteTable(emitters, path..file, 'Emitters', EMITTERS_HEADER)) then
-			Echo("<ambient player>: saved emitters to "..path..file)
+			Echo("<ape>: saved emitters to "..path..file)
 		else
-			Echo("<ambient player>: failed to save emitters")
+			Echo("<ape>: failed to save emitters")
 			return false
 		end
 		file = nil
@@ -905,15 +905,15 @@ end
 function WriteTable(t, filename, tname, header)
 
 	if not (filename) then 
-		Echo("<ambient player>: you must specify a file")
+		Echo("<ape>: you must specify a file")
 		return false 
 	end
 	
-	Echo("<ambient player>: saving "..filename.." ...")
+	Echo("<ape>: saving "..filename.." ...")
 	local file = io.open(filename, 'w')
 	
 	if (file == nil) then 
-		Echo("<ambient player>: failed to open "..filename)
+		Echo("<ape>: failed to open "..filename)
 		return false 
 	end
 	
@@ -924,6 +924,6 @@ function WriteTable(t, filename, tname, header)
 	file:write('}\nreturn '..tname)
 	
 	file:close()
-	Echo("<ambient player>: done!")
+	Echo("<ape>: done!")
 	return true
 end
