@@ -18,11 +18,12 @@ TODO:
 - mutex groups
 - chili support v
 - allow emitters to run scripts?
+- kill console or move it to module and use meta table for words
 --]]
 
 --os.getenv("HOME")
 
-local versionNum = '0.4'
+local versionNum = '0.4!'
 
 function widget:GetInfo()
   return {
@@ -37,10 +38,10 @@ function widget:GetInfo()
 end	
 
 
-
---------------------------------------------------------------------------------
--- CONSTANTS, SHORTCUTS & TEMPLATES
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-- CONSTANTS & SHORTCUTS
+-------------------------------------------------------------------------------------------------------------------------
 
 local PlaySound = Spring.PlaySoundFile
 local PlayStream = Spring.PlaySoundStream
@@ -49,6 +50,12 @@ local TraceRay = Spring.TraceScreenRay
 local IsMouseMinimap = Spring.IsAboveMinimap
 local GetGroundHeight = Spring.GetGroundHeight
 local GetModKeys = Spring.GetModKeyState
+
+-- widget cant light
+--local MapLight = Spring.AddMapLight
+--local ModelLight = Spring.AddModelLight
+--local UpdateMapLight = Spring.UpdateMapLight
+--local UpdateModelLight = Spring.UpdateModelLight
 
 local random=math.random
 
@@ -80,13 +87,14 @@ local LOG_FILENAME = 'ambient_log.txt'
 
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
--- PACKAGE GLOBALS
+-- PACKAGE
 -------------------------------------------------------------------------------------------------------------------------
 
 local logfile = [[]]
 local spEcho = Spring.Echo
 
 -- should start dumping if it gets too long
+-- also might want to do boolean->string here as it gets too annoying
 function Echo(s)
 	spEcho('<ape>: '..s)
 	logfile = logfile.."\n"..s
@@ -97,7 +105,8 @@ local config = {}
 config.path_sound = 'Sounds/Ambient/'
 config.path_read = 'Sounds/Ambient/'
 config.path_map = nil
-
+-- config.mapX
+-- config.mapZ
 
 local SOUNDITEM_PROTOTYPE = {
 	-- sounditem stats
@@ -151,8 +160,8 @@ local emitters = {
 	--		sounds = {
 	--			[j] = {	
 	--				item = <sounditem>
-	--				generated = <boolean>
-	--				timer = <number>
+	--				generated = <boolean> -- this is not needed anymore
+	--				timer = <number> --there are different timers, one counts the time until playback, one counts during playback until end
 	--				...
 	--			},
 	-- 		},
@@ -185,7 +194,7 @@ options = {}
 
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
--- INCLUDES
+-- MODULES
 -------------------------------------------------------------------------------------------------------------------------
 
 -- SetupGUI() builds controls so we can't import keys yet
@@ -210,6 +219,7 @@ do
 	else
 		Echo("failed to load gui module")
 	end
+	-- load console here if wanted or if chili fails
 end
 
 local draw = {widget = widget, Echo = Echo, options = options, emitters = emitters}
@@ -223,10 +233,10 @@ do
 end
 
 
-
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
 -- Epic Menu Options
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
 
 options_path = 'Settings/Audio/Ambient Sound'
 options_order = {'color_red', 'color_green', 'color_blue', 'color_alpha_inner', 'color_alpha_outer', 'color_highlightfactor',
@@ -387,11 +397,10 @@ options.delay_tooltip = {
 }
 
 
-
-
---------------------------------------------------------------------------------
--- VARS
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-- LOCALS
+-------------------------------------------------------------------------------------------------------------------------
 
 local secondsToUpdate = 0.1
 local gameStarted = Spring.GetGameFrame() > 0
@@ -417,9 +426,12 @@ local tooltipTimer = options.delay_tooltip.value
 
 local worldTooltip
 
---------------------------------------------------------------------------------
--- LISTENERS
---------------------------------------------------------------------------------
+
+
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-- INPUT LISTENERS AND AUXILIARY
+-------------------------------------------------------------------------------------------------------------------------
 
 local function updateTooltip()
 	if highlightEmitter then
@@ -532,9 +544,11 @@ function widget:MouseMove(x, y, dx, dy, button)
 end
 
 
---------------------------------------------------------------------------------
+
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
 -- UPDATE/MISC
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
 
 local function Distance(sx, sz, tx, tz)
 	local dx = sx - tx
@@ -709,13 +723,146 @@ local function SpawnEmitter(name, yoffset)
 
 	-- __newindex should build our tables
 	emitters[name].pos = {x = math.floor(p[1]), y = math.floor(p[2]), z = math.floor(p[3])}	
+	
+	
+	--emitters[name].light = MapLight(eLightTable)
 end
 
 
 
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-- I/O
+-------------------------------------------------------------------------------------------------------------------------
+-- $\luaui\modules\snd_ambientplayer_io.lua
+
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-- DRAW
+-------------------------------------------------------------------------------------------------------------------------
+-- $\luaui\modules\snd_ambientplayer_draw.lua 
+
+function widget:DrawWorldPreUnit() --?		
+	DrawEmitters(highlightEmitter)
+end
+
+
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
+-- INIT
+-------------------------------------------------------------------------------------------------------------------------
+
+function widget:Initialize()
+
+	gui.DoPlay = DoPlay
+	
+	local cpath = PATH_LUA..PATH_CONFIG
+	local upath = PATH_LUA..PATH_UTIL
+
+	--setfenv(SetupGUI, gui)
+	gui.SetupGUI()	
+
+	for k, v in pairs(gui) do 
+		--widget[k] = widget[k] or v
+		if not widget[k] then
+			widget[k] = v
+			Echo("added key '"..k.."'to globals")
+		end
+	end
+	for k, v in pairs(draw) do 
+		--widget[k] = widget[k] or v
+		if not widget[k] then
+			widget[k] = v
+			Echo("added key '"..k.."'to globals")
+		end
+	end
+	for k, v in pairs(i_o) do 
+		--widget[k] = widget[k] or v
+		if not widget[k] then
+			widget[k] = v
+			Echo("added key '"..k.."'to globals")
+		end
+	end
+
+	-- put this stuff into io
+	
+	Echo ("Loading local config...")
+	if vfsExist(cpath..MAPCONFIG_FILENAME, VFSMODE) then
+		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
+		if opt.config then
+			for k, v in pairs(opt.config) do config[k] = v or config[k]	end			
+		end
+--		if (opt.words) then	
+--			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
+--		end
+	else Echo("could not open config file, using defaults")
+	end	
+	
+	Echo ("Loading templates...")	
+	if vfsExist(cpath..SOUNDS_ITEMS_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_ITEMS_DEF_FILENAME) then
+			Echo("failed to load templates, check format\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
+		end		
+		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)			
+		if not list.Sounditems then 
+			Echo("templates file was empty")
+		else
+			local i = 0
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
+			Echo ("found "..i.." sounditems")
+		end
+	else
+		Echo("file not found\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
+	end
+	
+	Echo ("Loading sounds...")	
+	if vfsExist(cpath..SOUNDS_INUSE_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_INUSE_DEF_FILENAME) then
+			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
+		end		
+		local list = vfsInclude(cpath..SOUNDS_INUSE_DEF_FILENAME, nil, VFSMODE)			
+		if (list.Sounditems == nil) then 
+			Echo("sounds file was empty")
+		else
+			local i = 0
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.inuse[s] = params end			
+			Echo ("found "..i.." sounds")					
+		end		
+	else
+		Echo("file not found\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
+	end
+	
+	Echo ("Loading emitters...")	
+	if vfsExist(cpath..EMITTERS_FILENAME, VFSMODE) then
+		local tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
+		if tmp then
+			local i = 0
+			for e, params in pairs(tmp) do i = i + 1; emitters[e] = params end					
+			Echo ("found "..i.." emitters")
+		else Echo ("emitters file was empty")
+		end	
+	end	
+	
+		
+	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end
+	config.mapX = Game.mapSizeX
+	config.mapZ = Game.mapSizeZ
+	inited=true --?
+	UpdateGUI()
+end
+
+
+function widget:GameStart()
+	gameStarted = true
+	Echo ("The map directory is assumed to be "..config.path_map.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")	
+end
+
+
+
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
 -- CONSOLE
---------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
 
 local words = {
 		["utl"] = 	{
@@ -1158,129 +1305,7 @@ function widget:TextCommand(command)
 	end			
 end
 
---------------------------------------------------------------------------------
--- I/O
---------------------------------------------------------------------------------
 
-
---------------------------------------------------------------------------------
--- DRAW
---------------------------------------------------------------------------------
-
-function widget:DrawWorldPreUnit() --?		
-	DrawEmitters(highlightEmitter)
-end
-
-
-
---------------------------------------------------------------------------------
--- INIT
---------------------------------------------------------------------------------
-
-function widget:Initialize()
-
-	gui.DoPlay = DoPlay
-	
-	local cpath = PATH_LUA..PATH_CONFIG
-	local upath = PATH_LUA..PATH_UTIL
-
-	--setfenv(SetupGUI, gui)
-	gui.SetupGUI()	
-
-	for k, v in pairs(gui) do 
-		--widget[k] = widget[k] or v
-		if not widget[k] then
-			widget[k] = v
-			Echo("added key '"..k.."'to globals")
-		end
-	end
-	for k, v in pairs(draw) do 
-		--widget[k] = widget[k] or v
-		if not widget[k] then
-			widget[k] = v
-			Echo("added key '"..k.."'to globals")
-		end
-	end
-	for k, v in pairs(i_o) do 
-		--widget[k] = widget[k] or v
-		if not widget[k] then
-			widget[k] = v
-			Echo("added key '"..k.."'to globals")
-		end
-	end
-
-	-- put this stuff into io
-	
-	Echo ("Loading local config...")
-	if vfsExist(cpath..MAPCONFIG_FILENAME, VFSMODE) then
-		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
-		if opt.config then
-			for k, v in pairs(opt.config) do config[k] = v or config[k]	end			
-		end
---		if (opt.words) then	
---			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
---		end
-	else Echo("could not open config file, using defaults")
-	end	
-	
-	Echo ("Loading templates...")	
-	if vfsExist(cpath..SOUNDS_ITEMS_DEF_FILENAME, VFSMODE) then
-		if not spLoadSoundDefs(cpath..SOUNDS_ITEMS_DEF_FILENAME) then
-			Echo("failed to load templates, check format\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
-		end		
-		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)			
-		if not list.Sounditems then 
-			Echo("templates file was empty")
-		else
-			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
-			Echo ("found "..i.." sounditems")
-		end
-	else
-		Echo("file not found\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
-	end
-	
-	Echo ("Loading sounds...")	
-	if vfsExist(cpath..SOUNDS_INUSE_DEF_FILENAME, VFSMODE) then
-		if not spLoadSoundDefs(cpath..SOUNDS_INUSE_DEF_FILENAME) then
-			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
-		end		
-		local list = vfsInclude(cpath..SOUNDS_INUSE_DEF_FILENAME, nil, VFSMODE)			
-		if (list.Sounditems == nil) then 
-			Echo("sounds file was empty")
-		else
-			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.inuse[s] = params end			
-			Echo ("found "..i.." sounds")					
-		end		
-	else
-		Echo("file not found\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
-	end
-	
-	Echo ("Loading emitters...")	
-	if vfsExist(cpath..EMITTERS_FILENAME, VFSMODE) then
-		local tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
-		if tmp then
-			local i = 0
-			for e, params in pairs(tmp) do i = i + 1; emitters[e] = params end					
-			Echo ("found "..i.." emitters")
-		else Echo ("emitters file was empty")
-		end	
-	end	
-	
-		
-	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end
-	config.mapX = Game.mapSizeX
-	config.mapZ = Game.mapSizeZ
-	inited=true --?
-	UpdateGUI()
-end
-
-
-function widget:GameStart()
-	gameStarted = true
-	Echo ("The map directory is assumed to be "..config.path_map.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")	
-end
 
 --function widget:Shutdown()	
 --	if (config.autosave) then Save() end
