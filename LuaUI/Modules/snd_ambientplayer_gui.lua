@@ -267,8 +267,8 @@ local function DeclareControls()
 	
 	---------------------------------------------------- log window ------------------------------------------------	
 	window_console = Window:New {
-		x = "20%",
-		y = "7%",
+		x = "25%",
+		y = "5%",
 		parent = screen0,
 		caption = "Message Log",
 		draggable = true,
@@ -490,7 +490,7 @@ local function DeclareControls()
 	}
 	SCROLL_INSPECT_PROTOTYPE = {				
 		y = 40,
-		clientWidth = 300 - 38,
+		clientWidth = 300 - 8,
 		clientHeight = 250 - 90,				
 		scrollPosX = -16,
 		horizontalScrollbar = false,
@@ -759,7 +759,8 @@ local function DeclareFunctions()
 			w.layout = layout -- userdata
 			btn.listener = w
 			--w:Invalidate()
-			controls[wt.name] = {} -- string
+			containers[wt.name] = w
+			--controls[wt.name] = {} -- this is built automatically
 			w:Refresh()
 			
 			rawset(t, k, w)
@@ -818,7 +819,15 @@ function UpdateGUI()
 	--ho("tick")
 end
 
-
+function MouseOver(mx, my)
+	--Echo ("call")
+	for c, params in pairs(containers) do		
+		--if params.noSelfHitTest then Echo(c.." has no self hit test") end
+		local w = params		
+		if params.visible and (mx > w.x and mx < w.x + w.width) and (my > w.y and my < w.y + w.height) then return true end
+	end
+	return false
+end
 
 
 --

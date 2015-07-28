@@ -100,9 +100,9 @@ local spEcho = Spring.Echo
 
 -- should start dumping if it gets too long
 -- also might want to do boolean->string here as it gets too annoying
-function Echo(s)
+function Echo(s, keepline)
 	spEcho('<ape>: '..s)
-	logfile = logfile.."\n"..s
+	logfile = logfile..(keepline and '' or '\n')..s
 	if controls and controls.log then controls.log:SetText(logfile) end
 end
 
@@ -210,9 +210,9 @@ local i_o = {widget = widget, Echo = Echo, options = options, config = config, s
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_IO
 	if vfsExist(file, VFSMODE) and vfsInclude(file, i_o, VFSMODE) then
-		Echo("i/o module successfully loaded")
+		Echo("I/O module successfully loaded")
 	else
-		Echo("failed to load i/o module")
+		Echo("failed to load I/O module")
 	end
 end
 
@@ -222,8 +222,8 @@ do
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
 	if vfsExist(file, VFSMODE) then
 		gui = vfsInclude(file, gui, VFSMODE)		
-		if gui then Echo("gui module successfully loaded")
-		else Echo("failed to load gui module") end
+		if gui then Echo("GUI module successfully loaded")
+		else Echo("failed to load GUI module") end
 	else
 		Echo("could not find gui module")
 	end
@@ -234,9 +234,9 @@ local draw = {widget = widget, Echo = Echo, options = options, emitters = emitte
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_DRAW
 	if vfsExist(file, VFSMODE) and vfsInclude(file, draw, VFSMODE) then
-		Echo("draw module successfully loaded")
+		Echo("DRAW module successfully loaded")
 	else
-		Echo("failed to load draw module")
+		Echo("failed to load DRAW module")
 	end
 end
 
@@ -444,7 +444,8 @@ local worldTooltip
 
 -- fuck you
 local function MouseOnGUI()
-	return IsMouseMinimap(mx or 0, mz or 0) or screen0.hoveredControl --or screen0.focusedControl
+	local mz_inv = math.abs(screen0.height - mz)
+	return IsMouseMinimap(mx or 0, mz or 0) or MouseOver(mx, mz_inv)--screen0.hoveredControl --or screen0.focusedControl
 end
 
 
@@ -779,26 +780,27 @@ function widget:Initialize()
 	--setfenv(SetupGUI, gui)
 	Echo("Building GUI...")
 	gui.SetupGUI()	
+	Echo("done", true)
 
 	for k, v in pairs(gui) do 
 		--widget[k] = widget[k] or v
 		if not widget[k] then
 			widget[k] = v
-			Echo("added key '"..k.."'to globals")
+			Echo("added key '"..k.."' to globals")
 		end
 	end
 	for k, v in pairs(draw) do 
 		--widget[k] = widget[k] or v
 		if not widget[k] then
 			widget[k] = v
-			Echo("added key '"..k.."'to globals")
+			Echo("added key '"..k.."' to globals")
 		end
 	end
 	for k, v in pairs(i_o) do 
 		--widget[k] = widget[k] or v
 		if not widget[k] then
 			widget[k] = v
-			Echo("added key '"..k.."'to globals")
+			Echo("added key '"..k.."' to globals")
 		end
 	end
 
@@ -808,12 +810,15 @@ function widget:Initialize()
 	if vfsExist(cpath..MAPCONFIG_FILENAME, VFSMODE) then
 		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
 		if opt.config then
-			for k, v in pairs(opt.config) do config[k] = v or config[k]	end			
-		end
+			for k, v in pairs(opt.config) do config[k] = v or config[k]	end
+			Echo("done", true)
+		else
+			Echo("local config was empty, using defaults", true)
+		end		
 --		if (opt.words) then	
 --			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
 --		end
-	else Echo("could not open config file, using defaults")
+	else Echo("could not open config file, using defaults", true)
 	end	
 	
 	Echo ("Loading templates...")	
@@ -823,11 +828,11 @@ function widget:Initialize()
 		end		
 		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)			
 		if not list.Sounditems then 
-			Echo("templates file was empty")
+			Echo("templates file was empty", true)
 		else
 			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
-			Echo ("found "..i.." sounditems")
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params; Echo('.', true) end
+			Echo ("found "..i.." sounditems", true)
 		end
 	else
 		Echo("file not found\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")		
@@ -840,11 +845,11 @@ function widget:Initialize()
 		end		
 		local list = vfsInclude(cpath..SOUNDS_INUSE_DEF_FILENAME, nil, VFSMODE)			
 		if (list.Sounditems == nil) then 
-			Echo("sounds file was empty")
+			Echo("sounds file was empty", true)
 		else
 			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.inuse[s] = params end			
-			Echo ("found "..i.." sounds")					
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.inuse[s] = params; Echo('.', true) end			
+			Echo ("found "..i.." sounds", true)					
 		end		
 	else
 		Echo("file not found\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
@@ -855,13 +860,13 @@ function widget:Initialize()
 		local tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
 		if tmp then
 			local i = 0
-			for e, params in pairs(tmp) do i = i + 1; emitters[e] = params end					
-			Echo ("found "..i.." emitters")
-		else Echo ("emitters file was empty")
+			for e, params in pairs(tmp) do i = i + 1; emitters[e] = params; Echo('.', true) end					
+			Echo ("found "..i.." emitters", true)
+		else Echo ("emitters file was empty", true)
 		end	
 	end	
 	
-	Echo("updating local config...")	
+	Echo("Updating local config...")	
 	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end
 	config.mapX = Game.mapSizeX
 	config.mapZ = Game.mapSizeZ
