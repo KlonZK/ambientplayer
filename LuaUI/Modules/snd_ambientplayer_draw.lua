@@ -133,7 +133,7 @@ local u = 0
 local v = 0
 local dstep = (2.0 * math.pi) / 30
 
-function DrawEmitters(highlightEmitter) -- highlightEmitter should be global to the environment
+function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to the environment
 	delta = delta > 60 and 0 or delta + 0.05
 	u = u > 60 and 0 or u + 0.14
 	v = v > 60 and 0 or v + 0.2
@@ -144,7 +144,7 @@ function DrawEmitters(highlightEmitter) -- highlightEmitter should be global to 
 			local pos = params.pos
 			if pos.x then
 				local list, linealpha -- should be options.alpha_*
-				if highlightEmitter == e then
+				if mouseOverEmitter == e then
 					list = emitMarker_Highlight
 					linealpha = 1
 				else

@@ -1,6 +1,6 @@
 --[[
 TODO:
-- add emitters, emitters graphical representation, figure out how tracks and emitters work together VVV
+- add emitters, emitters graphical representation, figure out how tracks and emitters work together VVVv
 - implement adding sound items to emitters Vv
 - implement batch loading, adding, editing vv-
 - restructure? vv
@@ -19,6 +19,11 @@ TODO:
 - chili support v
 - allow emitters to run scripts?
 - kill console or move it to module and use meta table for words
+
+- make emitters hold actual items?
+- track playing status of emitters using length, make animation play when playing
+- 
+- continue gui implementation, rework update function
 --]]
 
 --os.getenv("HOME")
@@ -47,7 +52,7 @@ local PlaySound = Spring.PlaySoundFile
 local PlayStream = Spring.PlaySoundStream
 local GetMouse = Spring.GetMouseState 
 local TraceRay = Spring.TraceScreenRay
-local IsMouseMinimap = Spring.IsAboveMinimap
+local IsMouseMinimap = Spring.IsAboveMiniMap
 local GetGroundHeight = Spring.GetGroundHeight
 local GetModKeys = Spring.GetModKeyState
 
@@ -98,7 +103,7 @@ local spEcho = Spring.Echo
 function Echo(s)
 	spEcho('<ape>: '..s)
 	logfile = logfile.."\n"..s
-	if textbox_console then textbox_console:SetText(logfile) end
+	if controls and controls.log then controls.log:SetText(logfile) end
 end
 
 local config = {}
@@ -117,7 +122,7 @@ local SOUNDITEM_PROTOTYPE = {
 	gainMod = 0.05,
 	priority = 0,
 	maxconcurrent = 2, 
-	maxdist = math.huge, -- not a good default
+	maxdist = 1000000, -- +inf and math.huge break shit
 	preload = true,
 	in3d = true,
 	rolloff = 0, -- not a good default
@@ -157,7 +162,7 @@ local emitters_controls = {}
 local emitters = {
 	--	e = { -- are they indexed now or what?
 	--		pos = {x, y, z},
-	--		sounds = {
+	--		sounds = { --< INDEXES TABLE WILL FAIL HORRIBLY IF THIGNS GET REMOVED. NEEDS COUNTERMEASURES OR CHANGE
 	--			[j] = {	
 	--				item = <sounditem>
 	--				generated = <boolean> -- this is not needed anymore
@@ -172,7 +177,8 @@ local emitters = {
 setmetatable(emitters, {
 	__newindex = function(t, k, v)				
 		rawset (t, k, v)		
-		if not t[k].sounds then t[k]['sounds'] = {} end		
+		if not t[k].sounds then t[k]['sounds'] = {} end	
+		--if not t[k].script then t[k]['script'] = 'function run() end'
 		setmetatable(t[k].sounds, {			
 			__index = function(st, item)				
 				if type(item) == 'string' then
@@ -214,10 +220,12 @@ local gui = {widget = widget, Echo = Echo, options = options, config = config, s
 				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls}
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
-	if vfsExist(file, VFSMODE) and vfsInclude(file, gui, VFSMODE) then
-		Echo("gui module successfully loaded")
+	if vfsExist(file, VFSMODE) then
+		gui = vfsInclude(file, gui, VFSMODE)		
+		if gui then Echo("gui module successfully loaded")
+		else Echo("failed to load gui module") end
 	else
-		Echo("failed to load gui module")
+		Echo("could not find gui module")
 	end
 	-- load console here if wanted or if chili fails
 end
@@ -409,7 +417,8 @@ local inited = false
 local mx, mz
 local mcoords
 local needReload = false
-local highlightEmitter
+local mouseOverEmitter
+
 local drag = {
 	objects = {},
 	_type = {},
@@ -433,10 +442,16 @@ local worldTooltip
 -- INPUT LISTENERS AND AUXILIARY
 -------------------------------------------------------------------------------------------------------------------------
 
+-- fuck you
+local function MouseOnGUI()
+	return IsMouseMinimap(mx or 0, mz or 0) or screen0.hoveredControl --or screen0.focusedControl
+end
+
+
 local function updateTooltip()
-	if highlightEmitter then
-		local e = emitters[highlightEmitter]		
-		worldTooltip = "Emitter: "..highlightEmitter.."\n("..
+	if mouseOverEmitter then
+		local e = emitters[mouseOverEmitter]		
+		worldTooltip = "Emitter: "..mouseOverEmitter.."\n("..
 			string.format("%.0f", e.pos.x)..", "..
 				string.format("%.0f", e.pos.z)..", "..
 					string.format("%.0f", e.pos.y)..")\n "
@@ -448,10 +463,12 @@ local function updateTooltip()
 	end
 end
 
+
 function widget:IsAbove(x, y)	
-	if highlightEmitter then return true end	
+	if mouseOverEmitter and not MouseOnGUI() then return true end	
 	--if dragObject then return true end
 end
+
 
 function widget:GetTooltip(x, y)
 	if not worldTooltip then
@@ -460,18 +477,20 @@ function widget:GetTooltip(x, y)
 		tooltipTimer = options.delay_tooltip.value
 	end
 	
-	--local e = emitters[highlightEmitter]	
+	--local e = emitters[mouseOverEmitter]	
 	return worldTooltip
 end
 
+
 function widget:MousePress(x, y, button)	
 	--if button == 4 or button == 5 then return false end
-	if highlightEmitter then
+	if MouseOnGUI() then return false end
+	if mouseOverEmitter then
 		if button == 3 then return true end
 		if button == 2 then 			
 		end	
 		if button == 1 then			
-			local e = emitters[highlightEmitter]
+			local e = emitters[mouseOverEmitter]
 			drag.objects[1] = e
 			drag._type.emitter = true			
 			drag.params.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)
@@ -487,22 +506,20 @@ end
 function widget:MouseRelease(x, y, button)
 	--Echo("release")
 	if button == 3 then		
-		if highlightEmitter then			
-			if window_inspect.currentInspect == highlightEmitter then
-				--Echo("hide "..window_inspect.currentInspect)
-				window_inspect:Hide()
-				window_inspect.panel:Dispose()
-				window_inspect:Invalidate()
-				window_inspect.currentInspect = nil
+		if mouseOverEmitter then		
+			if inspectionWindows[mouseOverEmitter].inspect then -- window already existed a moment ago
+				--Echo("kill")
+				inspectionWindows[mouseOverEmitter].inspect = nil -- kill it
 			else
-				--Echo("show "..highlightEmitter)
-				UpdateInspectionWindow(highlightEmitter)
-				window_inspect:Show()
-				local xp = mx > (screen0.width / 2) and (mx - window_inspect.width) or mx
+				--Echo("make")
+				inspectionWindows[mouseOverEmitter].inspect = mouseOverEmitter -- make a new one
+				inspectionWindows[mouseOverEmitter]:Show() -- refresh should be automatic lets just show it
+				local xp = mx > (screen0.width / 2) and (mx - inspectionWindows[mouseOverEmitter].width) or mx
 				local mz_inv = math.abs(screen0.height- mz) 
-				local yp = mz_inv > (screen0.height / 2) and (mz_inv - window_inspect.height) or mz_inv		
-				window_inspect:SetPos(xp, yp)		
-			end		
+				local yp = mz_inv > (screen0.height / 2) and (mz_inv - inspectionWindows[mouseOverEmitter].height) or mz_inv		
+				inspectionWindows[mouseOverEmitter]:SetPos(xp, yp)
+				--Echo(type(mouseOverEmitter).." - "..type(inspectionWindows[mouseOverEmitter]))
+			end
 		end
 	end		
 
@@ -516,13 +533,14 @@ function widget:MouseRelease(x, y, button)
 	Echo("drag ended")	
 end
 
+
 -- should rather do this when properities are open
 function widget:MouseWheel(up, value)
-	if not drag.objects[1] and highlightEmitter then
+	if not drag.objects[1] and mouseOverEmitter then
 		local alt,ctrl,_,shift = GetModKeys()
 		if not shift then return false end
 		
-		local e = emitters[highlightEmitter]
+		local e = emitters[mouseOverEmitter]
 		local gh = GetGroundHeight(e.pos.x, e.pos.z)		
 		local h = e.pos.y + value * (alt and 1 or(ctrl and 100 or 10))
 		e.pos.y = h < gh and gh or h 
@@ -530,6 +548,7 @@ function widget:MouseWheel(up, value)
 		return true
 	end
 end
+
 
 function widget:MouseMove(x, y, dx, dy, button)	
 	if dragStarted then			
@@ -558,19 +577,17 @@ local function Distance(sx, sz, tx, tz)
 end
 
 -- this is actually wasteful
-local function MouseOnGUI()
-	return IsMouseMinimap(mx, mz) or screen0.hoveredControl
-end
+-- also needs to poll all the windows to be really safe : /
 
 
 function widget:Update(dt) 	
 	if not (gameStarted) then return end
 	
-	--UpdateGUI()
-	mx, mz = GetMouse() --?
+	UpdateGUI()
+	mx, mz = GetMouse() --this is good.
 	_, mcoords = TraceRay(mx, mz, true)
 	
-	if options.showemitters.value then --and not MouseOnGUI then -- we dont want emitters to highlight if we are moving in the gui			
+	if options.showemitters.value and not MouseOnGUI() then -- we dont want emitters to highlight if we are moving in the gui			
 		local dist = 100000000
 		local nearest
 		--Echo("check")
@@ -586,17 +603,17 @@ function widget:Update(dt)
 			end
 		end			
 		if nearest and dist < options.emitter_highlight_treshold.value then		
-			highlightEmitter = nearest
+			mouseOverEmitter = nearest
 			if not worldTooltip then tooltipTimer = tooltipTimer - dt end
 		else		
-			highlightEmitter = nil			
+			mouseOverEmitter = nil			
 			worldTooltip = nil
 			tooltipTimer = options.delay_tooltip.value
 		end
 	else
-		highlightEmitter = nil
+		mouseOverEmitter = nil
 	end
-	--Echo (tostring(highlightEmitter))
+	--Echo (tostring(mouseOverEmitter))
 	
 	
 	
@@ -713,7 +730,7 @@ end
 
 local function SpawnEmitter(name, yoffset)
 	local p
-	if not MouseOnGUI then _, p = Spring.TraceScreenRay(mx,mz,true)
+	if not MouseOnGUI() then _, p = Spring.TraceScreenRay(mx,mz,true)
 	else return end
 	if (emitters[name]) then Echo("an emitter with that name already exists") return false end
 	
@@ -742,8 +759,8 @@ end
 -------------------------------------------------------------------------------------------------------------------------
 -- $\luaui\modules\snd_ambientplayer_draw.lua 
 
-function widget:DrawWorldPreUnit() --?		
-	DrawEmitters(highlightEmitter)
+function widget:DrawWorld() --?		
+	DrawEmitters(mouseOverEmitter)
 end
 
 
@@ -760,6 +777,7 @@ function widget:Initialize()
 	local upath = PATH_LUA..PATH_UTIL
 
 	--setfenv(SetupGUI, gui)
+	Echo("Building GUI...")
 	gui.SetupGUI()	
 
 	for k, v in pairs(gui) do 
@@ -843,12 +861,14 @@ function widget:Initialize()
 		end	
 	end	
 	
-		
+	Echo("updating local config...")	
 	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end
 	config.mapX = Game.mapSizeX
 	config.mapZ = Game.mapSizeZ
 	inited=true --?
+	Echo("Updating GUI...")
 	UpdateGUI()
+	Echo("Init done!")
 end
 
 

@@ -11,6 +11,9 @@
 local pairs = widget.pairs
 local type = widget.type
 local tostring = widget.tostring
+local setmetatable = widget.setmetatable
+local getfenv = widget.getfenv
+local rawset = widget.rawset
 
 local PATH_LUA = widget.LUAUI_DIRNAME
 
@@ -33,52 +36,74 @@ local Label
 local Line
 local EditBox
 local TextBox
-local color2incolor
-local incolor2color
+--local color2incolor
+--local incolor2color
 
+-- these dont really have to be locals? as images are just loaded once
 local SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
 local HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
 local CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
 local PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
 local PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
 --local PLAYER_CONTROLS_ICON = PATH_LUA..'Images/Commands/Bold/'..'drop_beacon.png'
+local CLOSE_ICON = HELP_ICON 
 
 local HELPTEXT = [[generic info here]]
 
+local inspectionWindows = {}
+local containers = {}
+local controls = {}	
 
-function SetupGUI()	
-		
-	Chili = widget.WG.Chili
-	
-	if (not Chili) then		
-		Echo("<ambient gui> Chili not found")
-		return false
-	end
-	
-	screen0 = Chili.Screen0
-	
-	Image = Chili.Image
-	Button = Chili.Button
-	Checkbox = Chili.Checkbox
-	Window = Chili.Window
-	Label = Chili.Label
-	Line = Chili.Line
-	EditBox = Chili.EditBox
-	TextBox = Chili.TextBox
-	ScrollPanel = Chili.ScrollPanel
-	LayoutPanel = Chili.LayoutPanel
-	Grid = Chili.Grid
-	StackPanel = Chili.StackPanel
-	TreeView = Chili.TreeView
-	Node = Chili.TreeViewNode
-	color2incolor = Chili.color2incolor
-	incolor2color = Chili.incolor2color
+setmetatable(controls, {
+	__index = function(t, k)
+		if containers[k] then rawset(t, k, {}) return t[k]
+		else return nil end
+	end	
+})	
 
+local WINDOW_INSPECT_PROTOTYPE
+local BUTTON_CLOSE_INSPECT_PROTOTYPE
+local BUTTON_CLOSE_IMG_INSPECT_PROTOTYPE
+local SCROLL_INSPECT_PROTOTYPE
+local LAYOUT_INSPECT_PROTOTTYPE
+
+
+
+local window_main
+local scroll_main
+local layout_main
+local button_console
+local button_help
+local button_settings
+
+local window_emitters -- unsure this will be used
+local scroll_emitters
+
+local window_console
+local scroll_console
+local textbox_console
+
+local window_help
+local scroll_help
+local textbox_help
+
+local window_settings
+local editbox_mapfolder
+local editbox_soundfolder
+local buttonimage_mapfolder
+local buttonimage_soundfolder
+
+local window_inspect
+local label_inspect
+
+
+local function DeclareControls()
 	---------------------------------------------------- main frame ------------------------------------------------
+	
 	window_main = Window:New {
 		x = '65%',
 		y = '25%',	
-		--dockable = false,
+		dockable = false,
 		parent = screen0,
 		caption = "Ambient Sound Editor",
 		draggable = true,
@@ -86,18 +111,20 @@ function SetupGUI()
 		dragUseGrip = true,
 		clientWidth = 350,
 		clientHeight = 540,
-		backgroundColor = {0.8,0.8,0.8,0.9},		
+		backgroundColor = {0.8,0.8,0.8,0.9},
+		children = {
+			Label:New {
+				x = 0,
+				y = 20,
+				clientWidth = 260,
+				parent = window_main,
+				align = 'center',
+				caption = '-Track Overview-',
+				textColor = {1,1,0,0.9},		
+			},
+		},
 	}
-	label_overview = Label:New {
-		x = 0,
-		y = 20,
-		clientWidth = 260,
-		parent = window_main,
-		align = 'center',
-		caption = '-Track Overview-',
-		textColor = {1,1,0,0.9},		
-	}
-	scroll_overview = ScrollPanel:New {
+	scroll_main = ScrollPanel:New {
 		x = 0,
 		y = 40,
 		clientWidth = 340,
@@ -113,14 +140,11 @@ function SetupGUI()
 		--margin = {20,20,20,20},
 		
 	}	
-	layout_overview = LayoutPanel:New {
+	layout_main = LayoutPanel:New {
 		x = 0,
 		y = 0,
-		--clientWidth = 160,
-		--clientHeight = 420,
-		parent = scroll_overview,
-		orientation = 'vertical',
-		--orientation = 'left',
+		parent = scroll_main,
+		orientation = 'vertical',		
 		selectable = true,		
 		multiSelect = true,
 		maxWidth = 340,
@@ -149,10 +173,7 @@ function SetupGUI()
 		clientWidth = 12,
 		clientHeight = 12,
 		caption = '',
-		OnClick = {	function()
-						window_console:ToggleVisibility()						
-					end
-					},
+		OnClick = {function() window_console:ToggleVisibility() end},
 		children = {
 			Image:New {
 				width = "100%",
@@ -166,14 +187,11 @@ function SetupGUI()
 		x = - 32,
 		y = -32,
 		parent = window_main,		
-		tooltip = 'Halp!',
+		tooltip = 'Help',
 		clientWidth = 12,
 		clientHeight = 12,
 		caption = '',
-		OnClick = {	function()
-						window_help:ToggleVisibility()
-					end
-					},
+		OnClick = {function() window_help:ToggleVisibility() end},
 		children = {
 			Image:New {
 				width = "100%",
@@ -191,10 +209,7 @@ function SetupGUI()
 		clientWidth = 12,
 		clientHeight = 12,
 		caption = '',
-		OnClick = {	function()
-						window_settings:ToggleVisibility()
-					end
-					},
+		OnClick = {function() window_settings:ToggleVisibility() end},
 		children = {
 			Image:New {
 				width = "100%",
@@ -203,6 +218,8 @@ function SetupGUI()
 			}
 		}	
 	}
+	
+	containers.main = window_main
 	
 	---------------------------------------------------- emitters window ------------------------------------------------	
 	
@@ -217,16 +234,18 @@ function SetupGUI()
 		dragUseGrip = true,
 		clientWidth = 300,
 		clientHeight = 540,
-		backgroundColor = {0.8,0.8,0.8,0.9},		
-	}
-	label_emitters = Label:New {
-		x = 0,
-		y = 20,
-		clientWidth = 260,
-		parent = window_emitters,
-		align = 'center',
-		caption = '-Emitters-',
-		textColor = {1,1,0,0.9},		
+		backgroundColor = {0.8,0.8,0.8,0.9},
+		children = {
+			Label:New{
+				x = 0,
+				y = 20,
+				clientWidth = 260,
+				parent = window_emitters,
+				align = 'center',
+				caption = '-Emitters-',
+				textColor = {1,1,0,0.9},
+			},
+		},		
 	}
 	scroll_emitters = ScrollPanel:New {
 		x = 0,
@@ -243,6 +262,7 @@ function SetupGUI()
 		
 	}	
 	window_emitters:Hide()
+	containers.emitters = window_emitters
 	
 	
 	---------------------------------------------------- log window ------------------------------------------------	
@@ -281,8 +301,11 @@ function SetupGUI()
 		textColor = {0.9,0.9,0.0,0.9},
 		backgroundColor = {0.2,0.2,0.2,0.5},
 		borderColor = {0.3,0.3,0.3,0.5},
-		text = logfile,	
+		text = '',	
 	}
+	
+	containers.console = window_console
+	controls.log = textbox_console
 	
 	---------------------------------------------------- help window ------------------------------------------------
 
@@ -325,6 +348,7 @@ function SetupGUI()
 		text = HELPTEXT,
 	}
 	window_help:Hide()
+	containers.help = window_help
 	
 		---------------------------------------------------- settings window ------------------------------------------------
 	window_settings = Window:New {
@@ -419,23 +443,419 @@ function SetupGUI()
 	}		
 	
 	window_settings:Hide()
+	containers.settings = window_settings
 	
 	---------------------------------------------------- inspect emitter window ------------------------------------------------
-	window_inspect = Window:New {
+	WINDOW_INSPECT_PROTOTYPE = {
 		x = "50%",
 		y = "50%",
-		parent = screen0,
-		caption = "Emitter Details",
+		--parent = screen0,
+		caption = "Details",
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
 		clientWidth = 300,
 		clientHeight = 250,
 		backgroundColor = {0.8,0.8,0.8,0.9},
-		currentInspect = nil,
-		panel = nil,
+		inspect = nil,
+		--Refresh = function(self) end,
+	}	
+	BUTTON_CLOSE_INSPECT_PROTOTYPE = {
+		name = 'closebutton',
+		x = -28,
+		y = 4,				
+		tooltip = 'Close',
+		clientWidth = 8,
+		clientHeight = 8,
+		caption = '',
+		OnClick = {
+			function(self) -- hope this shit works
+				self.listener.inspect = nil
+				self.listener():Refresh()				
+			end
+		},		
 	}
-	label_inspect = Label:New {
+	BUTTON_CLOSE_IMG_INSPECT_PROTOTYPE = {
+		width = "100%",
+		height = "100%",				
+		file = CLOSE_ICON,
+	}
+	LABEL_INSPECT_PROTOTYPE = {		
+		name = 'label',
+		y = 20,				
+		caption = '',
+		width = 300,				
+		align = 'center',		
+		textColor = {1,1,0,0.9},
+	}
+	SCROLL_INSPECT_PROTOTYPE = {				
+		y = 40,
+		clientWidth = 300 - 38,
+		clientHeight = 250 - 90,				
+		scrollPosX = -16,
+		horizontalScrollbar = false,
+		verticalScrollbar = true,
+		verticalSmartScroll = false,	
+		scrollbarSize = 6,
+		padding = {5,10,5,10},		
+	}
+	LAYOUT_INSPECT_PROTOTYPE =  {	
+		name = 'layout',
+		clientWidth = 300,
+		clientHeight = 250, -- this was width too. ?
+		maxWidth = 300,
+		minWidth = 0, -- same here						
+		orientation = 'vertical',				
+		selectable = false,		
+		multiSelect = false,
+		itemPadding = {6,2,6,2},
+		itemMargin = {0,0,0,0},
+		autosize = true,
+		align = 'left',
+		columns = 3,
+		left = 0,
+		centerItems = false,	
+	}		
+	--WINDOW_INSPECT_PROTOTYPE = Window:New(INSPECT_BUILDTABLE)
+	--WINDOW_INSPECT_PROTOTYPE:Hide()
+	--containers.inspect = window_inspect
+end
+
+
+local function DeclareFunctions()
+
+	--------------------------------------------------------------------------------------------------
+	-- main frame
+	layout_main.Refresh = function(self) 
+		local valid = true
+		for item, params in pairs(sounditems.templates) do
+		--local i = controls.main and #controls.main or 1 --< cant index the table properly if things get removed
+			if not controls.main['label_'..item] then -- make new controls for newly added items
+				valid = false
+				controls.main['label_'..item] = TextBox:New { --< should make custom clickie textbox for this
+					refer = item,
+					clientWidth = 200,
+					parent = layout_main,
+					align = 'left',
+					text = item,
+					fontSize = 10,
+					textColor = {0.9,0.9,0.9,1},
+					backgroundColor = {0.2,0.2,0.2,0.5},
+					borderColor = {0.3,0.3,0.3,0.5},
+					OnMouseOver = { 
+						function(self)
+							local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
+							for key, _ in pairs(sounditems.default) do ttip = ttip..key..": "..tostring(params[key]).."\n" end
+							self.tooltip=ttip
+						end
+					},
+				}
+				controls.main['length_'..item] = TextBox:New {
+					refer = item,
+					x = 204,
+					clientWidth = 26,
+					parent = layout_main,
+					align = 'right',
+					text = ''..params.length,
+					fontSize = 10,
+					textColor = {0.9,0.9,0.9,1},
+					backgroundColor = {0.2,0.2,0.2,0.5},
+					borderColor = {0.3,0.3,0.3,0.5},
+					tooltip = [[The length of the item in seconds. As this information can't currently be obtained by the Widget, you may want to insert it manually.]]
+					-- this needs a refresh function for playback
+				}
+				controls.main['editBtn_'..item] = Image:New {
+					refer = item,
+					parent = layout_main,
+					file = PROPERTIES_ICON,
+					width = 20,
+					height = 20,
+					tooltip = 'Sounditem Properties',
+					color = {0.8,0.7,0.9,0.9},
+					OnClick = {
+						function()
+						end
+					},
+				}
+				controls.main['playBtn_'..item] = Image:New {
+					refer = item,
+					parent = layout_main,
+					file = PLAYSOUND_ICON,
+					width = 20,
+					height = 20,
+					tooltip = 'Play',
+					color = {0,0.8,0.2,0.9},
+					margin = {-6,0,0,0},
+					OnClick = {
+						function()
+							DoPlay(track, options.volume.value, nil, nil, nil) --< this probably shouldnt return anything
+						end
+					},
+				}
+			else -- update controls for exisiting items (not a whole lot to do as of now)
+				controls.main['label_'..item].text = item
+				controls.main['length_'..item].text = params.length
+			end				
+		end
+		
+		--if controls.main then
+		for control, params in pairs(controls.main) do				
+			if not sounditems.templates[params.refer] then -- dispose of controls for items that were removed
+				valid = false
+				controls.main[control]:Dispose()
+				controls.main[control] = nil
+			end
+		end
+		--end
+		
+		if not valid then self:Invalidate() end	
+	end
+	
+	--------------------------------------------------------------------------------------------------
+	-- inspection window
+	
+	WINDOW_INSPECT_PROTOTYPE.Refresh = function(self)
+		local this = self -- userdata
+		local name = self.name -- string :)
+		
+		
+		if self.inspect then
+			--Echo("check")
+			local valid = true
+			local inspect = self.inspect -- string?
+			--Echo(type(inspect))
+			local label = self.label
+			local layout = self.layout
+			--Echo (layout.name)
+			--Echo("check 2")
+			if emitters[inspect] then
+				local e = emitters[inspect]
+				label:SetCaption(inspect)
+				
+				for i = 1, #e.sounds do
+					local sound = e.sounds[i]
+					local item = sound.item
+					if not controls[name]['label_'..item] then
+						valid = false
+						local t = {}
+							t.name = 'label_'..item
+							t.refer = item
+							t.width = this.width-140
+							t.parent = layout
+							t.align = 'left'
+							t.text =  item or 'error: no item' --< this shouldnt happen
+							t.fontSize = 10
+							t.textColor = {0.9,0.9,0.9,1}
+							t.backgroundColor = {0.2,0.2,0.2,0.5}
+							t.borderColor = {0.3,0.3,0.3,0.5}
+							t.OnMouseOver = {
+								function(self) 
+								end
+							}							
+						controls[name]['label_'..item] = TextBox:New (t)
+						t = {}
+							t.name = 'editBtn_'..item
+							t.refer = item
+							t.parent = layout
+							t.file = PROPERTIES_ICON			
+							t.width = 20
+							t.height = 20			
+							t.tooltip = 'Sound Properties'
+							t.color = {0.8,0.7,0.9,0.9}				
+							t.OnClick = {
+								function()
+								end
+							}						
+						controls[name]['editBtn_'..item] = Image:New (t)
+						t = {}
+							t.name = 'playBtn_'..item
+							t.refer = item
+							t.parent = layout
+							t.file = PLAYSOUND_ICON		
+							t.width = 20
+							t.height = 20
+							t.tooltip = 'Play at Location'
+							t.color = {0,0.8,0.2,0.9}			
+							t.margin = {-6,0,0,0}
+							t.OnClick = {
+								function()
+									local px, py, pz = e.pos.x, e.pos.y, e.pos.z									
+									return DoPlay(sound.item, options.volume.value, px or nil, py or nil, pz or nil) -- pos is false for global emitter, for some silly reason. needs change
+								end
+							}									
+						controls[name]['playBtn_'..item] = Image:New (t)
+					else
+						controls[name]['label_'..item].text = item						
+					end				
+				end
+				
+				for control, params in pairs(controls[name]) do				
+					if not e.sounds[params.refer] then -- dispose of controls for items that were removed
+						valid = false
+						controls[name][control]:Dispose()
+						controls[name][control] = nil
+					end	
+				end											
+			elseif true then do end
+			else --< if it is some kind of object that isnt meant to be here
+				assert (false, "invalid or misplaced inspect object: "..type(object).." - "..tostring(object))
+			end
+		elseif self.visible then			
+			--inspectionWindows[self] = nil
+			self:Hide()
+			--Echo("weub")
+			--self:Dispose()
+		end		
+		
+		if not valid then 
+			--layout:Invalidate()
+			self:Invalidate() 
+		end
+	end
+	
+	--------------------------------------------------------------------------------------------------
+	-- inspection window handle
+	
+	inspectionWindows.DisposeAll = function(self)
+		for w, params in pairs(self) do
+			if type(params) ~= 'function' then params.inspect = nil end
+			 -- windows without inspect selfdestruct
+		end
+	end
+	inspectionWindows.RefreshAll = function(self)
+		for w, params in pairs(self) do
+			if type(params) ~= 'function' then params:Refresh() end
+			
+		end
+	end	
+			
+	setmetatable(inspectionWindows, {
+		__index = function(t, k)		
+			Echo("new inspection window - key: "..tostring(k).."("..type(k)..")")
+			local function Copy(_t) -- doesnt have to be that deep actually but meh
+				local w = {}
+				for _k, v in pairs(_t) do	
+					if type(v) == 'table' then w[_k] = Copy(v) else w[_k] = v end
+				end
+				return w
+			end					
+			local wt = Copy(WINDOW_INSPECT_PROTOTYPE)
+			wt.name = 'inspect_'..tostring(k)
+			
+			w = Window:New (wt)
+			label = Label:New (Copy(LABEL_INSPECT_PROTOTYPE))			
+			btn = Button:New (Copy(BUTTON_CLOSE_INSPECT_PROTOTYPE))		
+			scroll = ScrollPanel:New (Copy(SCROLL_INSPECT_PROTOTYPE))
+			layout = LayoutPanel:New (Copy(LAYOUT_INSPECT_PROTOTYPE))
+						
+			screen0:AddChild(w)
+			w:AddChild(label)
+			w:AddChild(btn)
+			btn:AddChild(Image:New (Copy(BUTTON_CLOSE_IMG_INSPECT_PROTOTYPE)))
+			w:AddChild(scroll)
+			scroll:AddChild(layout)
+			
+			w.label = label -- userdata
+			w.layout = layout -- userdata
+			btn.listener = w
+			--w:Invalidate()
+			controls[wt.name] = {} -- string
+			w:Refresh()
+			
+			rawset(t, k, w)
+			return t[k]		
+		end	
+	}) 
+	
+	--------------------------------------------------------------------------------------------------
+	--------------------------------------------------------------------------------------------------
+	--------------------------------------------------------------------------------------------------
+	--------------------------------------------------------------------------------------------------
+	
+end
+
+
+function SetupGUI()	
+		
+	Chili = widget.WG.Chili
+	
+	if (not Chili) then		
+		Echo("<ambient gui> Chili not found")
+		return false
+	end
+	
+	screen0 = Chili.Screen0
+	
+	Image = Chili.Image
+	Button = Chili.Button
+	Checkbox = Chili.Checkbox
+	Window = Chili.Window
+	Label = Chili.Label
+	Line = Chili.Line
+	EditBox = Chili.EditBox
+	TextBox = Chili.TextBox
+	ScrollPanel = Chili.ScrollPanel
+	LayoutPanel = Chili.LayoutPanel
+	Grid = Chili.Grid
+	StackPanel = Chili.StackPanel
+	TreeView = Chili.TreeView
+	Node = Chili.TreeViewNode
+	color2incolor = Chili.color2incolor
+	incolor2color = Chili.incolor2color
+
+	DeclareControls()
+	DeclareFunctions()
+end
+
+
+function UpdateGUI()
+	--Echo("call")
+	editbox_mapfolder.text = config.path_map
+	editbox_soundfolder.text = config.path_sound
+	
+	layout_main:Refresh()
+	inspectionWindows:RefreshAll()
+	--ho("tick")
+end
+
+
+
+
+--
+
+local gui = getfenv()
+gui.inspectionWindows = inspectionWindows
+gui.controls = controls
+gui.containers = containers
+
+
+
+return gui
+
+
+--[[
+	WINDOW_INSPECT_PROTOTYPE.button_close = Button:New{
+		x = -32,
+		y = 32,				
+		tooltip = 'Close',
+		clientWidth = 10,
+		clientHeight = 10,
+		caption = '',
+		OnClick = {
+			function() 
+				window_inspect.inspect = nil
+				window_inspect:Refresh()				
+			end
+		},
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",				
+				file = CLOSE_ICON,
+			},
+		},
+	}
+	WINDOW_INSPECT_PROTOTYPE.label = Label:New {
 		x = 0,
 		y = 20,
 		parent = window_inspect,
@@ -445,214 +865,40 @@ function SetupGUI()
 		align = 'center',		
 		textColor = {1,1,0,0.9},
 	}
-		
-	window_inspect:Hide()
-end
-
-
-function UpdateGUI()
-	editbox_mapfolder.text = config.path_map
-	editbox_soundfolder.text = config.path_sound
-	
-	for track, params in pairs(sounditems.templates) do
-		
-			--local name = params.name
-			tracklist_controls['label'..track] = EditBox:New {
-				x = 0,
-				--y = 0,
-				clientWidth = 200,
-				--clientHeight = 16,
-				parent = layout_overview,
-				align = 'left',
-				text =  track,
-				fontSize = 10,
-				textColor = {0.9,0.9,0.9,1},
-				backgroundColor = {0.2,0.2,0.2,0.5},
-				borderColor = {0.3,0.3,0.3,0.5},
-				OnMouseOver = { function(self) 
-									local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
-									for key, _ in pairs(sounditems.default) do										
-										ttip = ttip..key..": "..tostring(params[key]).."\n"										
-									end
-									--self:SetTooltip(ttip)
-									self.tooltip=ttip
-								end
-							},
-				OnChange = {function()
-							params.name = self.text
-							end
-						},
-			}
-			tracklist_controls['length'..track] = EditBox:New {
-				x = 204,
-				clientWidth = 26,
-				parent = layout_overview,
-				align = 'right',
-				text = ''..params.length,
-				fontSize = 10,
-				textColor = {0.9,0.9,0.9,1},
-				backgroundColor = {0.2,0.2,0.2,0.5},
-				borderColor = {0.3,0.3,0.3,0.5},
-				tooltip = [[The length of the track in seconds. As this information can't currently be obtained by the Widget, you may want to insert it manually.]]
-			}
-						
-			tracklist_controls['edit_image'..track] = Image:New {
-				--x = 250,
-				--y = 8,
-				parent = layout_overview,
-				file = PROPERTIES_ICON,				
-				width = 20,
-				height = 20,
-				--margin = {0,0,0,-6},
-				--padding = {0,0,0,-4},
-				--clientWidth = 32,
-				--clientHeight = 32,
-				tooltip = 'Sounditem Properties',
-				color = {0.8,0.7,0.9,0.9},
-				--margin = {0,2,0,0},
-				--caption = '',
-				OnClick = {	function()
-								
-								--local p = {x,y,z}
-								--return widget.DoPlay(track, options.volume.value, nil, nil, nil)		
-							end
-						},
-			}
-			tracklist_controls['play_image'..track] = Image:New {
-				--x = 240,
-				--y = 0,
-				parent = layout_overview,
-				file = PLAYSOUND_ICON,				
-				width = 20,
-				height = 20,
-				tooltip = 'Play Sounditem',
-				color = {0,0.8,0.2,0.9},
-				--caption = '',
-				margin = {-6,0,0,0},
-				OnClick = {	function()
-								--local p = {x,y,z}
-								
-								return DoPlay(track, options.volume.value, nil, nil, nil)		
-							end
-						},
-			}
-		--end	
-	end	
-end
-
-
-function UpdateInspectionWindow(object)	
-	-- Echo("call with "..object)
-		
-	if window_inspect.currentInspect and (window_inspect.currentInspect ~= object) then		
-		Echo(window_inspect.currentInspect.." and "..object)
-		window_inspect.panel:Dispose()
-		window_inspect:Invalidate()
-	end
-	
-	if emitters[object] then
-		local e = emitters[object]
-		window_inspect.currentInspect = object		
-		label_inspect:SetCaption(object)
-		window_inspect.panel = ScrollPanel:New {
-			x = 0,
-			y = 40,
-			clientWidth = window_inspect.width - 38,
-			clientHeight = window_inspect.height - 90,
-			parent = window_inspect,
-			scrollPosX = -16,
-			horizontalScrollbar = false,
-			verticalScrollbar = true,
-			verticalSmartScroll = false,	
-			scrollbarSize = 6,
-			padding = {5,10,5,10},
-			--autosize = true,
-			--itemPadding = {5,10,5,10},
-			--margin = {20,20,20,20},			
-		}
-		window_inspect.panel.layout = LayoutPanel:New {
-			x = 0,
-			y = 0,
-			clientWidth = window_inspect.panel.width-20,
-			clientHeight = window_inspect.panel.width-20,
-			parent = window_inspect.panel,
-			orientation = 'vertical',
-			--orientation = 'left',
-			selectable = false,		
-			multiSelect = false,
-			maxWidth = window_inspect.panel.width,
-			minWidth = window_inspect.panel.width,
-			itemPadding = {6,2,6,2},
-			itemMargin = {0,0,0,0},
-			autosize = true,
-			align = 'left',
-			columns = 3,
-			left = 0,
-			centerItems = false,	
-		}		
-		
-		for i = 1, #e.sounds do
-			local sound = e.sounds[i]
-			for k, v in pairs(sound) do
-				widget.tostring(v)
-			end
-			namebox = EditBox:New {
-				--x = 0,				
-				--autosize = true,
-				width = window_inspect.panel.layout.width-86,
-				--height = 12,
-				parent = window_inspect.panel.layout,
-				align = 'left',
-				text =  sound.item or 'error: no item',
-				fontSize = 10,
-				textColor = {0.9,0.9,0.9,1},
-				backgroundColor = {0.2,0.2,0.2,0.5},
-				borderColor = {0.3,0.3,0.3,0.5},
-				OnMouseOver = { function(self) 
-									--local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
-									--for param, val in pairs(params) do										
-									--	if type(val) == 'boolean' then ttip = ttip..param..": "..(val and "true" or "false").."\n" 											
-									--	else ttip = ttip..param..": "..val.."\n" 
-									--	end
-									--end
-									--self:SetTooltip(ttip)
-									--self.tooltip=ttip
-								end
-				},
-			}					
-			propsicon = Image:New {				
-				parent = window_inspect.panel.layout,
-				file = PROPERTIES_ICON,				
-				width = 20,
-				height = 20,				
-				tooltip = 'Sound Properties',
-				color = {0.8,0.7,0.9,0.9},				
-				OnClick = {	function()
-								--local p = {x,y,z}
-								--return widget.DoPlay(track, options.volume.value, nil, nil, nil)		
-							end
-				},
-			}
-			playicon = Image:New {
-				parent = window_inspect.panel.layout,
-				file = PLAYSOUND_ICON,				
-				width = 20,
-				height = 20,
-				tooltip = 'Play at Location',
-				color = {0,0.8,0.2,0.9},				
-				margin = {-6,0,0,0},
-				OnClick = {	function()
-								local px, py, pz = e.pos.x, e.pos.y, e.pos.z
-								Echo(px.." "..py.." "..pz)
-								return widget.DoPlay(sound.item, options.volume.value, px or nil, py or nil, pz or nil) -- pos is false for global emitter, for some silly reason. needs change
-							end
-				},
-			}
-		end
-		
-	end
-	--window_inspect:Invalidate()
-end
-
-
-return true
+	scroll_inspect = ScrollPanel:New {
+		x = 0,
+		y = 40,
+		clientWidth = window_inspect.width - 38,
+		clientHeight = window_inspect.height - 90,
+		parent = window_inspect,
+		scrollPosX = -16,
+		horizontalScrollbar = false,
+		verticalScrollbar = true,
+		verticalSmartScroll = false,	
+		scrollbarSize = 6,
+		padding = {5,10,5,10},
+		--autosize = true,
+		--itemPadding = {5,10,5,10},
+		--margin = {20,20,20,20},			
+	}
+	layout = LayoutPanel:New {
+		x = 0,
+		y = 0,
+		clientWidth = window_inspect.panel.width-20,
+		clientHeight = window_inspect.panel.width-20,
+		parent = scroll_inspect,
+		orientation = 'vertical',
+		--orientation = 'left',
+		selectable = false,		
+		multiSelect = false,
+		maxWidth = window_inspect.panel.width,
+		minWidth = window_inspect.panel.width,
+		itemPadding = {6,2,6,2},
+		itemMargin = {0,0,0,0},
+		autosize = true,
+		align = 'left',
+		columns = 3,
+		left = 0,
+		centerItems = false,	
+	}		
+	--]]	
