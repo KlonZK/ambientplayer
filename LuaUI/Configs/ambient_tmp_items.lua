@@ -1,10 +1,10 @@
 -- Sounditem definitions. same format as gamedata/sounds.lua 
--- these are templates used by the editor. for the table of sound items being used by emitters, see ambient_sounds_instances.lua
+-- these are individual sounds being used in emitters. for the table of sound item templates, see ambient_sounds_items.lua
 
 local Sounds = {
 	Sounditems = {
-		brook_1 = {			
-			file = "maps/white_rabbit_v30.sdd/Sounds/Ambient/brook_1.ogg",			
+		brook_1 = {
+			file = "maps/white_rabbit_v30.sdd/Sounds/Ambient/brook_1.ogg",
 		},
 		brook_2 = {
 			dopplerscale = 0,
@@ -253,7 +253,6 @@ local Sounds = {
 			rnd = 0,
 			rolloff = 0,
 		},
-
 		wind_mighty_1 = {
 			dopplerscale = 0,
 			emitter = false,

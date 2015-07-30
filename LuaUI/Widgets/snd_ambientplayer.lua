@@ -1,11 +1,11 @@
 --[[
 TODO:
 - add emitters, emitters graphical representation, figure out how tracks and emitters work together VVVv
-- implement adding sound items to emitters Vv
+- implement adding sound items to emitters VVv
 - implement batch loading, adding, editing vv-
-- restructure? vv
+- restructure? Vvv
 - slash words and vars 
-- build writable tables for options Vv
+- build writable tables for options VVv
 - save options, playlist, emitters support (good target for own file) Vv
 - remake initialize() to account for list files Vv
 - find out how to find out about file sizes and lengths
@@ -23,7 +23,7 @@ TODO:
 - make emitters hold actual items?
 - track playing status of emitters using length, make animation play when playing
 - 
-- continue gui implementation, rework update function
+- continue gui implementation, rework update function vv
 --]]
 
 --os.getenv("HOME")
@@ -82,10 +82,10 @@ local FILE_MODULE_DRAW = 'snd_ambientplayer_draw.lua'
 
 local MAPCONFIG_FILENAME = 'ambient_mapconfig.lua'
 local SOUNDS_ITEMS_DEF_FILENAME = 'ambient_sounds_templates.lua'
-local SOUNDS_INUSE_DEF_FILENAME = 'ambient_sounds_inuse.lua'
+local SOUNDS_INSTANCES_DEF_FILENAME = 'ambient_sounds_instances.lua'
 local EMITTERS_FILENAME = 'ambient_emitters.lua'
 local TMP_ITEMS_FILENAME = 'ambient_tmp_items.lua'
-local TMP_INUSE_FILENAME = 'aambient_tmp_inuse.lua'
+local TMP_INSTANCES_FILENAME = 'aambient_tmp_instances.lua'
 local LOG_FILENAME = 'ambient_log.txt'
 
 
@@ -136,7 +136,7 @@ local SOUNDITEM_PROTOTYPE = {
 
 local sounditems = {
 	templates = {},
-	inuse = {},
+	instances = {},
 	default = SOUNDITEM_PROTOTYPE,
 }
 
@@ -148,7 +148,7 @@ setmetatable(sounditems.templates, {
 	end
 }) 
 		
-setmetatable(sounditems.inuse, {
+setmetatable(sounditems.instances, {
 	__newindex = function (t, k, v)		
 		rawset(t, k, v)
 		setmetatable(t[k], {__index = SOUNDITEM_PROTOTYPE})
@@ -160,9 +160,9 @@ local tracklist_controls = {}
 local emitters_controls = {}
 
 local emitters = {
-	--	e = { -- are they indexed now or what?
+	--	[e<string>] = { 
 	--		pos = {x, y, z},
-	--		sounds = { --< INDEXES TABLE WILL FAIL HORRIBLY IF THIGNS GET REMOVED. NEEDS COUNTERMEASURES OR CHANGE
+	--		sounds = { --< INDEXED TABLE WILL FAIL HORRIBLY IF THIGNS GET REMOVED. NEEDS COUNTERMEASURES OR CHANGE
 	--			[j] = {	
 	--				item = <sounditem>
 	--				generated = <boolean> -- this is not needed anymore
@@ -206,7 +206,8 @@ options = {}
 -- SetupGUI() builds controls so we can't import keys yet
 Echo ("Loading modules...")	
 
-local i_o = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters}
+local i_o = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
+				PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME, TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME}
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_IO
 	if vfsExist(file, VFSMODE) and vfsInclude(file, i_o, VFSMODE) then
@@ -216,8 +217,18 @@ do
 	end
 end
 
+local draw = {widget = widget, Echo = Echo, options = options, emitters = emitters}
+do				
+	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_DRAW
+	if vfsExist(file, VFSMODE) and vfsInclude(file, draw, VFSMODE) then
+		Echo("DRAW module successfully loaded")
+	else
+		Echo("failed to load DRAW module")
+	end
+end
+
 local gui = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
-				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls}
+				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls, UpdateMarkerList = draw.UpdateMarkerList}
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
 	if vfsExist(file, VFSMODE) then
@@ -230,15 +241,7 @@ do
 	-- load console here if wanted or if chili fails
 end
 
-local draw = {widget = widget, Echo = Echo, options = options, emitters = emitters}
-do				
-	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_DRAW
-	if vfsExist(file, VFSMODE) and vfsInclude(file, draw, VFSMODE) then
-		Echo("DRAW module successfully loaded")
-	else
-		Echo("failed to load DRAW module")
-	end
-end
+
 
 
 -------------------------------------------------------------------------------------------------------------------------
@@ -414,8 +417,9 @@ local secondsToUpdate = 0.1
 local gameStarted = Spring.GetGameFrame() > 0
 local inited = false
 
-local mx, mz
+local mx, mz, mz_inv
 local mcoords
+local modkeys = {}
 local needReload = false
 local mouseOverEmitter
 
@@ -423,12 +427,14 @@ local drag = {
 	objects = {},
 	_type = {},
 	params = {},
+	timer = options.delay_drag.value,
+	started = false,
 }
-local dragObject
-local dragType
+--local dragObject
+--local dragType
 --local DELAY_DRAG = 0.2 -- moved to options
-local dragTimer = options.delay_drag.value
-local dragStarted = false
+--local dragTimer = options.delay_drag.value
+--local dragStarted = false
 
 --local DELAY_TOOLTIP = 0.4 -- moved to options
 local tooltipTimer = options.delay_tooltip.value
@@ -439,13 +445,128 @@ local worldTooltip
 
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
+-- LOCAL FUNCTIONS
+-------------------------------------------------------------------------------------------------------------------------
+
+local function DoPlay(item, vol, x, y, z) 
+	if not (sounditems.templates[item] or sounditems.instances[item]) then 
+		Echo("item "..tostring(track).." not found!") 
+		return false	
+	else
+		local tr = item
+		-- if (tracklist.tracks[tr].generated) then	tr = tracklist.tracks[tr].file	end	 -- is this used?
+		if (PlaySound(tr, vol, x, y, z)) then
+			if (options.verbose.value) then
+				Echo("playing "..tr.." at volume: "..string.format("%.2f", vol))
+				if (x) then Echo("at Position: "..x..", "..y..", "..z) end -- should format this looks bad with decimals
+			end
+			return true		
+		end	
+		Echo("playback of "..tr.." failed, not an audio file?")
+		return false
+	end
+end
+
+-- 
+local function AddItemToEmitter(e, iname) -- <string, string> !!!
+	--assert(type(item) == 'table')
+	local item
+	local name
+	
+	if sounditems.templates[iname] then 
+		item = sounditems.templates[iname] 
+		name = "$"..e.."$ "..iname		
+	end
+	if sounditems.instances[iname] then -- this needs testing
+		assert(not item, "identical item names in templates/instance tables")
+		item = sounditems.instances[iname]
+		local _, endprefix = string.find(iname, "[\$].-[\$%s]")
+		Echo(endprefix)
+		name = "$"..e.."$ "..iname:sub(endprefix + 1) -- remove old emitter tag		
+	end	
+	
+	while (sounditems.instances[name]) do name = name.."_" end -- add any number of _ at the end for duplicates
+	
+	sounditems.instances[name] = {}	
+	local newItem = sounditems.instances[name]		
+	for k, v in pairs(item) do newItem[k] = v end
+	
+	local es = emitters[e].sounds; es[#es + 1] = {}	
+	local newSound = es[#es]
+	
+	newSound.item = name -- !	
+	newSound.timer = newItem.onset
+	newSound.isPlaying = false
+	
+	-- newItem.maxdist = newItem.maxdist < 100000 and newItem.maxdist or 100000 -- this is bad, should not have to set it here	
+	-- newItem.emitter = e -- needed?
+	
+	needReload = true
+	Echo("added <"..name..">")
+	return true
+end
+
+-- this needs a look at
+local function RemoveItemFromEmitter(e, item)
+	if not sounditems.instances[item] then 
+		Echo("a sounditem with that name is not in use")
+		return false 
+	end
+	
+	assert(sounditems.instances[item] and emitters[e].sounds[item]) -- to make sure we didnt fuck up earlier when adding
+	
+	sounditems.instances[item] = nil
+	emitters[e].sounds[item] = nil
+end
+
+
+local function RemoveItemFromList(item)
+	if not sounditems.templates[item] then
+		Echo("a sounditem with that name is not registered")
+		return false
+	end
+		
+	sounditems.instances[item] = nil
+	for e = 1, #emitters do
+		emitters[e].sounds[item] = nil
+	end	
+end
+
+
+local function SpawnEmitter(name, yoffset)
+	local p
+	if not MouseOnGUI() then _, p = Spring.TraceScreenRay(mx,mz,true)
+	else return end
+	if (emitters[name]) then Echo("an emitter with that name already exists") return false end
+	
+	yoffset = yoffset or 0
+	p[2] = p[2] + yoffset	
+	if not (name) then name = (#emitters + 1).." - "..p[1]..", "..p[3]..", "..p[2] end		
+
+	-- __newindex should build our tables
+	emitters[name].pos = {x = math.floor(p[1]), y = math.floor(p[2]), z = math.floor(p[3])}	
+	
+	
+	--emitters[name].light = MapLight(eLightTable)
+end
+
+
+
+-------------------------------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------------------------------------
 -- INPUT LISTENERS AND AUXILIARY
 -------------------------------------------------------------------------------------------------------------------------
 
 -- fuck you
 local function MouseOnGUI()
-	local mz_inv = math.abs(screen0.height - mz)
+	--local mz_inv = math.abs(screen0.height - mz)
 	return IsMouseMinimap(mx or 0, mz or 0) or MouseOver(mx, mz_inv)--screen0.hoveredControl --or screen0.focusedControl
+end
+
+
+function widget:IsAbove(x, y)	
+	if mouseOverEmitter and not MouseOnGUI() then return true end	
+	--if dragObject then return true end
 end
 
 
@@ -465,12 +586,6 @@ local function updateTooltip()
 end
 
 
-function widget:IsAbove(x, y)	
-	if mouseOverEmitter and not MouseOnGUI() then return true end	
-	--if dragObject then return true end
-end
-
-
 function widget:GetTooltip(x, y)
 	if not worldTooltip then
 		if tooltipTimer > 0 then return end
@@ -485,27 +600,46 @@ end
 
 function widget:MousePress(x, y, button)	
 	--if button == 4 or button == 5 then return false end
-	if MouseOnGUI() then return false end
-	if mouseOverEmitter then
-		if button == 3 then return true end
-		if button == 2 then 			
-		end	
-		if button == 1 then			
+	--if MouseOnGUI() then return false end
+	--if MouseOver(mx, mz_inv) then return true end
+	Echo("main")
+	if button == 1 then
+		if mouseOverEmitter then
 			local e = emitters[mouseOverEmitter]
 			drag.objects[1] = e
 			drag._type.emitter = true			
 			drag.params.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)
 			Echo("drag timer started")
 			return true
-		end			
-	else		
-	end	
+		elseif modkeys.space and controls.tracklist:IsMouseOver(mx, mz_inv) then -- this needs to check for layer too, somehow : /
+			Echo("mouse over")
+			local tl = controls.tracklist
+			--Echo(tl.name..tostring(tl.selectedItems))
+			local selection = tl.selectedItems
+			-- only trues but no order 
+			if selection then
+				Echo("selection")				
+				for k, _ in pairs(selection) do
+					local sel = tl.children[k]
+					assert (sel.refer, "selection "..tostring(sel).." missing item reference")
+					drag.objects[#drag.objects + 1] = sel.refer --< why is this not a string
+					Echo("added "..tostring(sel.refer).." to drag")
+				end				
+				drag.params.source = tl
+				drag.params.templates = true
+				drag._type.sounditems = true
+				Echo("drag timer started")
+				return true
+			end
+		end
+	elseif button == 3 and mouseOverEmitter then return true
+	end
 	return false
 end
 
 
 function widget:MouseRelease(x, y, button)
-	--Echo("release")
+	Echo("release")
 	if button == 3 then		
 		if mouseOverEmitter then		
 			if inspectionWindows[mouseOverEmitter].inspect then -- window already existed a moment ago
@@ -516,21 +650,47 @@ function widget:MouseRelease(x, y, button)
 				inspectionWindows[mouseOverEmitter].inspect = mouseOverEmitter -- make a new one
 				inspectionWindows[mouseOverEmitter]:Show() -- refresh should be automatic lets just show it
 				local xp = mx > (screen0.width / 2) and (mx - inspectionWindows[mouseOverEmitter].width) or mx
-				local mz_inv = math.abs(screen0.height- mz) 
+				--local mz_inv = math.abs(screen0.height- mz) 
 				local yp = mz_inv > (screen0.height / 2) and (mz_inv - inspectionWindows[mouseOverEmitter].height) or mz_inv		
 				inspectionWindows[mouseOverEmitter]:SetPos(xp, yp)
 				--Echo(type(mouseOverEmitter).." - "..type(inspectionWindows[mouseOverEmitter]))
 			end
 		end
+		return
+		
+	elseif button == 1 then
+		Echo("hello")
+		if drag._type.sounditems then
+			--local source = drag.params.templates and sounditems.templates or sounditems.instances
+			if mouseOverEmitter then -- there should be none if mouse is over gui so its probably safe				
+				--local e = emitters[mouseOverEmitter]	
+				for i = 1, #drag.objects do
+					local item = drag.objects[i] -- string
+					AddItemToEmitter(mouseOverEmitter, item)
+				end				
+			else -- add to a window
+				local target = MouseOver(mx, mz_inv)				
+				if target and target.refer and emitters[target.refer] then --< the emitter window has a refer, and containers only contains windows. this -should- work
+					local e = target.refer
+					Echo("target emitter: "..e)
+					for i = 1, #drag.objects do
+						local item = drag.objects[i] -- string
+						AddItemToEmitter(e, item)
+					end	
+				else Echo("drag dropped")
+				-- else just drop it			
+				end
+			end
+		end
 	end		
 
 	--if button == 4 or button == 5 then return false end
-	
-	dragTimer = options.delay_drag.value
-	drag.objects[1] = nil
-	drag._type.emitter = nil	
-	drag.params.hoff = nil
-	dragStarted = false
+		
+	drag.timer = options.delay_drag.value
+	drag.objects = {}
+	drag._type = {} 
+	drag.params = {}
+	drag.started = false
 	Echo("drag ended")	
 end
 
@@ -538,8 +698,8 @@ end
 -- should rather do this when properities are open
 function widget:MouseWheel(up, value)
 	if not drag.objects[1] and mouseOverEmitter then
-		local alt,ctrl,_,shift = GetModKeys()
-		if not shift then return false end
+		--local alt,ctrl,_,shift = GetModKeys()
+		if not modkeys.shift then return false end
 		
 		local e = emitters[mouseOverEmitter]
 		local gh = GetGroundHeight(e.pos.x, e.pos.z)		
@@ -552,13 +712,16 @@ end
 
 
 function widget:MouseMove(x, y, dx, dy, button)	
-	if dragStarted then			
-		if drag._type.emitter and mcoords then		
-			drag.objects[1].pos.x = mcoords[1]
-			drag.objects[1].pos.z = mcoords[3]
-			drag.objects[1].pos.y = mcoords[2] + drag.params.hoff 	
-			updateTooltip()	
-			return true
+	if drag.started then			
+		if drag._type.emitter then		
+			if mcoords then
+				drag.objects[1].pos.x = mcoords[1]
+				drag.objects[1].pos.z = mcoords[3]
+				drag.objects[1].pos.y = mcoords[2] + drag.params.hoff 	
+				updateTooltip()	
+				return true
+			end
+		elseif drag._type.sounditems then --? anything need to be done?		
 		end
 	end
 end
@@ -586,7 +749,9 @@ function widget:Update(dt)
 	
 	UpdateGUI()
 	mx, mz = GetMouse() --this is good.
+	mz_inv = math.abs(screen0.height - mz)
 	_, mcoords = TraceRay(mx, mz, true)
+	modkeys.alt,modkeys.ctrl,modkeys.space,modkeys.shift = GetModKeys()
 	
 	if options.showemitters.value and not MouseOnGUI() then -- we dont want emitters to highlight if we are moving in the gui			
 		local dist = 100000000
@@ -618,11 +783,11 @@ function widget:Update(dt)
 	
 	
 	
-	if drag.objects[1] and not dragStarted then		
-		dragTimer = dragTimer - dt
-		if dragTimer <= 0 then				
-			dragStarted = true			
-			--dragTimer = options.delay_drag
+	if drag.objects[1] and not drag.started then		
+		drag.timer = drag.timer - dt
+		if drag.timer <= 0 then				
+			drag.started = true			
+			--drag.timer = options.delay_drag
 			Echo("drag started")
 		end
 	end
@@ -654,98 +819,6 @@ function widget:Update(dt)
 end	
 
 
-local function DoPlay(item, vol, x, y, z) 
-	if not (sounditems.templates[item] or sounditems.inuse[item]) then 
-		Echo("item "..tostring(track).." not found!") 
-		return false	
-	else
-		local tr = item
-		-- if (tracklist.tracks[tr].generated) then	tr = tracklist.tracks[tr].file	end	 -- is this used?
-		if (PlaySound(tr, vol, x, y, z)) then
-			if (options.verbose.value) then
-				Echo("playing "..tr.." at volume: "..string.format("%.2f", vol))
-				if (x) then Echo("at Position: "..x..", "..y..", "..z) end -- should format this looks bad with decimals
-			end
-			return true		
-		end	
-		Echo("playback of "..tr.." failed, not an audio file?")
-		return false
-	end
-end
-
--- need to pass actual item not just name
-local function AddItemToEmitter(e, item)
-	assert(type(item) == 'table')
-	local name = tostring(e)..":"..tostring(item)
-	if sounditems.inuse[name] then 
-		Echo("a sounditem with that name already exists at this emitter")
-		return false 
-	end
-	
-	sounditems.inuse[name] = {}	
-	local newItem = sounditems.inuse[name]	
-	emitters[e].sounds[#emitters[e].sounds + 1] = {}
-	local eS = emitters[e].sounds[#emitters[e].sounds + 1]
-		
-	for k, v in pairs(item) do
-		newItem[k] = v		
-	end
-	
-	eS.item = newItem
-	eS.generated = true
-	eS.timer = newItem.onset
-	
-	-- newItem.maxdist = newItem.maxdist < 100000 and newItem.maxdist or 100000 -- this is bad, should not have to set it here	
-	-- newItem.emitter = e -- needed?
-	
-	needReload = true
-	return true
-end
-
-
-local function RemoveItemFromEmitter(e, item)
-	if not sounditems.inuse[item] then 
-		Echo("a sounditem with that name is not in use")
-		return false 
-	end
-	
-	assert(sounditems.inuse[item] and emitters[e].sounds[item]) -- to make sure we didnt fuck up earlier when adding
-	
-	sounditems.inuse[item] = nil
-	emitters[e].sounds[item] = nil
-end
-
-
-local function RemoveItemFromList(item)
-	if not sounditems.templates[item] then
-		Echo("a sounditem with that name is not registered")
-		return false
-	end
-		
-	sounditems.inuse[item] = nil
-	for e = 1, #emitters do
-		emitters[e].sounds[item] = nil
-	end	
-end
-
-
-local function SpawnEmitter(name, yoffset)
-	local p
-	if not MouseOnGUI() then _, p = Spring.TraceScreenRay(mx,mz,true)
-	else return end
-	if (emitters[name]) then Echo("an emitter with that name already exists") return false end
-	
-	yoffset = yoffset or 0
-	p[2] = p[2] + yoffset	
-	if not (name) then name = (#emitters + 1).." - "..p[1]..", "..p[3]..", "..p[2] end		
-
-	-- __newindex should build our tables
-	emitters[name].pos = {x = math.floor(p[1]), y = math.floor(p[2]), z = math.floor(p[3])}	
-	
-	
-	--emitters[name].light = MapLight(eLightTable)
-end
-
 
 
 -------------------------------------------------------------------------------------------------------------------------
@@ -773,6 +846,7 @@ end
 function widget:Initialize()
 
 	gui.DoPlay = DoPlay
+	gui.drag = drag
 	
 	local cpath = PATH_LUA..PATH_CONFIG
 	local upath = PATH_LUA..PATH_UTIL
@@ -831,7 +905,7 @@ function widget:Initialize()
 			Echo("templates file was empty", true)
 		else
 			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params; Echo('.', true) end
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
 			Echo ("found "..i.." sounditems", true)
 		end
 	else
@@ -839,20 +913,20 @@ function widget:Initialize()
 	end
 	
 	Echo ("Loading sounds...")	
-	if vfsExist(cpath..SOUNDS_INUSE_DEF_FILENAME, VFSMODE) then
-		if not spLoadSoundDefs(cpath..SOUNDS_INUSE_DEF_FILENAME) then
-			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
+	if vfsExist(cpath..SOUNDS_INSTANCES_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_INSTANCES_DEF_FILENAME) then
+			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INSTANCES_DEF_FILENAME.."'")		
 		end		
-		local list = vfsInclude(cpath..SOUNDS_INUSE_DEF_FILENAME, nil, VFSMODE)			
+		local list = vfsInclude(cpath..SOUNDS_INSTANCES_DEF_FILENAME, nil, VFSMODE)			
 		if (list.Sounditems == nil) then 
 			Echo("sounds file was empty", true)
 		else
 			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.inuse[s] = params; Echo('.', true) end			
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.instances[s] = params end			
 			Echo ("found "..i.." sounds", true)					
 		end		
 	else
-		Echo("file not found\n '"..cpath..SOUNDS_INUSE_DEF_FILENAME.."'")		
+		Echo("file not found\n '"..cpath..SOUNDS_INSTANCES_DEF_FILENAME.."'")		
 	end
 	
 	Echo ("Loading emitters...")	
@@ -860,7 +934,7 @@ function widget:Initialize()
 		local tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
 		if tmp then
 			local i = 0
-			for e, params in pairs(tmp) do i = i + 1; emitters[e] = params; Echo('.', true) end					
+			for e, params in pairs(tmp) do i = i + 1; emitters[e] = params end					
 			Echo ("found "..i.." emitters", true)
 		else Echo ("emitters file was empty", true)
 		end	

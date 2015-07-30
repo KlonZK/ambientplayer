@@ -10,10 +10,7 @@ local Emitters = {
 		},
 	},
 	center = {
-		sounds = {
-			[1] = {item = 'center_wind_mighty_1'},
-			[2] = {item = 'center_wind_mighty_2'},
-		},
+		sounds = {},
 		pos = {
 			x = 4631,
 			y = 2496,
@@ -29,9 +26,7 @@ local Emitters = {
 		},
 	},		
 	rn1 = {
-		sounds = {
-			[1] = {item = 'rn1_brook_3'},
-		},
+		sounds = {},
 		pos = {
 			x = 3446,
 			y = -84,
@@ -39,9 +34,7 @@ local Emitters = {
 		},
 	},	
 	sw1 = {
-		sounds = {
-			[1] = {item = 'sw1_pigeon_1_mono'},
-		},
+		sounds = {},
 		pos = {
 			x = 3604,
 			y = 386,
@@ -49,13 +42,7 @@ local Emitters = {
 		},		
 	},
 	sw3 = {
-		sounds = {
-			[1] = {item = 'sw3_brook_1'},			
-			[2] = {item = 'sw3_owls_3_mono'},
-			[3] = {item = 'sw3_wind_mighty_1'},
-			[4] = {item = 'sw3_wind_soft_1'},
-			[5] = {item = 'sw3_wind_soft_2'},
-		},
+		sounds = {},
 		pos = {
 			x = 2483,
 			y = 408,

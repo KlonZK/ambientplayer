@@ -41,6 +41,7 @@ local GetGroundHeight = widget.Spring.GetGroundHeight
 local circleDivs = 65 -- how precise circle? octagon by default
 local innersize = 0.9 -- circle scale compared to unit radius
 --local outersize = 2.0 -- outer fade size compared to circle scale (1 = no outer fade)
+--local h = 0.001
 
 local shellSizes = {1.0, 1.1, 1.2, 1.3, 1.4}
 
