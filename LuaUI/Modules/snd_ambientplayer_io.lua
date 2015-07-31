@@ -55,7 +55,7 @@ local config = config
 local emitters = emitters
 local sounditems = sounditems
 
-
+--local LOG_FILENAME = LOG_FILENAME
 
 local function Save(list, path, file) 	
 	if (list == 0 or list == 1) then --options		
@@ -236,7 +236,6 @@ end
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
--- stuff never gets called atm
 
 -- do i have to load all of them if only one or a few need updating? tho its not a lot to do so i guess it doesnt matter?
 -- these dont write tags from meta index. problem?

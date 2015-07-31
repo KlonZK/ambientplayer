@@ -239,7 +239,16 @@ local function DeclareControls()
 		clientWidth = 12,
 		clientHeight = 12,
 		caption = '',
-		OnClick = {function() window_settings:ToggleVisibility() end},
+		OnClick = {function() --< it is kinda hidden away here but should do.
+			for c, params in pairs(controls.settings) do 
+				if params.value then 
+					params:SetValue(params.refer.value)
+					params:Invalidate()
+				end
+				
+			end
+			window_settings:ToggleVisibility() 
+		end},
 		children = {
 			Image:New {
 				width = "100%",
@@ -461,8 +470,28 @@ local function DeclareControls()
 		
 	containers.settings = window_settings
 
-	local order = {red = 1, blue = 2, green = 3, alpha_inner = 4, alpha_outer = 5, highlightfactor = 6}
-	local items = {}
+	local se = options.showemitters
+	controls.settings[se.name] = Checkbox:New{
+		parent = tabs_settings['Display'].layout,
+		width = 100,
+		refer = se,
+		value = se.value,
+		caption = se.name,
+		fontSize = 11,
+		--padding = {22,22,2,22},
+		margin = {2,12,2,12},
+		textColor = col_grey_08,
+		SetValue = function(self, val)
+			if not self.checked == val then self:Toggle() end
+		end,
+		OnChange = {function(self, checked) -- this whole thing is a bit bad, maybe the update call should be different. consider memoize
+				se.value = checked
+			end
+		},
+	}	
+	
+	local order = {red = 2, blue = 3, green = 4, alpha_inner = 5, alpha_outer = 6, highlightfactor = 7}
+	local items = {[1] = options.emitter_radius}
 	--local i = 0	
 	for o, params in pairs(options) do			
 		if string.find(o, 'color') then local color = o:sub(7);	items[order[color]] = params end
@@ -476,7 +505,8 @@ local function DeclareControls()
 			parent = tabs_settings['Display'].layout,
 		}
 		controls.settings[o.name] = Trackbar:New {
-			name = 'test'..o.name,
+			refer = o,
+			--name = 'test'..o.name,
 			width = 200,				
 			parent = tabs_settings['Display'].layout,
 			min = o.min,
@@ -653,6 +683,7 @@ local function DeclareControls()
 	--WINDOW_INSPECT_PROTOTYPE:Hide()
 	--containers.inspect = window_inspect
 end
+
 
 
 local function DeclareFunctions()
@@ -911,6 +942,7 @@ local function DeclareFunctions()
 	end	
 	--]]
 	setmetatable(inspectionWindows, {
+		__mode = 'v',
 		__index = function(t, k)		
 			Echo("new inspection window - key: "..tostring(k).."("..type(k)..")")
 			local function Copy(_t) -- recursive table copy. these prototypes only go 1 level deep atm
@@ -979,6 +1011,8 @@ local function DeclareFunctions()
 	end
 	--]]
 end
+
+
 
 
 function SetupGUI()		

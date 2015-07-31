@@ -28,7 +28,7 @@ TODO:
 
 --os.getenv("HOME")
 
-local versionNum = '0.4!'
+local versionNum = '0.42'
 
 function widget:GetInfo()
   return {
@@ -85,8 +85,8 @@ local SOUNDS_ITEMS_DEF_FILENAME = 'ambient_sounds_templates.lua'
 local SOUNDS_INSTANCES_DEF_FILENAME = 'ambient_sounds_instances.lua'
 local EMITTERS_FILENAME = 'ambient_emitters.lua'
 local TMP_ITEMS_FILENAME = 'ambient_tmp_items.lua'
-local TMP_INSTANCES_FILENAME = 'aambient_tmp_instances.lua'
-local LOG_FILENAME = 'ambient_log.txt'
+local TMP_INSTANCES_FILENAME = 'aambient_tmp_instances.lua' -- should be in i/O
+local LOG_FILENAME = 'ambient_log.txt' -- "
 
 
 
@@ -95,15 +95,17 @@ local LOG_FILENAME = 'ambient_log.txt'
 -- PACKAGE
 -------------------------------------------------------------------------------------------------------------------------
 
-local logfile = [[]]
+local logfile
+local _log = [[]]
 local spEcho = Spring.Echo
 
 -- should start dumping if it gets too long
 -- also might want to do boolean->string here as it gets too annoying
 function Echo(s, keepline)
 	spEcho('<ape>: '..s)
-	logfile = logfile..(keepline and '' or '\n')..s
-	if controls and controls.log then controls.log:SetText(logfile) end
+	_log = _log..(keepline and '' or '\n')..s
+	if controls and controls.log then controls.log:SetText(_log) end
+	if logfile then logfile:write((keepline and '' or '\n')..s) end
 end
 
 local config = {}
@@ -207,11 +209,13 @@ options = {}
 Echo ("Loading modules...")	
 
 local i_o = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
-				PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME, TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME}
+				PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME, 
+					TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME, LOG_FILENAME}
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_IO
 	if vfsExist(file, VFSMODE) and vfsInclude(file, i_o, VFSMODE) then
 		Echo("I/O module successfully loaded")
+		
 	else
 		Echo("failed to load I/O module")
 	end
@@ -248,10 +252,9 @@ end
 -------------------------------------------------------------------------------------------------------------------------
 -- Epic Menu Options
 -------------------------------------------------------------------------------------------------------------------------
-
 options_path = 'Settings/Audio/Ambient Sound'
-options_order = {'color_red', 'color_green', 'color_blue', 'color_alpha_inner', 'color_alpha_outer', 'color_highlightfactor',
-					'verbose', 'autosave', 'autoreload', 'showemitters', 'emitter_highlight_treshold', 'emitter_radius', 'dragtime', 					 
+options_order = {'color_red', 'color_green', 'color_blue', 'color_alpha_inner', 'color_alpha_outer', 'color_highlightfactor', 
+					'showemitters', 'emitter_radius', 'verbose', 'autosave', 'autoreload', 'emitter_highlight_treshold', 'dragtime', 					 
 						'checkrate', 'volume', 'autoplay'}
 
 options.checkrate = {
@@ -300,7 +303,7 @@ options.showemitters = {
 	name = "Show Emitters",
 	type = 'bool',
 	value = true,
-	path = "Settings/Audio/Ambient Sound/Editor",
+	path = "Ambient Sound Editor",
 }
 options.emitter_highlight_treshold = {
 	name = "Emitter selection radius",
@@ -318,7 +321,7 @@ options.dragtime = {
 	min = 0.1,
 	max = 2,
 	step = 1,
-	path = "Settings/Audio/Ambient Sound/Editor",		
+	path = "Ambient Sound Editor",		
 }	
 options.emitter_radius = {
 	name = "Radius of Emitter Aura",
@@ -327,7 +330,7 @@ options.emitter_radius = {
 	min = 25,
 	max = 100,
 	step = 1,
-	path = "Settings/Audio/Ambient Sound/Editor",		
+	path = "Ambient Sound Editor",		
 }
 options.color_red = {
 	name = "Red",
@@ -336,7 +339,7 @@ options.color_red = {
 	min = 0.0,
 	max = 1,
 	step = 0.1,
-	path = "Settings/Audio/Ambient Sound/Editor/Colors",	
+	path = "Ambient Sound Editor/Colors",
 	OnChange = function() UpdateMarkerList() end,	
 }
 options.color_green = {
@@ -346,7 +349,7 @@ options.color_green = {
 	min = 0.0,
 	max = 1,
 	step = 0.1,
-	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	path = "Ambient Sound Editor/Colors",
 	OnChange = function() UpdateMarkerList() end,
 				
 }
@@ -367,7 +370,7 @@ options.color_alpha_inner = {
 	min = 0.0,
 	max = 1,
 	step = 0.05,
-	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	path = "Ambient Sound Editor/Colors",
 	OnChange = function() UpdateMarkerList() end,
 }
 options.color_alpha_outer = {
@@ -377,7 +380,7 @@ options.color_alpha_outer = {
 	min = 0.0,
 	max = 1,
 	step = 0.05,
-	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	path = "Ambient Sound Editor/Colors",
 	OnChange = function() UpdateMarkerList() end,
 }
 options.color_highlightfactor = {
@@ -387,7 +390,7 @@ options.color_highlightfactor = {
 	min = 0.1,
 	max = 5,
 	step = 0.1,
-	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
+	path = "Ambient Sound Editor/Colors",
 	OnChange = function() UpdateMarkerList() end,
 }
 options.delay_drag = {
@@ -941,19 +944,30 @@ function widget:Initialize()
 	end	
 	
 	Echo("Updating local config...")	
-	if not (config.path_map) then config.path_map= 'maps/'..Game.mapName..'.sdd/' end
+	if not (config.path_map) then config.path_map = 'maps/'..Game.mapName..'.sdd/' end
 	config.mapX = Game.mapSizeX
 	config.mapZ = Game.mapSizeZ
+		
+	--logfile = io.open(config.path_map..PATH_LUA..PATH_CONFIG..LOG_FILENAME, 'w')	
+	logfile = io.open(LOG_FILENAME, 'w')
+	if not logfile then Echo("no file") end
+	if logfile:write(_log) then Echo("written backlog") end
+	
 	inited=true --?
-	Echo("Updating GUI...")
+	Echo("Updating GUI...")	
 	UpdateGUI()
 	Echo("Init done!")
 end
 
 
-function widget:GameStart()
+function widget:GameStart()		
 	gameStarted = true
 	Echo ("The map directory is assumed to be "..config.path_map.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")	
+end
+
+function widget:Shutdown()
+	Echo("shutting down...")
+	if logfile then logfile:close() end
 end
 
 
