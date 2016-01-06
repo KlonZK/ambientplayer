@@ -28,7 +28,7 @@ TODO:
 
 --os.getenv("HOME")
 
-local versionNum = '0.42'
+local versionNum = '0.5'
 
 function widget:GetInfo()
   return {
