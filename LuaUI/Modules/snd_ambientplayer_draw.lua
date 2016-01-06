@@ -129,19 +129,39 @@ function UpdateMarkerList()
 			options.color_alpha_outer.value * options.color_highlightfactor.value)		
 end
 
-local delta = 0
-local u = 0
-local v = 0
+--local delta = 0
+--local u = 0
+--local v = 0
 local dstep = (2.0 * math.pi) / 30
 
 function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to the environment
-	delta = delta > 60 and 0 or delta + 0.05
-	u = u > 60 and 0 or u + 0.14
-	v = v > 60 and 0 or v + 0.2
+
 	if not emitMarker then UpdateMarkerList() end
 	
 	if options.showemitters.value then	
 		for e, params in pairs(emitters) do			
+			
+			-- this block needs to be removed when everything is set up, it is just a temp hack so i dont have to edit
+			-- the config files manually right now
+			if not params.gl then
+				Echo("made gl table")
+				params.gl = {}			
+				params.gl.delta = math.random(60)
+				params.gl.u = math.random(60)
+				params.gl.v = math.random(60)				
+			end			
+
+			if params.isPlaying then
+				--Echo("is playing")
+				params.gl.delta = params.gl.delta > 60 and 0 or params.gl.delta + 0.05
+				params.gl.u = params.gl.u > 60 and 0 or params.gl.u + 0.14
+				params.gl.v = params.gl.v > 60 and 0 or params.gl.v + 0.2
+			end	
+
+			local delta = params.gl.delta
+			local u = params.gl.u
+			local v = params.gl.v
+			
 			local pos = params.pos
 			if pos.x then
 				local list, linealpha -- should be options.alpha_*

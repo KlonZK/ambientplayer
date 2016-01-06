@@ -38,7 +38,7 @@ function widget:GetInfo()
     date      = "dez 2014",
     license   = "GNU GPL, v2 or later",
     layer     = -1,
-    enabled   = true,
+    enabled   = false,
   }
 end	
 
@@ -85,7 +85,7 @@ local SOUNDS_ITEMS_DEF_FILENAME = 'ambient_sounds_templates.lua'
 local SOUNDS_INSTANCES_DEF_FILENAME = 'ambient_sounds_instances.lua'
 local EMITTERS_FILENAME = 'ambient_emitters.lua'
 local TMP_ITEMS_FILENAME = 'ambient_tmp_items.lua'
-local TMP_INSTANCES_FILENAME = 'aambient_tmp_instances.lua' -- should be in i/O
+local TMP_INSTANCES_FILENAME = 'ambient_tmp_instances.lua' -- should be in i/O
 local LOG_FILENAME = 'ambient_log.txt' -- "
 
 
@@ -130,10 +130,10 @@ local SOUNDITEM_PROTOTYPE = {
 	rolloff = 0, -- not a good default
 	dopplerscale = 0,
 	-- widget stats
-	length = 0,
+	length_real = 0,
 	rnd = 0,
-	minlooptime = 1, -- minlooptime is added? to the length on every loop...
-	onset = 1, -- ...while onset just gets used once at start of game
+	length_loop = 1, -- length_loop is added? to the length on every loop...
+	delay = 1, -- ...while delay just gets used once at start of game
 }
 
 local sounditems = {
@@ -164,6 +164,7 @@ local emitters_controls = {}
 local emitters = {
 	--	[e<string>] = { 
 	--		pos = {x, y, z},
+	--		gl = {delta, u, v},
 	--		sounds = { --< INDEXED TABLE WILL FAIL HORRIBLY IF THIGNS GET REMOVED. NEEDS COUNTERMEASURES OR CHANGE
 	--			[j] = {	
 	--				item = <sounditem>
@@ -172,6 +173,7 @@ local emitters = {
 	--				...
 	--			},
 	-- 		},
+	--		isPlaying = false,
 	--	},	
 }
 
@@ -179,13 +181,27 @@ local emitters = {
 setmetatable(emitters, {
 	__newindex = function(t, k, v)				
 		rawset (t, k, v)		
-		if not t[k].sounds then t[k]['sounds'] = {} end	
+		if not t[k].sounds then t[k].sounds = {} end
+		if not t[k].gl then 
+			t[k].gl = {}
+			t[k].gl.delta = math.random(60)
+			t[k].gl.u = math.random(60)
+			t[k].gl.v = math.random(60)
+		end	
 		--if not t[k].script then t[k]['script'] = 'function run() end'
 		setmetatable(t[k].sounds, {			
-			__index = function(st, item)				
-				if type(item) == 'string' then
-					for i = 1, #st do						
-						if st[i].item == item then return st[i].item end --ill just assume they will both be strings for now
+			__index = function(st, trk)				
+				--for _k, _v in pairs(st) do
+				--	Echo("\nst: ".._k.."--".. tostring(_v))
+				--end
+				if type(trk) == 'string' then
+					--Echo("searching emitter for item:"..trk)
+					for i = 1, #st do
+						--for k, v in pairs(st) do
+						--	Echo(k, v)
+						--end
+						--Echo("\n--->"..st[i].item.."--"..type(st[i].item))
+						if st[i].item == trk then return st[i] end --ill just assume they will both be strings for now
 					end
 				end
 				return nil
@@ -194,7 +210,7 @@ setmetatable(emitters, {
 	end	
 })
 
-emitters.global = {pos = {}, sounds = {}}
+emitters.global = {pos = {}, sounds = {}, gl = {delta = math.random(60), u = math.random(60), v = math.random(60)}}
 
 options = {}
 
@@ -451,18 +467,24 @@ local worldTooltip
 -- LOCAL FUNCTIONS
 -------------------------------------------------------------------------------------------------------------------------
 
-local function DoPlay(item, vol, x, y, z) 
-	if not (sounditems.templates[item] or sounditems.instances[item]) then 
-		Echo("item "..tostring(track).." not found!") 
+local function DoPlay(trk, vol, e) 
+	local item = sounditems.templates[trk] or sounditems.instances[trk]
+	if not item then 
+		Echo("item "..tostring(trk).." not found!") 
 		return false	
 	else
-		local tr = item
+		--local tr = item
 		-- if (tracklist.tracks[tr].generated) then	tr = tracklist.tracks[tr].file	end	 -- is this used?
-		if (PlaySound(tr, vol, x, y, z)) then
+		if (PlaySound(trk, vol, e.pos.x, e.pos.y, e.pos.z)) then
 			if (options.verbose.value) then
-				Echo("playing "..tr.." at volume: "..string.format("%.2f", vol))
-				if (x) then Echo("at Position: "..x..", "..y..", "..z) end -- should format this looks bad with decimals
+				Echo("playing "..trk.." at volume: "..string.format("%.2f", vol))
+				if (e.pos.x) then Echo("at Position: "..e.pos.x..", "..e.pos.y..", "..e.pos.z) end -- should format this looks bad with decimals
 			end
+			--Echo(type(e.sounds))
+			--Echo (e.sounds[item].endTimer)
+			if e.sounds[trk] then e.sounds[trk].endTimer = item.length_real end
+			--Echo("length: "..sounditems.instances[item].length)
+			
 			return true		
 		end	
 		Echo("playback of "..tr.." failed, not an audio file?")
@@ -475,17 +497,20 @@ local function AddItemToEmitter(e, iname) -- <string, string> !!!
 	--assert(type(item) == 'table')
 	local item
 	local name
+	local template
 	
 	if sounditems.templates[iname] then 
 		item = sounditems.templates[iname] 
-		name = "$"..e.."$ "..iname		
+		name = "$"..e.."$ "..iname
+		template = iname
 	end
 	if sounditems.instances[iname] then -- this needs testing
 		assert(not item, "identical item names in templates/instance tables")
 		item = sounditems.instances[iname]
-		local _, endprefix = string.find(iname, "[\$].-[\$%s]")
+		local _, endprefix = string.find(iname, "[%$].*[%$%s]")
 		Echo(endprefix)
-		name = "$"..e.."$ "..iname:sub(endprefix + 1) -- remove old emitter tag		
+		name = "$"..e.."$ "..iname:sub(endprefix + 1) -- remove old emitter tag
+		template = item.template
 	end	
 	
 	while (sounditems.instances[name]) do name = name.."_" end -- add any number of _ at the end for duplicates
@@ -493,19 +518,21 @@ local function AddItemToEmitter(e, iname) -- <string, string> !!!
 	sounditems.instances[name] = {}	
 	local newItem = sounditems.instances[name]		
 	for k, v in pairs(item) do newItem[k] = v end
+	newItem.template = template
 	
 	local es = emitters[e].sounds; es[#es + 1] = {}	
-	local newSound = es[#es]
+	--local newSound = es[#es]
 	
-	newSound.item = name -- !	
-	newSound.timer = newItem.onset
-	newSound.isPlaying = false
+	es[#es].item = name -- !	
+	es[#es].startTimer = newItem.delay
+	es[#es].endTimer = 0
+	es[#es].isPlaying = false
 	
 	-- newItem.maxdist = newItem.maxdist < 100000 and newItem.maxdist or 100000 -- this is bad, should not have to set it here	
 	-- newItem.emitter = e -- needed?
 	
 	needReload = true
-	Echo("added <"..name..">")
+	Echo("added <"..es[#es].item..">")
 	return true
 end
 
@@ -560,7 +587,24 @@ end
 -- INPUT LISTENERS AND AUXILIARY
 -------------------------------------------------------------------------------------------------------------------------
 
--- fuck you
+function widget:KeyPress(...)
+	return gui.KeyPress(...)
+	--return true
+end
+
+function widget:TextInput(...)
+	--Echo("catch")	
+	if Spring.IsGUIHidden() then return false end
+	gui.TextInput(...)
+	--if Chili.Screen0.TextInput then
+		--Echo("call")		
+	--	return Chili.Screen0:TextInput(utf8, ...), true
+	--else 
+	--	Echo("no callin")
+	--end
+end
+
+-- fuck you you-know-who
 local function MouseOnGUI()
 	--local mz_inv = math.abs(screen0.height - mz)
 	return IsMouseMinimap(mx or 0, mz or 0) or MouseOver(mx, mz_inv)--screen0.hoveredControl --or screen0.focusedControl
@@ -576,10 +620,10 @@ end
 local function updateTooltip()
 	if mouseOverEmitter then
 		local e = emitters[mouseOverEmitter]		
-		worldTooltip = "Emitter: "..mouseOverEmitter.."\n("..
-			string.format("%.0f", e.pos.x)..", "..
-				string.format("%.0f", e.pos.z)..", "..
-					string.format("%.0f", e.pos.y)..")\n "
+		worldTooltip = "\255\255\230\70Emitter: "..mouseOverEmitter.."\255\255\255\255\n("..
+			"X: "..string.format("%.0f", e.pos.x)..", "..
+				"Z: "..string.format("%.0f", e.pos.z)..", "..
+					"Y: "..string.format("%.0f", e.pos.y)..")\n "
 					
 		for i = 1, #e.sounds do					
 			worldTooltip = worldTooltip.."\n"..(e.sounds[i].item)
@@ -736,6 +780,10 @@ end
 -- UPDATE/MISC
 -------------------------------------------------------------------------------------------------------------------------
 
+function RequestReload()
+	needReload = true
+end
+
 local function Distance(sx, sz, tx, tz)
 	local dx = sx - tx
 	local dz = sz - tz
@@ -804,20 +852,29 @@ function widget:Update(dt)
 	
 	if not (options.autoplay.value) then return end
 	for e, params in pairs (emitters) do		
+		local hasRunningTracks = false
 		for i = 1, #params.sounds do		
 		local trk = params.sounds[i]
 		local item = trk.item 
-			if item and trk.rnd and trk.rnd > 0 then -- remove extra nil check eventually
-				trk.timer = trk.timer - options.checkrate.value -- this seems inaccurate				
-				if (trk.timer < 0) then
-					trk.timer = 0
-					if (random(trk.rnd) == 1) then
-						DoPlay(item, options.volume.value, params.pos.x, params.pos.y, params.pos.z) --< this should pass nils if pos.* doesnt exist
-						trk.timer  = item.minlooptime
+			if item then -- remove extra nil check eventually
+				trk.endTimer = trk.endTimer - options.checkrate.value
+				if trk.rnd and trk.rnd > 0 then
+					trk.startTimer = trk.startTimer - options.checkrate.value -- this seems inaccurate				
+					if (trk.startTimer < 0) then
+						trk.startTimer = 0
+						if (random(trk.rnd) == 1) then
+							DoPlay(item, options.volume.value, params.pos.x, params.pos.y, params.pos.z) --< this should pass nils if pos.* doesnt exist
+							trk.startTimer  = item.length_loop
+							--trk.endTimer = item.length
+							--Echo("length: "..item.length)
+						end
 					end
-				end
+				end	
+				hasRunningTracks = trk.endTimer > 0 and true or hasRunningTracks
 			end	
-		end	
+		end
+		params.isPlaying = hasRunningTracks
+		if params.isPlaying then Echo(e.." is playing") end
 	end
 end	
 
@@ -950,8 +1007,11 @@ function widget:Initialize()
 		
 	--logfile = io.open(config.path_map..PATH_LUA..PATH_CONFIG..LOG_FILENAME, 'w')	
 	logfile = io.open(LOG_FILENAME, 'w')
-	if not logfile then Echo("no file") end
-	if logfile:write(_log) then Echo("written backlog") end
+	if not logfile then 
+		Echo("could not open logfile") 
+	elseif logfile:write(_log) then 
+		Echo("written backlog") 
+	end
 	
 	inited=true --?
 	Echo("Updating GUI...")	
@@ -1208,7 +1268,7 @@ local function Invoke(args)
 					local e = emitters[n]
 					Echo(tostring(e)..": "..(e.pos.x or "none")..", "..(e.pos.y or "none")..", "..(e.pos.z or "none"))
 					for track, param in pairs(e.playlist) do
-						Echo("- "..track.." length: "..tracklist.tracks[track].length)
+						Echo("- "..track.." length: "..tracklist.tracks[track].length_real)
 					end					
 				else
 					Echo("Index: ".. emitters.index)
@@ -1221,14 +1281,14 @@ local function Invoke(args)
 		
 		Echo("-----sounditems-----")
 		for track, params in pairs (tracklist.tracks) do
-			if not (params.emitter)	then Echo(track.." - "..(params.length).."s") end			
+			if not (params.emitter)	then Echo(track.." - "..(params.length_real).."s") end			
 		end
 		Echo("-----emitters-----")
 		for e, tab in pairs (emitters) do
 			if not (e == "index") then
 				Echo(tostring(e)..": "..(tab.pos.x or "none")..", "..(tab.pos.y or "none")..", "..(tab.pos.z or "none"))
 				for track, param in pairs(tab.playlist) do
-						Echo("- "..track.." length: "..tracklist.tracks[track].length)
+						Echo("- "..track.." length: "..tracklist.tracks[track].length_real)
 				end
 			end
 		end

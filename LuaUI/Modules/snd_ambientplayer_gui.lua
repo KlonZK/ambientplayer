@@ -8,15 +8,21 @@
 ------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------
 
+
 local pairs = widget.pairs
+local ipairs = widget.ipairs
 local type = widget.type
 local string = widget.string
 local tostring = widget.tostring
+local tonumber = widget.tonumber
 local setmetatable = widget.setmetatable
 local getfenv = widget.getfenv
 local setfenv = widget.setfenv
 local rawset = widget.rawset
 local assert = widget.assert
+local os = widget.os
+local math = widget.math
+local select = widget.select
 
 local PATH_LUA = widget.LUAUI_DIRNAME
 
@@ -40,8 +46,8 @@ local Trackbar
 --local Node
 local Label
 local Line
-local EditBox
-local TextBox
+local FilterEditBox
+local ClickyTextBox
 --local color2incolor
 --local incolor2color
 
@@ -54,6 +60,9 @@ local PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
 --local PLAYER_CONTROLS_ICON = PATH_LUA..'Images/Commands/Bold/'..'drop_beacon.png'
 local CLOSE_ICON = PATH_LUA..'Images/close.png'
 local CLOSEALL_ICON = PATH_LUA..'Images/closeall.png'
+local CONFIRM_ICON = PATH_LUA..'Images/arrow_green.png'
+--local UNDO_ICON = PATH_LUA..'Images/undo.png'
+local COGWHEEL_ICON = PATH_LUA..'Images/cogwheel.png'
 
 local HELPTEXT = [[generic info here]]
 
@@ -90,11 +99,11 @@ local scroll_emitters
 
 local window_console
 local scroll_console
-local textbox_console
+local ClickyTextBox_console
 
 local window_help
 local scroll_help
-local textbox_help
+local ClickyTextBox_help
 
 local window_settings
 local tabbar_settings
@@ -190,7 +199,9 @@ local function DeclareControls()
 			local x, y = self:LocalToScreen(self.x, self.y)
 			Echo("test: "..mx..", "..my)
 			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))
-			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) end
+			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+		end,
+
 			--if self.visible and (mx > self.x and mx < self.x + self.width) and (my > self.y and my < self.y + self.height) 
 			--	then return true end end,
 		--OnMouseUp = {function(self,...) self.inherited.MouseDown(self,...) return self end},			
@@ -331,7 +342,7 @@ local function DeclareControls()
 		resizable = true,
 		autosize = true,
 	}
-	textbox_console = TextBox:New {
+	ClickyTextBox_console = ClickyTextBox:New {
 		x = 4,
 		y = 0,
 		autosize = true,
@@ -344,7 +355,7 @@ local function DeclareControls()
 	}
 	
 	containers.console = window_console
-	controls.log = textbox_console
+	controls.log = ClickyTextBox_console
 	
 	---------------------------------------------------- help window ------------------------------------------------
 
@@ -375,7 +386,7 @@ local function DeclareControls()
 		resizable = true,
 		autosize = true,
 	}
-	textbox_help = TextBox:New {
+	ClickyTextBox_help = ClickyTextBox:New {
 		x = 4,
 		y = 0,
 		autosize = true,
@@ -389,7 +400,293 @@ local function DeclareControls()
 	window_help:Hide()
 	containers.help = window_help
 	
-		---------------------------------------------------- settings window ------------------------------------------------
+	---------------------------------------------------- properties window ------------------------------------------------
+	
+		--[[
+		file = "",
+	gain = 1.0,
+	pitch = 1.0,
+	pitchMod = 0.0,
+	gainMod = 0.05,
+	priority = 0,
+	maxconcurrent = 2, 
+	maxdist = 1000000, -- +inf and math.huge break shit
+	preload = true,
+	in3d = true,
+	rolloff = 0, -- not a good default
+	dopplerscale = 0,
+	-- widget stats
+	length_real = 0,
+	rnd = 0,
+	length_loop = 1, -- length_loop is added? to the length on every loop...
+	delay = 1, -- ...while delay just gets used once at start of game
+	--]]	
+	
+	local props = {"length_real", "length_loop", "delay", "rnd", 
+	"priority", "maxconcurrent", "maxdist", "rolloff", 
+	"gain", "gainMod", "pitch", "pitchMod", "dopplerscale"}
+	local tooltips = {
+[[actual length of the track in seconds.
+
+currently the widget is unable to obtain that information from the file, you may want to edit this manually.
+ 
+some of the functionality of the player/editor requires this to be know, but it is not strictly necessary.
+
+defaults to 1, unit is seconds]],
+		
+[[how many seconds have to pass before this sound will start playing again after playback has started. this may be longer or shorter than the actual length of the track.
+
+note that setting this to 0 or very low values may produce undesireable results.		
+
+note also that the number of simultaneous playbacks of the track is limited by the maxconcurrent setting.
+		
+defaults to length_real, unit is seconds]].."\n\n\255\255\150\0(this has nothing to do with the \"looptime\" option that spring sounditems can use. this widget never uses that and if you use it for any of the sounditems used by the widget, things will likely break.)\255\255\255\255",
+
+[[time in seconds after game starts this sound may play for the very first time. does nothing otherwise.
+
+defaults to 0, unit is seconds]],
+
+[[this sound will on average play once this many seconds. 
+
+1 means it will immediately play when its timer(length_loop) has reached zero,
+0 means "never".
+
+defaults to 0]],
+		
+[[how relevant this sound is compared to other sounds in the game. lower means less, values can be negative.
+
+if there are too many sounds happening at once, less important ones will be pushed off the cliff.
+
+you may want to keep looped sounds such as wind, water etc. at a relativly high priority. 
+
+defaults to 0]],
+
+[[how many simultaneous playbacks of this sound are allowed.
+
+note that this is controlled by the engine and as such is independent from the length_real setting.
+
+defaults to 2]],
+
+[[if the camera is farther away from the location of playback than this, the sound will not be played at all.
+
+consequently, when you are out of this range when the playback would start but later move close enough, you will not hear the sound.
+
+similarly, if you leave the area later after the playback has started, it will not stop (albeit possibly become inaudible)
+
+defaults to 100000, unit is elmos]].."\n\n\255\255\150\0(the side length of a 1x1 map square is 512 elmos.)\255\255\255\255",
+
+[[how quickly the sound diminishes as you move further away from the source. 
+
+higher means faster, values above 1.0 make the sound fade very, very quickly.
+
+as opposed to maxdist, this will affect the loudness of the sounds while it is being played.
+
+notice that currently the engine makes all sounds audible while zoomed out to the maximum.
+
+defaults to 0]],		
+
+[[loudness of the sound. 
+
+defaults to 1]],
+[[variation of loudness between individual playbacks. 
+
+defaults to 0.05]],
+
+[[speed of playback. 
+
+defaults to 1]],
+
+[[variation of speed between individual playbacks. 
+
+defaults to 0]],
+
+[[how much doppler effect should be applied to this sound for fast camera movements.
+
+defaults to 0]],
+	}
+	
+	controls.properties = {}
+	
+	window_properties = Window:New {
+		x = "25%",
+		y = "25%",
+		parent = screen0,
+		caption = "Properties",
+		draggable = true,
+		resizable = false,
+		dragUseGrip = true,
+		clientWidth = 400,
+		clientHeight = 216,
+		--backgroundColor = col_grey_08,	
+		controls_props = {},
+	}		
+	controls.properties.file = ClickyTextBox:New {
+		textColor = col_green_1,
+		y = 16,
+		x = 12,
+		padding = {0,4,0,0},
+		clientWidth = 380,
+		clientHeight = 20,
+		parent = window_properties,		
+		text = '',
+		fontSize = 10,
+		tooltip = [[filename and path. notice that this can be an absolute path on your computer, but it needs to be a relative path inside the spring virtual file system (eg. '/maps/mymap.sdd/luaui/sounds/somesoundfile.ogg') if you want to distribute it.]],					
+	}			
+	local label_height = math.floor(controls.properties.file.font:GetTextWidth(controls.properties.file.text)/380) * 10
+
+	layout_properties = LayoutPanel:New {		
+		y = 32 + label_height,
+		--name = 'layout',
+		parent = window_properties,
+		orientation = 'vertical',		
+		selectable = false,		
+		multiSelect = false,
+		maxWidth = 400,
+		minWidth = 400,
+		itemPadding = {6,2,6,2},
+		itemMargin = {0,0,0,0},
+		autosize = true,
+		align = 'left',
+		columns = 6,
+		left = 0,					
+		centerItems = false,
+		IsMouseOver	= function(self, mx, my) 
+			local x, y = self:LocalToScreen(self.x, self.y)
+			Echo("test: "..mx..", "..my)
+			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))
+			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+			end,
+			--if self.visible and (mx > self.x and mx < self.x + self.width) and (my > self.y and my < self.y + self.height) 
+			--	then return true end end,
+		--OnMouseUp = {function(self,...) self.inherited.MouseDown(self,...) return self end},
+		Refresh = function(self)
+			local label_height = math.floor(controls.properties.file.font:GetTextWidth(controls.properties.file.text)/380) * 10
+			self.y = 32 + label_height
+			self:Invalidate()
+		end,
+	}				
+	--window_properties.layout = layout_properties
+	
+	
+	
+	for i, prop in ipairs(props) do					
+		ClickyTextBox:New { 
+			--refer = i,			
+			padding = {0,4,0,0},
+			clientWidth = 80,
+			parent = layout_properties,
+			text = prop,
+			fontSize = 11,
+			tooltip = tooltips[i],		
+		}
+		controls.properties[i] =  FilterEditBox:New { 
+			refer = prop,					
+			clientWidth = 44,
+			clientHeight = 16,
+			padding = {4,0,4,0},
+			backgroundColor = {.1,.1,.1,.5},
+			borderColor = {.3,.3,.3,.3},
+			borderColor2 = {.4,.4,.4,.4},
+			x = 10,
+			parent = layout_properties,
+			text = '', --type(item[prop] == 'number') and tostring(item[prop]) or 'default',
+			fontSize = 10,
+			InputFilter = function(unicode)
+				return tonumber(unicode) or unicode == '.'
+			end,
+		}
+		Image:New {					
+			refer = i,
+			parent = layout_properties,
+			file = COGWHEEL_ICON,
+			margin = {0,0,10,0},
+			width = 14,
+			height = 14,
+			tooltip = 'restore default/template value',
+			color = {1,.9,.7,1}, --
+			OnClick = {
+				function(self,...)
+					local v = window_properties.defaultItem[props[self.refer]]
+					controls.properties[self.refer].text = type(v) == 'number' and tostring(v) or 'default'					
+				end
+			},
+		}					
+	end	
+	controls.properties[0] = Checkbox:New {	
+		parent = window_properties,					
+		y = 182 + label_height,
+		x = 12,
+		width = 50,					
+		--checked = true, --item.in3d,
+		caption = "in3d",
+		tooltip = 'exact effect unknown, presumably is required for sounds to be played locational.',
+		fontSize = 11,
+		padding = {0,4,0,10},			
+		Refresh = function(self)
+			local label_height = math.floor(controls.properties.file.font:GetTextWidth(controls.properties.file.text)/380) * 10
+			self.y = 182 + label_height
+			self:Invalidate()
+		end,
+	}	
+	controls.properties.in3_defaultBtn = Image:New {					
+		--refer = i,
+		parent = window_properties,
+		file = COGWHEEL_ICON,
+		y = 184 + label_height,
+		x = 70,
+		width = 14,
+		height = 14,
+		tooltip = 'restore default/template value',
+		color = {1,.9,.7,1}, --
+		OnClick = {
+			function(self,...)
+				local v = window_properties.defaultItem.in3d
+				if not controls.properties[0].checked == v then controls.properties[0]:Toggle() end
+			end		
+		},
+		Refresh = function(self)
+			local label_height = math.floor(controls.properties.file.font:GetTextWidth(controls.properties.file.text)/380) * 10
+			self.y = 184 + label_height
+			self:Invalidate()
+		end,			
+	}
+	local button_discard = Image:New {					
+		parent = window_properties,
+		file = CLOSE_ICON,
+		x = 315,
+		y = -30,
+		width = 20,
+		height = 20,
+		tooltip = 'discard changes',
+		color = {0.8,0.3,0.1,0.7}, --
+		OnClick = {
+			function(self,...)
+				self.parent:Discard()
+			end
+		},					
+	}	
+	local button_confirm = Image:New {					
+		parent = window_properties,
+		file = CONFIRM_ICON,
+		x = 350,
+		y = -30,
+		width = 20,
+		height = 20,
+		tooltip = 'save changes',		
+		OnClick = {
+			function(self,...)
+				self.parent:Confirm()
+			end
+		},					
+	}
+
+	
+	
+	
+	window_properties:Hide()
+	containers.properties = window_properties
+	
+	---------------------------------------------------- settings window ------------------------------------------------
 	window_settings = Window:New {
 		x = "25%",
 		y = "25%",
@@ -399,7 +696,8 @@ local function DeclareControls()
 		resizable = false,
 		dragUseGrip = true,
 		clientWidth = 440,
-		clientHeight = 250,
+		clientHeight = 210,
+		autosize = true,
 		--backgroundColor = col_grey_08,
 	}
 	tabbar_settings = TabBar:New {
@@ -696,7 +994,7 @@ local function DeclareFunctions()
 		--local i = controls.main and #controls.main or 1 --< cant index the table properly if things get removed
 			if not controls.main['label_'..item] then -- make new controls for newly added items
 				valid = false
-				controls.main['label_'..item] = TextBox:New { --< should make custom clickie textbox for this
+				controls.main['label_'..item] = ClickyTextBox:New { --< should make custom clickie ClickyTextBox for this
 					refer = item,					
 					clientWidth = 200,
 					parent = layout_main,
@@ -712,7 +1010,7 @@ local function DeclareFunctions()
 					--borderFlip = {0.7,0.7,1,0.5},
 					OnMouseOver = { 
 						function(self)
-							local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
+							local ttip = "\255\80\255\50"..self.text.."\255\255\255\255\n\n"--.."\n--------------------------------------------------------------\n\n"
 							for key, _ in pairs(sounditems.default) do ttip = ttip..key..": "..tostring(params[key]).."\n" end
 							ttip = ttip..'\n(right-click to edit)'
 							self.tooltip=ttip
@@ -729,13 +1027,13 @@ local function DeclareFunctions()
 						self:Invalidate()
 					end,					
 				}
-				controls.main['length_'..item] = TextBox:New {
+				controls.main['length_'..item] = ClickyTextBox:New {
 					refer = item,
 					x = 204,
 					clientWidth = 26,
 					parent = layout_main,
 					align = 'right',
-					text = ''..params.length,
+					text = ''..params.length_real,
 					fontSize = 10,
 					textColor = col_white_09,
 					backgroundColor = col_grey_02,
@@ -753,7 +1051,12 @@ local function DeclareFunctions()
 					tooltip = 'Sounditem Properties',
 					color = {0.8,0.7,0.9,0.9}, --
 					OnClick = {
-						function()
+						function(self,...)
+							local w = window_properties
+							if w.refer then w:Confirm() end
+							w.refer = self.refer
+							w:Refresh()
+							w:Show()							
 						end
 					},
 					--AllowSelect = function(self, idx, select) layout_main.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
@@ -769,14 +1072,14 @@ local function DeclareFunctions()
 					margin = {-6,0,0,0},
 					OnClick = {
 						function()
-							DoPlay(item, options.volume.value, nil, nil, nil) --< this probably shouldnt return anything
+							DoPlay(item, options.volume.value, emitters.global) --< this probably shouldnt return anything
 						end
 					},
 					--AllowSelect = function(self, idx, select) layout_main.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
 				}
 			else -- update controls for exisiting items (not a whole lot to do as of now)
 				controls.main['label_'..item].text = item
-				controls.main['length_'..item].text = params.length
+				controls.main['length_'..item].text = params.length_real
 			end				
 		end
 		
@@ -818,21 +1121,28 @@ local function DeclareFunctions()
 					local sound = e.sounds[i]
 					local item = sound.item
 					if not controls[name]['label_'..item] then
-						valid = false
+						valid = false						
+						local _, endprefix = string.find(item, "[%$].*[%$%s]")
+						local txt = '\255\230\255\100'..string.sub(item, 0, endprefix)
+							..'\255\255\255\255'..string.sub(item, endprefix + 1)
 						local t = {}
 							t.name = 'label_'..item							
 							t.refer = item
 							t.width = this.width - 140
 							t.parent = layout
 							t.align = 'left'
-							t.text =  item or 'error: no item' --< that shouldnt happen
+							t.text = txt or 'error: no item' --< that shouldnt happen
 							t.fontSize = 10
 							t.textColor = col_white_09
 							t.backgroundColor = col_grey_02
 							t.borderColor = col_grey_03
 							t.OnMouseOver = {
 								function(self) 
-									local ttip = self.text.."\n\n"--.."\n--------------------------------------------------------------\n\n"
+									local _, endprefix = string.find(item, "[%$].*[%$%s]")
+									local ttip = '\255\230\255\100'..string.sub(item, 0, endprefix)
+										..'\255\125\230\255'..string.sub(item, endprefix + 1).."\255\255\255\255\n\n"
+										
+									--local ttip = "\255\125\230\255"..item.."\255\255\255\255\n\n"--.."\n--------------------------------------------------------------\n\n"
 									for key, _ in pairs(sounditems.default) do ttip = ttip..key..": "..
 											tostring(sounditems.instances[sound.item][key]).."\n" 
 									end
@@ -840,7 +1150,7 @@ local function DeclareFunctions()
 									self.tooltip=ttip
 								end
 							}							
-						controls[name]['label_'..item] = TextBox:New (t)						
+						controls[name]['label_'..item] = ClickyTextBox:New (t)						
 						t = {}
 							t.name = 'editBtn_'..item
 							t.refer = item
@@ -851,9 +1161,14 @@ local function DeclareFunctions()
 							t.tooltip = 'Sound Properties'
 							t.color = {0.8,0.7,0.9,0.9}				
 							t.OnClick = {
-								function()
+								function(self,...)									
+									local w = window_properties
+									if w.refer then w:Confirm() end
+									w.refer = self.refer
+									w:Refresh()
+									w:Show()									
 								end
-							}						
+							}
 						controls[name]['editBtn_'..item] = Image:New (t)
 						t = {}
 							t.name = 'playBtn_'..item
@@ -867,13 +1182,16 @@ local function DeclareFunctions()
 							t.margin = {-6,0,0,0}
 							t.OnClick = {
 								function()
-									local px, py, pz = e.pos.x, e.pos.y, e.pos.z									
-									return DoPlay(sound.item, options.volume.value, px or nil, py or nil, pz or nil) -- pos is false for global emitter, for some silly reason. needs change
+									--local px, py, pz = e.pos.x, e.pos.y, e.pos.z									
+									return DoPlay(sound.item, options.volume.value, e) -- pos is false for global emitter, for some silly reason. needs change
 								end
 							}									
 						controls[name]['playBtn_'..item] = Image:New (t)
-					else
-						controls[name]['label_'..item].text = item						
+					else						
+						local _, endprefix = string.find(item, "[%$].*[%$%s]")
+						local txt = '\255\230\255\100'..string.sub(item, 0, endprefix)
+							..'\255\255\255\255'..string.sub(item, endprefix + 1)
+						controls[name]['label_'..item].text = txt						
 					end				
 				end
 				
@@ -917,9 +1235,66 @@ local function DeclareFunctions()
 					end
 				end				
 			end
-	},
+	}
 	
+	-----------------------------------------------------------------------------------------------------
+	-- properties window
 	
+
+	window_properties.Refresh = function(self, ...)		
+		if self.refer then 			
+			local item
+			if sounditems.templates[self.refer] then
+				item = sounditems.templates[self.refer]
+				self.defaultItem = sounditems.default
+			elseif sounditems.instances[self.refer] then
+				item = sounditems.instances[self.refer]
+				--local _, endprefix = string.find(self.refer, "[%$].*[%$%s]")				
+				--local template = string.sub(self.refer, endprefix + 1)				
+				self.defaultItem = sounditems.templates[item.template]
+				--if not self.defaultItem then Echo("no template:"..template) end
+			else	
+				Echo("Error: reference to non-existant item")
+				self:Invalidate()				
+				self:Hide()
+				return
+			end
+			controls.properties.file:SetText(item.file)-- = item.file
+			controls.properties.file:Invalidate()
+			layout_properties:Refresh()
+			if not controls.properties[0].checked == item.in3d then controls.properties[0]:Toggle() end
+			controls.properties[0]:Refresh()
+			controls.properties.in3_defaultBtn:Refresh()
+			for i, control in ipairs(controls.properties) do
+				local txt = item[control.refer]
+				control.text = type(txt) == 'number' and tostring(txt) or 'default'				
+			end
+			self:Invalidate()
+		else			
+			self:Invalidate()
+			self:Hide()
+		end		
+	end	
+	window_properties.Confirm = function(self)
+		local item = sounditems.templates[self.refer] or sounditems.instances[self.refer]
+		if item then
+			item.in3d = controls.properties[0].checked
+			for i, control in ipairs(controls.properties) do
+				item[control.refer] = tonumber(control.text)
+			end			
+		else
+			Echo("Error: reference to non-existant item")			
+		end		
+		self.refer = nil
+		self:Invalidate()
+		self:Hide()
+		widget.RequestReload()
+	end
+	window_properties.Discard = function(self)
+		self.refer = nil
+		self:Invalidate()
+		self:Hide()
+	end
 	
 	
 	--------------------------------------------------------------------------------------------------
@@ -991,18 +1366,15 @@ local function DeclareFunctions()
 	--------------------------------------------------------------------------------------------------
 	--------------------------------------------------------------------------------------------------
 	
-	function Chili.TextBox:HitTest(x,y)
-		return self
-	end
 	--[[
-	function Chili.TextBox:OnMouseDown(...)
+	function Chili.ClickyTextBox:OnMouseDown(...)
 		--self.state.pressed = true
 		inherited.MouseDown(self, ...)
 		--self:Invalidate()
 		return self
 	end
 	
-	function Chili.TextBox:OnMouseUp(...)
+	function Chili.ClickyTextBox:OnMouseUp(...)
 		--if (self.state.pressed) then
 		--self.state.pressed = false
 		inherited.MouseUp(self, ...)
@@ -1022,7 +1394,50 @@ function SetupGUI()
 	if (not Chili) then		
 		Echo("<ambient gui> Chili not found")
 		return false
-	end	
+	end
+	--[[
+	for k,v in pairs(Chili) do
+		if type(v) == 'function' then Echo(k) end
+	end
+
+	Chili.TextInput = function(self,utf8, ...)
+		Echo("called")
+		if Spring.IsGUIHidden() then return false end		
+		return Chili.Screen0:TextInput(utf8, ...)
+		
+	end
+	Chili.widgetHandler:UpdateCallIn("TextInput") 
+	--widget.widgetHandler:UpdateWidgetCallIn("TextInput", Chili)
+	
+	Chili.Object.OnTextInput = {}
+	Chili.Object.TextInput = function(self,...)	
+		--Echo("object")
+		if (self:CallListeners(self.OnTextInput, ...)) then
+			return self
+		end
+		return false
+	end
+	Chili.Screen.TextInput = function(self,...)
+		--Echo("screen")
+		local focusedControl = Chili.UnlinkSafe(self.focusedControl)
+       -- Echo("1")
+		if focusedControl then
+				--Echo("focus")
+                return (not not focusedControl:TextInput(...))				
+        end
+		--Echo("no focus")
+        return (not not inherited:TextInput(...))
+	end
+	Chili.Control.TextInput = function(self,...)
+		--Echo("control")
+		return inherited.TextInput(self, ...)
+	end
+	Chili.EditBox.TextInput = function(self,...)
+		--Echo("box")
+		return inherited.TextInput(self, ...)
+	end--]]
+	
+	
 	
 	screen0 = Chili.Screen0
 	
@@ -1032,8 +1447,86 @@ function SetupGUI()
 	Window = Chili.Window
 	Label = Chili.Label
 	Line = Chili.Line
-	EditBox = Chili.EditBox
-	TextBox = Chili.TextBox
+	FilterEditBox = Chili.EditBox:Inherit{
+		classname = 'FilterEditBox',
+		allowUnicode = true,
+		cursorColor = {0,1.3,1,0.7},
+		--borderColor = {0.7,0.7,0.7,.5},
+		--backgroundColor = {0.8, 0.8, 1.0, 0.4},
+		Update = function(self, ...)
+			Chili.Control.Update(self, ...)
+			if self.state.focused then
+				self:RequestUpdate()
+				if (os.clock() >= (self._nextCursorRedraw or -math.huge)) then
+					self._nextCursorRedraw = os.clock() + 0.1 --10FPS
+					
+				end
+			end
+			self:Invalidate()
+		end,
+		
+		TextInput = function(self, utf8char, ...)			
+			local unicode = utf8char
+			if (not self.allowUnicode) then
+				local success
+				success, unicode = widget.pcall(string.char, utf8char)
+				if success then
+					success = not unicode:find("%c")
+				end
+				if (not success) then
+					unicode = nil
+				end
+			end
+
+			if unicode and not self.InputFilter or self.InputFilter(unicode) then
+				local cp  = self.cursor
+				local txt = self.text
+				self.text = txt:sub(1, cp - 1) .. unicode .. txt:sub(cp, #txt)
+				self.cursor = cp + unicode:len()
+			--else
+			--	return false
+			end
+
+			self._interactedTime = widget.Spring.GetTimer()
+			--self.inherited.TextInput(utf8char, ...)
+			self:UpdateLayout()
+			self:Invalidate()
+			return self
+		end,
+	}
+	
+	
+	ClickyTextBox = Chili.TextBox:Inherit{
+		classname = "clickytextbox",
+		HitTest = function(self, x,y)
+			return self
+		end,
+		--[[
+		MouseDown = function(self,...)
+		  local btn = select(3,...)
+		  Echo(btn)		  
+		  if not btn == 3 then return nil end
+		  self.state.pressed = true
+		  self.inherited.MouseDown(self, ...)
+		  self:Invalidate()
+		  return self
+		end,
+		MouseUp = function(self,...)
+		  local btn = select(3,...)
+		  Echo(btn)		  
+		  if not btn == 3 then return nil end
+		  if (self.state.pressed) then
+			self.state.pressed = false
+			self.inherited.MouseUp(self, ...)
+			self:Invalidate()
+			return self
+		  end
+		end,
+		OnClick = {function(self,...)
+			local btn = select(3,...)
+			if not btn == 3 then return nil end
+		end,}--]]
+	}
 	Panel = Chili.Panel
 	ScrollPanel = Chili.ScrollPanel
 	LayoutPanel = Chili.LayoutPanel
@@ -1079,6 +1572,24 @@ function MouseOver(mx, my)
 	return false
 end
 
+function KeyPress(...)
+	if not Chili then return false end
+	local focusedControl = Chili.UnlinkSafe(Chili.Screen0.focusedControl)       
+	if focusedControl and focusedControl.classname == 'FilterEditBox' then				
+		--return (not not focusedControl:KeyPress(...))
+		focusedControl:KeyPress(...)
+		return true
+    end
+end
+
+function TextInput(...)
+	if not Chili then return false end
+	local focusedControl = Chili.UnlinkSafe(Chili.Screen0.focusedControl)
+	if focusedControl and focusedControl.classname == 'FilterEditBox' then
+		return (not not focusedControl:TextInput(...))
+    end	
+end
+
 
 --
 
@@ -1088,7 +1599,7 @@ gui.controls = controls
 gui.containers = containers
 
 
-
+	
 return gui
 
 

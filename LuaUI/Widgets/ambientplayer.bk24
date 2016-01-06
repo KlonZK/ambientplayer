@@ -60,8 +60,8 @@ local SOUNDITEM_TEMPLATE = {
 	length = "?",
 	emitter = false, 
 	rnd = 0,	
-	minlooptime = 0,
-	onset = 1,
+	length_loop = 0,
+	delay = 1,
 	
 }
 local TMPVALUES_TEMPLATE = {
@@ -220,7 +220,7 @@ function widget:Initialize()
 		else
 			tracklist.tracks=list.Sounditems
 			for track, params in pairs (tracklist.tracks) do
-				tracklist.tmpvalues[track] = {timeframe = params.onset, generated = false}
+				tracklist.tmpvalues[track] = {timeframe = params.delay, generated = false}
 				--params.timeframe=secondsToUpdate+params.offset
 				--params.generated=false
 			end
@@ -267,7 +267,7 @@ function ReloadSoundDefs()
 		tracklist.tracks=list.Sounditems
 		for track, params in pairs (tracklist.tracks) do			
 			if not (tracklist.tmpvalues[track]) then 
-				tracklist.tmpvalues[track] = {timeframe = params.onset, generated = false} --should never happen
+				tracklist.tmpvalues[track] = {timeframe = params.delay, generated = false} --should never happen
 				Echo("THIS SHALL NEVER HAPPEN!")
 			end
 				--params.timeframe=secondsToUpdate+params.offset
@@ -304,7 +304,7 @@ function widget:Update(dt)
 						tmp.timeframe = 0
 						if (random(trk.rnd) == 1) then						
 							DoPlay(track, config.ambientVolume, t.pos.x, t.pos.y, t.pos.z)
-							tmp.timeframe=trk.minlooptime
+							tmp.timeframe=trk.length_loop
 						end
 					end
 				end
@@ -775,7 +775,7 @@ function AddItemToEmitter(e, item)
 		tracklist.tracks[name][k] = v		
 	end
 	tracklist.tmpvalues[name].generated = true
-	tracklist.tmpvalues[name].timeframe = tracklist.tracks[name].onset
+	tracklist.tmpvalues[name].timeframe = tracklist.tracks[name].delay
 	tracklist.tracks[name].emitter=e
 	emitters[e].playlist[name] = true
 	needReload = true
@@ -831,7 +831,7 @@ function LoadFromFile(folder, file, name)
 			tracklist.tracks[shortname]={}
 			tracklist.tmpvalues[shortname]={}
 			for param, value in pairs (SOUNDITEM_TEMPLATE) do tracklist.tracks[shortname][param] = value end		
-			tracklist.tmpvalues[shortname].timeframe = tracklist.tracks[shortname].onset
+			tracklist.tmpvalues[shortname].timeframe = tracklist.tracks[shortname].delay
 			tracklist.tmpvalues[shortname].generated = true
 			tracklist.tracks[shortname].file=folder..file			
 			Echo("<ape>: added playlist entry: "..shortname)
