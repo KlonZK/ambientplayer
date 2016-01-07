@@ -236,6 +236,19 @@ end
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+function SaveAll()
+	local wpath = config.path_map..PATH_LUA..PATH_CONFIG
+
+	if not (WriteSoundDefs(wpath, SOUNDS_ITEMS_DEF_FILENAME, SOUNDS_INSTANCES_DEF_FILENAME, true)) then 
+		Echo("failed to write sound defs: "..wpath) return false end
+	if not (WriteEmittersDef(wpath, EMITTERS_FILENAME)) then
+		Echo("failed to write emitters config") return false end
+	if not (WriteLocalConfig(wpath, MAPCONFIG_FILENAME)) then
+		Echo("failed to write map config") return false end	
+	
+	return true
+end
+
 
 -- do i have to load all of them if only one or a few need updating? tho its not a lot to do so i guess it doesnt matter?
 -- these dont write tags from meta index. problem?
@@ -305,22 +318,24 @@ end
 function WriteEmittersDef(path, file)
 	if (WriteTable(emitters, path..file, EMITTERS_HEADER, 'Emitters')) then
 		Echo("saved emitters to "..path..file)
-	else Echo("failed to save emitters :(") return false	end	
+	else Echo("failed to save emitters :(") return false end
+	return true
 end
 
 
 function WriteLocalConfig(path, file)
 	if (WriteTable(config, path..file, MAPCONFIG_HEADER, 'Config')) then
 		Echo("saved local config to "..path..file)
-	else Echo("failed to save local config :(") return false end	
+	else Echo("failed to save local config :(") return false end
+	return true
 end
 
-
+-- this seems unused
 function WriteOptions(path, file)
 	if (WriteTable(options, path..file, OPTIONS_HEADER, 'Options')) then
 		Echo("saved local config to "..path..file)
 	else Echo("failed to save local config :(") return false end	
-
+	return true
 end
 
 return true

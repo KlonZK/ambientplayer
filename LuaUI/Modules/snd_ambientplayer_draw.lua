@@ -258,20 +258,9 @@ function DrawIcons(x, y, sx, sz, sy, focus)
 	glDepthMask(false)
 end
 
-function DrawCursor(x, y, sx, sz, sy)
-	local list = emitMarker
-	
-	glDepthTest(true)
-	glDepthMask(true)
-	
-	DrawList(list, delta, u, v, x, y, 0, sx, sy, sz)
-	
-	glDepthTest(false)
-	glDepthMask(false)	
-end
 
 function DrawCursorToWorld(x, z, y, sx, sz, sy)
-	local list = emitMarker
+	local list = emitMarker_Highlight
 	
 	glDepthTest(true)
 	glDepthMask(true)

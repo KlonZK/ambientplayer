@@ -298,7 +298,7 @@ local function DeclareControls()
 		padding = {8,8,8,8,},
 		
 		OnClick = {function() --< it is kinda hidden away here but should do.
-			
+			i_o.SaveAll()
 		end},
 		children = {
 			Image:New {

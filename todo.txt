@@ -3,7 +3,7 @@ remove or fix console
 finish options/settings window
 
 continue gui and io implementation:
-- implement saving via gui
+- implement saving via gui X
 - implement adding emitters via gui X
 - implement loading sounds (file browser?)
 - implement localizing sounds, if possible

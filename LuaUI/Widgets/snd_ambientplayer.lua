@@ -233,7 +233,10 @@ Echo ("Loading modules...")
 
 local i_o = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
 				PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME, 
-					TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME, LOG_FILENAME}
+					TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME, LOG_FILENAME = LOG_FILENAME, 
+						MAPCONFIG_FILENAME = MAPCONFIG_FILENAME, EMITTERS_FILENAME = EMITTERS_FILENAME,
+						SOUNDS_ITEMS_DEF_FILENAME = SOUNDS_ITEMS_DEF_FILENAME,
+							SOUNDS_INSTANCES_DEF_FILENAME = SOUNDS_INSTANCES_DEF_FILENAME, }
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_IO
 	if vfsExist(file, VFSMODE) and vfsInclude(file, i_o, VFSMODE) then
@@ -256,7 +259,7 @@ end
 
 local gui = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
 				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls, UpdateMarkerList = draw.UpdateMarkerList,
-					DrawIcons = draw.DrawIcons}
+					DrawIcons = draw.DrawIcons, i_o = i_o}
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
 	if vfsExist(file, VFSMODE) then
@@ -348,7 +351,7 @@ options.dragtime = {
 	path = "Ambient Sound Editor",		
 }	
 options.emitter_radius = {
-	name = "Radius of Emitter Aura",
+	name = "Emitter Radius",
 	type = 'number',
 	value = 5,
 	min = 25,
@@ -986,8 +989,8 @@ function widget:Initialize()
 	Echo ("Loading local config...")
 	if vfsExist(cpath..MAPCONFIG_FILENAME, VFSMODE) then
 		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
-		if opt.config then
-			for k, v in pairs(opt.config) do config[k] = v or config[k]	end
+		if opt then
+			for k, v in pairs(opt) do config[k] = v or config[k] end
 			Echo("done", true)
 		else
 			Echo("local config was empty, using defaults", true)
