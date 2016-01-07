@@ -48,6 +48,7 @@ local Label
 local Line
 local FilterEditBox
 local ClickyTextBox
+local gl_AnimatedImage
 --local color2incolor
 --local incolor2color
 
@@ -63,6 +64,8 @@ local CLOSEALL_ICON = PATH_LUA..'Images/closeall.png'
 local CONFIRM_ICON = PATH_LUA..'Images/arrow_green.png'
 --local UNDO_ICON = PATH_LUA..'Images/undo.png'
 local COGWHEEL_ICON = PATH_LUA..'Images/cogwheel.png'
+local SAVE_ICON = PATH_LUA..'Images/disc_save_2.png'
+local LOAD_ICON = PATH_LUA..'Images/disc_load_2.png'
 
 local HELPTEXT = [[generic info here]]
 
@@ -206,26 +209,37 @@ local function DeclareControls()
 			--	then return true end end,
 		--OnMouseUp = {function(self,...) self.inherited.MouseDown(self,...) return self end},			
 	}		
-	button_console = Button:New {
-		x = 0,
-		y = -32,
+			
+	button_emitters = Button:New {
+		x = 10,
+		y = -52,
 		parent = window_main,		
-		tooltip = 'Message Log',
-		clientWidth = 12,
-		clientHeight = 12,
+		tooltip = 'spawn new emitter and place it on the map, cancel with right-click\n\npress shift and turn the mousewheel to adjust height(use shift + ctrl/alt make it go faster/slower)\n\nyou can also do this later: hover over an emitter on the map, press shift and any of the modkeys and turn the mousewheel\n\nyou can drag around emitters on the map with left-drag. inspect them with right-click',
+		clientWidth = 30,
+		clientHeight = 30,
 		caption = '',
-		OnClick = {function() window_console:ToggleVisibility() end},
-		children = {
-			Image:New {
-				width = "100%",
-				height = "100%",				
-				file = CONSOLE_ICON,
-			},
-		}
+		OnClick = {function() 
+			local drag = widget.GetDrag()
+			if drag then
+				drag._type.spawn = true
+				drag.params.hoff = 0
+				drag.started = true
+				-- nothing else needed at this point.
+			end			
+		end,
+		},
 	}
+	button_emitters_anim = gl_AnimatedImage:New {
+		parent = button_emitters,
+		width = "100%",
+		height = "100%",
+		--caption = '',
+		--file = COGWHEEL_ICON,
+	}
+
 	
 	button_help = Button:New {
-		x = - 32,
+		x = -32,
 		y = -32,
 		parent = window_main,		
 		tooltip = 'Help',
@@ -243,7 +257,7 @@ local function DeclareControls()
 	}
 	
 	button_settings = Button:New {
-		x = - 74,
+		x = -74,
 		y = -32,
 		parent = window_main,		
 		tooltip = 'Settings',
@@ -268,6 +282,75 @@ local function DeclareControls()
 			}
 		}	
 	}
+	button_save = Button:New {
+		x = -116,
+		y = -32,
+		parent = window_main,		
+		tooltip = 'Save Map Config',
+		caption = '',
+		--[[
+		clientWidth = 20,
+		clientHeight = 20,		
+		padding = {6,6,6,6,},
+		--]]
+		clientWidth = 16,
+		clientHeight = 16,		
+		padding = {8,8,8,8,},
+		
+		OnClick = {function() --< it is kinda hidden away here but should do.
+			
+		end},
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",				
+				file = SAVE_ICON,
+			}
+		}	
+	}
+	button_load = Button:New {
+		x = -158,
+		y = -32,
+		parent = window_main,		
+		tooltip = 'Load Sound Files',
+		caption = '',
+		--[[
+		clientWidth = 20,
+		clientHeight = 20,		
+		padding = {6,6,6,6,},
+		--]]
+		clientWidth = 16,
+		clientHeight = 16,		
+		padding = {8,8,8,8,},
+		
+		OnClick = {function() --< it is kinda hidden away here but should do.
+
+		end},
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",				
+				file = LOAD_ICON,
+			}
+		}	
+	}
+	button_console = Button:New {
+		x = -200,
+		y = -32,
+		parent = window_main,		
+		tooltip = 'Message Log',
+		clientWidth = 12,
+		clientHeight = 12,
+		caption = '',
+		OnClick = {function() window_console:ToggleVisibility() end},
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",				
+				file = CONSOLE_ICON,
+			},
+		}
+	}	
 	
 	containers.main = window_main
 	controls.tracklist = layout_main
@@ -1527,6 +1610,60 @@ function SetupGUI()
 			if not btn == 3 then return nil end
 		end,}--]]
 	}
+	
+	gl_AnimatedImage = Chili.Control:Inherit{
+		classname = 'gl_animatedimage',
+		defaultWidth  = 64,
+		defaultHeight = 64,
+		padding = {0,0,0,0},
+		color = {1,1,1,1},		
+		keepAspect = true;
+		OnClick  = {},
+		this = gl_AnimatedImage,
+		--DrawControl = function(self)
+		--	widget.draw.DrawIcons(self.x, self.y, self.x)
+		--end,
+	}
+	
+	function gl_AnimatedImage:DrawControl()	
+		--self:_DrawInClientArea(widget.draw.DrawIcons, self.x, self.y, self.x)
+		--local activeControl = Chili.UnlinkSafe(Chili.Screen0.activeControl)       
+		--if activeControl and (activeControl == self.parent or activeControl == self) then
+		if self.parent.state.hovered or self.state.hovered then
+			DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5, true)
+		else
+			DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5)
+		end
+		--widget.draw.DrawIcons(list)		
+	end
+	
+	function gl_AnimatedImage:IsActive()
+		local onclick = self.OnClick
+		if (onclick and onclick[1]) then
+			return true
+		end
+	end
+
+	function gl_AnimatedImage:HitTest()
+		  --FIXME check if there are any eventhandlers linked (OnClick,OnMouseUp,...)
+		return self:IsActive() and self
+	end
+
+	function gl_AnimatedImage:MouseDown(...)
+		  --// we don't use `this` here because it would call the eventhandler of the button class,
+		  --// which always returns true, but we just want to do so if a calllistener handled the event
+		return Control.MouseDown(self, ...) or self:IsActive() and self
+	end
+
+	function gl_AnimatedImage:MouseUp(...)
+		return Control.MouseUp(self, ...) or self:IsActive() and self
+	end
+
+	function gl_AnimatedImage:MouseClick(...)
+		return Control.MouseClick(self, ...) or self:IsActive() and self
+	end
+	
+	
 	Panel = Chili.Panel
 	ScrollPanel = Chili.ScrollPanel
 	LayoutPanel = Chili.LayoutPanel
@@ -1558,7 +1695,7 @@ function UpdateGUI()
 	
 	for _, window in pairs(inspectionWindows) do window:Refresh() end
 	--for _, tab in pairs(tabs_settings) do tab:Refresh() end
-	
+	button_emitters_anim:Invalidate()
 end
 
 
@@ -1588,6 +1725,64 @@ function TextInput(...)
 	if focusedControl and focusedControl.classname == 'FilterEditBox' then
 		return (not not focusedControl:TextInput(...))
     end	
+end
+
+function SpawnDialog(px, pz, py)	
+	local window_name = Window:New {
+		parent = screen0,
+		x = "50%",
+		y = "40%",
+		clientWidth = 160,
+		clientHeight = 54,
+		caption = 'choose name',
+		resizable = false,
+	}
+	local box = FilterEditBox:New {
+		parent = window_name,
+		x = 10,
+		y = 12,
+		clientWidth = 140,
+		text = '',
+		InputFilter = function(unicode)
+			return string.find(unicode, "[%w_]")
+			--if string.find(unicode, "%A%D") then return false end
+			---return true
+		end,
+	}
+	Image:New {
+		parent = window_name,
+		file = CLOSE_ICON,
+		x = 50,
+		y = 34,
+		width = 20,
+		height = 20,
+		tooltip = 'cancel',
+		color = {0.8,0.3,0.1,0.7}, --
+		OnClick = {
+			function(self,...)
+				window_name:Dispose()						
+				--window_name	= nil; box = nil
+			end
+		},
+	}
+	Image:New {
+		parent = window_name,
+		file = CONFIRM_ICON,
+		x = 80,
+		y = 34,
+		width = 20,
+		height = 20,
+		tooltip = 'accept',				
+		OnClick = {
+			function(self,...)
+				widget.SpawnEmitter(#box.text > 0 and box.text or nil , px, pz, py)
+				window_name:Dispose()
+				--window_name	= nil; box = nil						
+			end
+		},					
+	}
+	window_name:Show()
+	--box:SetFocus()
 end
 
 

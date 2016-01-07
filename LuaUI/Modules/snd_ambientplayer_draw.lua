@@ -120,7 +120,6 @@ local function MakeLists(red, green, blue, alpha_inner, alpha_outer)
 	return polys
 end
 
-
 function UpdateMarkerList()	
 	emitMarker = MakeLists(options.color_red.value, options.color_green.value, options.color_blue.value,
 		options.color_alpha_inner.value, options.color_alpha_outer.value)
@@ -133,6 +132,47 @@ end
 --local u = 0
 --local v = 0
 local dstep = (2.0 * math.pi) / 30
+
+local function DrawList(list, delta, u, v, x, y, z, sx, sy, sz)			
+	glPush()	
+		glTranslate(x,y,z)
+		--glPolygonOffset(-10000, -2)
+		glScale(sx, sz, sy)
+		glCallList(list[1])					
+	glPop()
+	glPush()
+		glTranslate(x,y,z)
+		glScale(sx, sz, sy)
+		glRotate(6*(delta+u+v),1,1,-1)
+		glCallList(list[2])
+	glPop()
+	glPush()
+		glTranslate(x,y,z)
+		glScale(sx, sz, sy)
+		glRotate(6*(delta+v),-1,-1,0)
+		glRotate(6*(delta+u),0,0,1)
+		glCallList(list[3])
+	glPop()
+	glPush()
+		glTranslate(x,y,z)
+		glScale(sx, sz, sy)
+		glRotate(6*(delta),0,0,1)
+		glRotate(6*(u + delta),0,1,0)
+		glRotate(6*(v + u),1,0,0)
+		glCallList(list[4])
+	glPop()
+	glPush()
+		glTranslate(x,y,z)
+		glScale(sx, sz, sy)
+		glRotate(6*(delta + u),0,0,1)
+		glRotate(6*(u),0,1,0)
+		glRotate(6*(v + v),1,0,0)
+		glCallList(list[5])
+		glPop() 
+end
+
+
+
 
 function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to the environment
 
@@ -174,7 +214,90 @@ function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to 
 				end					
 				glColor(1,1,1,1)
 				glDepthTest(true)
-				glDepthMask(true)				
+				glDepthMask(true)
+				DrawList(list, delta, u, v, pos.x, pos.y, pos.z, 
+					options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value)				
+		
+				local gy = GetGroundHeight(pos.x, pos.z)		
+				if pos.y >  gy then							
+					
+					glPush()						
+						glBeginEnd(GLLINES, function()
+							glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
+							--gl.Translate(pos.x,pos.y,pos.z)
+							glVertex(pos.x, pos.y, pos.z)
+							glVertex(pos.x, gy, pos.z)
+						end)
+					glPop()					
+					glDepthMask(false)						
+				end	
+				glColor(1,1,1,1)
+				glDepthTest(false)					
+			end			
+		end
+	end
+end
+
+local delta = 0
+local u = 0
+local v = 0
+
+function DrawIcons(x, y, sx, sz, sy, focus)
+	local list = focus and emitMarker_Highlight or emitMarker
+	
+	delta = delta > 60 and 0 or delta + 0.05
+	u = u > 60 and 0 or u + 0.14
+	v = v > 60 and 0 or v + 0.2
+	
+	glDepthTest(true)
+	glDepthMask(true)
+	
+	DrawList(list, delta, u, v, x, y, 0, sx, sy, sz)
+	
+	glDepthTest(false)
+	glDepthMask(false)
+end
+
+function DrawCursor(x, y, sx, sz, sy)
+	local list = emitMarker
+	
+	glDepthTest(true)
+	glDepthMask(true)
+	
+	DrawList(list, delta, u, v, x, y, 0, sx, sy, sz)
+	
+	glDepthTest(false)
+	glDepthMask(false)	
+end
+
+function DrawCursorToWorld(x, z, y, sx, sz, sy)
+	local list = emitMarker
+	
+	glDepthTest(true)
+	glDepthMask(true)
+	
+	DrawList(list, delta, u, v, x, y, z, sx, sy, sz)
+	
+	local gy = GetGroundHeight(x, z)		
+	if y >  gy then		
+		glPush()						
+			glBeginEnd(GLLINES, function()
+				glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
+				--gl.Translate(pos.x,pos.y,pos.z)
+				glVertex(x, y, z)
+				glVertex(x, gy, z)
+			end)
+		glPop()					
+		glDepthMask(false)						
+	end	
+	glColor(1,1,1,1)
+	--glDepthTest(false)
+	glDepthMask(false)	
+end
+
+return true
+
+--[[
 				glPush()					
 					glTranslate(pos.x,pos.y,pos.z)					
 					--glPolygonOffset(-10000, -2)
@@ -209,28 +332,9 @@ function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to 
 					glRotate(6*(u),0,1,0)
 					glRotate(6*(v + v),1,0,0)
 					glCallList(list[5])
-				glPop()			
-				local gy = GetGroundHeight(pos.x, pos.z)		
-				if pos.y >  gy then							
-					
-					glPush()						
-						glBeginEnd(GLLINES, function()
-							glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
-							--gl.Translate(pos.x,pos.y,pos.z)
-							glVertex(pos.x, pos.y, pos.z)
-							glVertex(pos.x, gy, pos.z)
-						end)
-					glPop()					
-					glDepthMask(false)						
-				end	
-				glColor(1,1,1,1)
-				glDepthTest(false)					
-			end			
-		end
-	end
-end
+				glPop()	
+--]]
 
-return true
 
 
 --[[

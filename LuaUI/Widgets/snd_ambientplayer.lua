@@ -7,23 +7,30 @@ TODO:
 - slash words and vars 
 - build writable tables for options VVv
 - save options, playlist, emitters support (good target for own file) Vv
-- remake initialize() to account for list files Vv
+- remake initialize() to account for list files Vv -?
 - find out how to find out about file sizes and lengths
 - find out how to create folders 
 - implement log V
 - disallow track names with only numbers --why?
-- split vv
+- split vv - may want to take a look at environemnts and their usefulness
+- may want to add lua functions to all environments in a go
 
-- emit zones
-- mutex groups
-- chili support v
-- allow emitters to run scripts?
+- emit zones -- implausible with current engine but could be approximated with scripts
+- mutex groups -- implement this via scripts?
+- chili support Vv
 - kill console or move it to module and use meta table for words
 
-- make emitters hold actual items?
-- track playing status of emitters using length, make animation play when playing
+- make emitters hold actual items? -- too late for this
+- track playing status of emitters using length, make animation play when playing V
 - 
-- continue gui implementation, rework update function vv
+- continue gui implementation, rework update function vvv
+
+- emitter script implementation:
+- use loadstring for basic scripts
+- consider how callins are to be implemented
+- consider external scripts
+- consider how functions are to be written to files(savetable may have problems with this)
+
 --]]
 
 --os.getenv("HOME")
@@ -248,7 +255,8 @@ do
 end
 
 local gui = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
-				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls, UpdateMarkerList = draw.UpdateMarkerList}
+				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls, UpdateMarkerList = draw.UpdateMarkerList,
+					DrawIcons = draw.DrawIcons}
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
 	if vfsExist(file, VFSMODE) then
@@ -441,6 +449,7 @@ local mcoords
 local modkeys = {}
 local needReload = false
 local mouseOverEmitter
+--local spawnMode = false
 
 local drag = {
 	objects = {},
@@ -563,18 +572,20 @@ local function RemoveItemFromList(item)
 end
 
 
-local function SpawnEmitter(name, yoffset)
-	local p
-	if not MouseOnGUI() then _, p = Spring.TraceScreenRay(mx,mz,true)
-	else return end
+function SpawnEmitter(name, x, z, y)-- yoffset)
+	--local p
+	--if not MouseOnGUI() then _, p = Spring.TraceScreenRay(mx,mz,true)
+	--else return end
 	if (emitters[name]) then Echo("an emitter with that name already exists") return false end
 	
-	yoffset = yoffset or 0
-	p[2] = p[2] + yoffset	
-	if not (name) then name = (#emitters + 1).." - "..p[1]..", "..p[3]..", "..p[2] end		
+	--yoffset = yoffset or 0
+	--p[2] = p[2] + yoffset	
+	name = name or math.floor(x)..", "..math.floor(z)..", "..math.floor(y)
 
 	-- __newindex should build our tables
-	emitters[name].pos = {x = math.floor(p[1]), y = math.floor(p[2]), z = math.floor(p[3])}	
+	emitters[name] = {}		
+	--emitters[name].gl = {delta = math.random(60), u = math.random(60), v = math.random(60)}
+	emitters[name].pos = {x = math.floor(x), y = math.floor(y), z = math.floor(z)}
 	
 	
 	--emitters[name].light = MapLight(eLightTable)
@@ -649,15 +660,17 @@ function widget:MousePress(x, y, button)
 	--if button == 4 or button == 5 then return false end
 	--if MouseOnGUI() then return false end
 	--if MouseOver(mx, mz_inv) then return true end
-	Echo("main")
-	if button == 1 then
-		if mouseOverEmitter then
+	Echo("main")	
+	if button == 1 then		
+		if drag._type.spawn then
+			return true
+		elseif mouseOverEmitter then
 			local e = emitters[mouseOverEmitter]
 			drag.objects[1] = e
 			drag._type.emitter = true			
 			drag.params.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)
 			Echo("drag timer started")
-			return true
+			return true	
 		elseif modkeys.space and controls.tracklist:IsMouseOver(mx, mz_inv) then -- this needs to check for layer too, somehow : /
 			Echo("mouse over")
 			local tl = controls.tracklist
@@ -678,17 +691,18 @@ function widget:MousePress(x, y, button)
 				Echo("drag timer started")
 				return true
 			end
-		end
-	elseif button == 3 and mouseOverEmitter then return true
+		end		
+	elseif button == 3 and (mouseOverEmitter or drag._type.spawn) then return true
 	end
+
 	return false
 end
 
 
 function widget:MouseRelease(x, y, button)
 	Echo("release")
-	if button == 3 then		
-		if mouseOverEmitter then		
+	if button == 3 then	-- we implicitly cancel spawn placement here. we should reset the button tho, maybe?
+		if mouseOverEmitter and not drag._type.spawn then		
 			if inspectionWindows[mouseOverEmitter].inspect then -- window already existed a moment ago
 				--Echo("kill")
 				inspectionWindows[mouseOverEmitter].inspect = nil -- kill it
@@ -702,12 +716,16 @@ function widget:MouseRelease(x, y, button)
 				inspectionWindows[mouseOverEmitter]:SetPos(xp, yp)
 				--Echo(type(mouseOverEmitter).." - "..type(inspectionWindows[mouseOverEmitter]))
 			end
-		end
 		return
-		
+		end		
 	elseif button == 1 then
 		Echo("hello")
-		if drag._type.sounditems then
+		if drag._type.spawn then						
+			Echo("wub")
+			local p = mcoords or select(2,TraceRay(mx,mz,true))
+			gui.SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + drag.params.hoff)
+			Echo("wub wub")
+		elseif drag._type.sounditems then
 			--local source = drag.params.templates and sounditems.templates or sounditems.instances
 			if mouseOverEmitter then -- there should be none if mouse is over gui so its probably safe				
 				--local e = emitters[mouseOverEmitter]	
@@ -744,13 +762,25 @@ end
 
 -- should rather do this when properities are open
 function widget:MouseWheel(up, value)
+	-- this would require a graphical representation of the spawn (should be there anyway, tho)
+	if drag._type.spawn then						
+		if not modkeys.shift then return false end
+		local p = mcoords or select(2,Spring.TraceRay(x,y,true))		
+		local gh = GetGroundHeight(p[1], p[3])		
+		drag.params.hoff = drag.params.hoff + value * (modkeys.alt and 1 or(modkeys.ctrl and 100 or 10))
+		if (p[2] + drag.params.hoff < gh) then
+			drag.params.hoff = 0
+		end
+		return true
+	end
+	--
 	if not drag.objects[1] and mouseOverEmitter then
 		--local alt,ctrl,_,shift = GetModKeys()
 		if not modkeys.shift then return false end
 		
 		local e = emitters[mouseOverEmitter]
 		local gh = GetGroundHeight(e.pos.x, e.pos.z)		
-		local h = e.pos.y + value * (alt and 1 or(ctrl and 100 or 10))
+		local h = e.pos.y + value * (modkeys.alt and 1 or(modkeys.ctrl and 100 or 10))
 		e.pos.y = h < gh and gh or h 
 		updateTooltip()
 		return true
@@ -764,10 +794,10 @@ function widget:MouseMove(x, y, dx, dy, button)
 			if mcoords then
 				drag.objects[1].pos.x = mcoords[1]
 				drag.objects[1].pos.z = mcoords[3]
-				drag.objects[1].pos.y = mcoords[2] + drag.params.hoff 	
+				drag.objects[1].pos.y = mcoords[2] + (drag.params.hoff or 0)
 				updateTooltip()	
 				return true
-			end
+			end		
 		elseif drag._type.sounditems then --? anything need to be done?		
 		end
 	end
@@ -779,6 +809,10 @@ end
 -------------------------------------------------------------------------------------------------------------------------
 -- UPDATE/MISC
 -------------------------------------------------------------------------------------------------------------------------
+
+function GetDrag()
+	return not drag.started and drag or nil
+end
 
 function RequestReload()
 	needReload = true
@@ -895,8 +929,17 @@ end
 
 function widget:DrawWorld() --?		
 	DrawEmitters(mouseOverEmitter)
+	if drag._type.spawn then 
+		local p = mcoords or select(2,TraceRay(mx,mz,true))
+		if not p then return end
+		p[2] = p[2] + (drag.params.hoff or 0)
+		DrawCursorToWorld(p[1], p[3], p[2], options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value) 
+	end
 end
 
+function widget:DrawScreen()
+	--if drag._type.spawn then DrawCursor(mx, mz, 10, 10, 10) end
+end
 
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
