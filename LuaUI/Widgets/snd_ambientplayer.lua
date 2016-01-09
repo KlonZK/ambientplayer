@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.62'
+local versionNum = '0.621'
 
 function widget:GetInfo()
   return {
@@ -103,10 +103,10 @@ local SOUNDITEM_PROTOTYPE = {
 	rolloff = 0, -- not a good default
 	dopplerscale = 0,
 	-- widget stats
-	length_real = 0,
+	length_real = 0, -- this should be ignored for purpose of playback, unless length_loop isnt set
 	rnd = 0,
-	length_loop = 1, -- length_loop is added? to the length on every loop...
-	delay = 1, -- ...while delay just gets used once at start of game
+	length_loop = 1, -- not sure how this works right now but it should be plainly the length of the loop...
+	delay = 1, -- should be just once
 }
 
 local sounditems = {
@@ -122,7 +122,8 @@ setmetatable(sounditems.templates, {
 		setmetatable(t[k], {__index = SOUNDITEM_PROTOTYPE})
 	end
 }) 
-		
+
+-- actually these should fall back to the template (which should now possible as they store a reference?)
 setmetatable(sounditems.instances, {
 	__newindex = function (t, k, v)		
 		rawset(t, k, v)
@@ -138,7 +139,7 @@ local emitters = {
 	--	[e<string>] = { 
 	--		pos = {x, y, z},
 	--		gl = {delta, u, v},
-	--		sounds = { --< INDEXED TABLE WILL FAIL HORRIBLY IF THIGNS GET REMOVED. NEEDS COUNTERMEASURES OR CHANGE
+	--		sounds = { --< INDEXED TABLE WILL FAIL HORRIBLY IF THINGS GET REMOVED OUT OF ORDER
 	--			[j] = {	
 	--				item = <sounditem>
 	--				generated = <boolean> -- this is not needed anymore
@@ -194,21 +195,23 @@ options = {}
 -- MODULES
 -------------------------------------------------------------------------------------------------------------------------
 
-settings = {paths = {}}
+settings = {paths = {}, browser = {}}
 
-local luastuff = {pairs = pairs, ipairs = ipairs, type = type, string = string, tostring = tostring, tonumber = tonumber, 
+local common = {pairs = pairs, ipairs = ipairs, type = type, string = string, tostring = tostring, tonumber = tonumber, 
 	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, assert = assert, os = os, 
-		math = math, select = select, table = table}
+		math = math, io = io, table = table, next = next, error = error, select = select, widget = widget, Echo = Echo, 
+			options = options, config = config, settings = settings, sounditems = sounditems, emitters = emitters, Spring = Spring}
 
 -- SetupGUI() builds controls so we can't import keys yet
 Echo ("Loading modules...")	
 
-local i_o = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
-				PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME, 
-					TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME, LOG_FILENAME = LOG_FILENAME, 
-						MAPCONFIG_FILENAME = MAPCONFIG_FILENAME, EMITTERS_FILENAME = EMITTERS_FILENAME,
+local i_o = {PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME, 
+				TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME, LOG_FILENAME = LOG_FILENAME, 
+					MAPCONFIG_FILENAME = MAPCONFIG_FILENAME, EMITTERS_FILENAME = EMITTERS_FILENAME,
 						SOUNDS_ITEMS_DEF_FILENAME = SOUNDS_ITEMS_DEF_FILENAME,
-							SOUNDS_INSTANCES_DEF_FILENAME = SOUNDS_INSTANCES_DEF_FILENAME, }
+							SOUNDS_INSTANCES_DEF_FILENAME = SOUNDS_INSTANCES_DEF_FILENAME}
+for k, v in pairs(common) do i_o[k] = v end
+
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_IO
 	if vfsExist(file, VFSMODE) and vfsInclude(file, i_o, VFSMODE) then
@@ -219,7 +222,8 @@ do
 	end
 end
 
-local draw = {widget = widget, Echo = Echo, options = options, emitters = emitters}
+local draw = {}
+for k, v in pairs(common) do draw[k] = v end
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_DRAW
 	if vfsExist(file, VFSMODE) and vfsInclude(file, draw, VFSMODE) then
@@ -232,8 +236,7 @@ end
 local unitools = {getfenv = getfenv, string = string, math = math}
 
 do
-	local file = PATH_LUA..PATH_UTIL..'unicode.lua'
-	Echo(file)
+	local file = PATH_LUA..PATH_UTIL..'unicode.lua'	
 	if vfsExist(file, VFSMODE) then
 		unitools = vfsInclude(file, unitools, VFSMODE)		
 		if unitools then Echo("unicode utils loaded")			
@@ -243,12 +246,9 @@ do
 	end	
 end
 
-local gui = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
-				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls, UpdateMarkerList = draw.UpdateMarkerList,
-					DrawIcons = draw.DrawIcons, i_o = i_o, KEYSYMS = KEYSYMS, VFS = VFS, unitools = unitools}
-for k, v in pairs(luastuff) do
-	gui[k] = v
-end
+local gui = {tracklist_controls = tracklist_controls, emitters_controls = emitters_controls, UpdateMarkerList = draw.UpdateMarkerList,
+				DrawIcons = draw.DrawIcons, i_o = i_o, KEYSYMS = KEYSYMS, VFS = VFS, unitools = unitools}
+for k, v in pairs(common) do gui[k] = v end
 					
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
@@ -736,12 +736,12 @@ function widget:MouseRelease(x, y, button)
 		return
 		end		
 	elseif button == 1 then
-		Echo("hello")
+		--Echo("hello")
 		if drag._type.spawn then						
 			Echo("wub")
 			local p = mcoords or select(2,TraceRay(mx,mz,true))
 			gui.SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + drag.params.hoff)
-			Echo("wub wub")
+			--Echo("wub wub")
 		elseif drag._type.sounditems then
 			--local source = drag.params.templates and sounditems.templates or sounditems.instances
 			if mouseOverEmitter then -- there should be none if mouse is over gui so its probably safe				
@@ -784,9 +784,8 @@ function widget:MouseRelease(x, y, button)
 end
 
 
--- should rather do this when properities are open
 function widget:MouseWheel(up, value)
-	-- this would require a graphical representation of the spawn (should be there anyway, tho)
+	-- this works fine. only thing that isnt ideal is that the spawn isnt visible while the window is open
 	if drag._type.spawn then						
 		if not modkeys.shift then return false end
 		local p = mcoords or select(2,Spring.TraceRay(x,y,true))		
@@ -822,7 +821,7 @@ function widget:MouseMove(x, y, dx, dy, button)
 				updateTooltip()	
 				return true
 			end		
-		elseif drag._type.sounditems then --? anything need to be done?		
+		elseif drag._type.sounditems then --? anything need to be done? could render a sound icon maybe
 		end
 	end
 end
@@ -961,9 +960,10 @@ function widget:DrawWorld() --?
 	end
 end
 
-function widget:DrawScreen()
+-- may want this to render sound icons when dragging?
+--function widget:DrawScreen()
 	--if drag._type.spawn then DrawCursor(mx, mz, 10, 10, 10) end
-end
+--end
 
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
@@ -982,16 +982,7 @@ function widget:SetConfigData(data)
 			settings[k] = v
 		end
 	end
-	
-	--[[
-	if (data and type(data) == 'table') then
-		if data.versionmin and data.versionmin >= 50 then
-			settings = data
-		end
-	end
-	WG.music_volume = settings.music_volume or 0.5
-	LoadKeybinds()
-	--]]
+	--WG.music_volume = settings.music_volume or 0.5	
 end
 
 
@@ -1134,6 +1125,7 @@ end
 
 function widget:GameStart()		
 	gameStarted = true
+	-- if at this point a directory for the map doesnt exist, i could make one
 	Echo ("The map directory is assumed to be "..config.path_map.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")	
 end
 

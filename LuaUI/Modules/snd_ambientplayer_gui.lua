@@ -129,9 +129,6 @@ local col_blue_07 = {0.7, 0.7, 0.8, 0.7}
 
 --local drag
 
-function ProxyHide(control) control:Hide() end
-function ProxyShow(control) control:Show() end
-
 
 local function DeclareControls()
 	---------------------------------------------------- main frame ------------------------------------------------
@@ -801,6 +798,44 @@ defaults to 0]],
 			end
 			self:Invalidate()
 		end,--]]
+		Confirm = function(self)
+			local templates = {}
+			local errors = 0
+			local n = 0
+			for k, v in pairs(controls.browser.layout_templates.list) do
+				n = n + 1
+				local success
+				if settings.browser.autoLocalize then
+					success = i_o.BinaryCopy(k, config.path_map..config.path_sound..v.box.refer2)					
+				end
+				if success then
+					templates[v.box.text] = {
+						file = k, 
+						file_local = config.path_map..config.path_sound..v.box.refer2
+					}
+				else
+					if settings.browser.autoLocalize then Echo("failed to localize file:"..k) end
+					templates[v.box.text] = {file = k,}
+				end
+				if sounditems.templates[v.box.text] then
+					Echo("a template with the name "..v.box.text.." already exists, skipping...")
+					templates[v.box.text] = nil
+					success = false
+				else 
+					sounditems.templates[v.box.text] = templates[v.box.text]
+					v.box:Dispose()
+					v.button:Dispose()
+					controls.browser.layout_templates.list[k] = nil
+					controls.browser.layout_templates:Invalidate() -- this works?				
+				end
+				errors = success and errors or errors + 1
+			end
+			if settings.browser.autoLocalize then
+				Echo("copied "..n.." files, "..errors.." errors")			
+			end		
+			Echo("generated "..n.." templates")
+			i_o:ReloadSoundDefs()	
+		end,
 	}
 	controls.browser.button_userpath = Image:New{
 		parent = window_browser,
@@ -1091,11 +1126,8 @@ defaults to 0]],
 					end
 				end,
 				},
-			}
-
-
-			
-			
+			}			
+			--local filter = '*.wav
 			local dirs, files = VFS.SubDirs(self.path), VFS.DirList(self.path)				
 				
 			for i = 1, #dirs do
@@ -1119,7 +1151,7 @@ defaults to 0]],
 						if btn == 1 then
 							self.parent.path = self.fulltext
 							if not self.parent:Refresh() then
-								Echo("Error: corrupt path "..self.fulltext)								
+								Echo("empty or corrupt path "..self.fulltext)								
 							else								
 								controls.browser.label_path:SetText(self.fulltext)
 							end
@@ -1131,7 +1163,7 @@ defaults to 0]],
 			for i = 1, #files do
 				--Echo(files[i])
 				local ending = string.find(files[i], "ogg$") or string.find(files[i], "wav$")
-				if ending or not self.showOnlySoundFiles then -- this could be an option				 
+				if ending or not settings.browser.showSoundsOnly then -- this could be an option				 
 					local _,_,filename = string.find(files[i], "([^\/\\]+)$")
 					list[#list + 1] = Image:New {
 						parent = self,
@@ -1163,7 +1195,7 @@ defaults to 0]],
 				end			
 			end				
 			self:Invalidate()
-			return #dirs > 0 or #files > 0
+			return #dirs > 0 or #files > 0 -- will this be false for empty folders?
 		end,
 	}
 	--controls.browser.layout_files.list = {}	
@@ -1211,8 +1243,9 @@ defaults to 0]],
 			Echo("adding templates")
 			for i = 1, #items do
 				if items[i].legit and not list[items[i].fulltext] then
-					local ending = string.find(items[i].text, "%.ogg$") or string.find(items[i].text, "%.wav$")
+					local ending = string.find(items[i].text, "%.ogg$") or string.find(items[i].text, "%.wav$")					
 					local name = string.sub(items[i].text, 1, ending - 1)
+					
 					list[items[i].fulltext] = {
 						button = Image:New {
 							parent = controls.browser.layout_templates,
@@ -1233,7 +1266,8 @@ defaults to 0]],
 							padding = {2,0,2,0},
 							textColor = {.8,.8,.8,.9},
 							text = name,
-							refer = items[i].fulltext,
+							refer = items[i].fulltext,							
+							refer2 = items[i].text,
 							tooltip = items[i].fulltext,
 							InputFilter = function(unicode)
 								return string.find(unicode, "[%w_-]")								
@@ -1276,8 +1310,39 @@ defaults to 0]],
 			end
 		},					
 	}	
-
-
+	Checkbox:New {
+		parent = window_browser,
+		x = 25,
+		y = -46,
+		width = 180,
+		height = 20,		
+		fontsize = 10,
+		textColor = col_grey_08,
+		checked = settings.browser.showSoundsOnly,
+		caption = 'show sound files only (.wav/.ogg)',
+		OnChange = {function(self, checked) 
+				settings.browser.showSoundsOnly = checked
+				controls.browser.layout_files:Refresh()
+			end
+		},	
+	}
+	Checkbox:New {
+		parent = window_browser,
+		x = -275,
+		y = -46,
+		width = 100,
+		height = 20,		
+		fontsize = 10,
+		textColor = col_grey_08,
+		checked = settings.browser.autoLocalize,
+		caption = 'autolocalize files',
+		tooltip = 'when this is enabled, selected files will be automatically copied into your maps\' sound folder once your close this window.\n\nnote that internally, the old file & location will be used until the next time you run spring.\n\nthis process may take some time.',
+		OnChange = {function(self, checked) 
+				settings.browser.autoLocalize = checked
+				--controls.browser.layout_files:Refresh()
+			end
+		},	
+	}
 --[[
 		OnSelectItem = {
 			function(self, index, state)								

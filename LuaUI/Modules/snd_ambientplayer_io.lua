@@ -8,16 +8,6 @@
 ------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------
 
-local io = widget.io
-local pairs = widget.pairs
-local ipairs = widget.ipairs
-local math = widget.math
-local error = widget.error
-local table = widget.table
-local next = widget.next
-local string = widget.string
-local tostring = widget.tostring
-local type = widget.type
 
 local VFSMODE = widget.VFSMODE
 
@@ -235,6 +225,35 @@ end
 -- 	I/O FUNCTIONS
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
+
+function BinaryCopy(source, target)
+	local timer = Spring.GetTimer()
+	
+	local sfile, tfile
+	local bufsize = 8192
+	
+	sfile = io.open(source, 'rb')
+	if not sfile then
+		Echo("copy: failed to open source file: "..source)
+		return false
+	end
+	tfile = io.open(target, 'wb')
+	if not tfile then
+		Echo("copy: failed to open target file: "..target)
+		return false
+	end	
+	
+	repeat
+		--local block, rest = sfile:read(bufsize, '*line')
+		local block = sfile:read(bufsize)
+		if block then tfile:write(block) end
+	until(not block)
+	sfile:close()
+	tfile:close()
+	local duration = Spring.DiffTimers(Spring.GetTimer(), timer)
+	Echo("done copying "..source..", spent "..duration.." seconds")
+	return true
+end
 
 function GetSpringDir()
 	local file = io.open('infolog.txt', 'r')	

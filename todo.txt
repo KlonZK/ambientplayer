@@ -1,6 +1,7 @@
 reconsider module environments (add basic lua functions to all environments) x
 remove or fix console
-finish options/settings window
+finish options/settings window and move all the stuff into zk settings
+(epic menu options maybe for player stuff)
 
 continue gui and io implementation:
 - implement saving via gui X
@@ -9,6 +10,9 @@ continue gui and io implementation:
 - implement localizing sounds, if possible
 - implement getting track length from files, if possible
 - improve main window: add tabs for emitters, global, possibly instances
+- consider creating $map.sdd folder and subfolders
+- also consider/test if installing the editor into spring/luaui would be possible
+- consider more chili subclasses for shared functions (mouseover for layout, ..)
 
 player implementation:
 - consider player module
@@ -19,7 +23,3 @@ emitter script implementation:
 - consider how callins are to be implemented
 - consider external scripts
 - consider how functions are to be written to files(savetable may have problems with this)
-
-i love you. :)
-
-

@@ -7,8 +7,6 @@
 --		license : "GNU GPL, v2 or later",												--
 ------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------
-local math = widget.math
-local pairs = widget.pairs
 
 local options = options
 local emitters = emitters
