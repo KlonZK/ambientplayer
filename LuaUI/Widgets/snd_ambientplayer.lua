@@ -1,43 +1,6 @@
---[[
-TODO:
-- add emitters, emitters graphical representation, figure out how tracks and emitters work together VVVv
-- implement adding sound items to emitters VVv
-- implement batch loading, adding, editing vv-
-- restructure? Vvv
-- slash words and vars 
-- build writable tables for options VVv
-- save options, playlist, emitters support (good target for own file) Vv
-- remake initialize() to account for list files Vv -?
-- find out how to find out about file sizes and lengths
-- find out how to create folders 
-- implement log V
-- disallow track names with only numbers --why?
-- split vv - may want to take a look at environemnts and their usefulness
-- may want to add lua functions to all environments in a go
-
-- emit zones -- implausible with current engine but could be approximated with scripts
-- mutex groups -- implement this via scripts?
-- chili support Vv
-- kill console or move it to module and use meta table for words
-
-- make emitters hold actual items? -- too late for this
-- track playing status of emitters using length, make animation play when playing V
-- 
-- continue gui implementation, rework update function vvv
-
-- emitter script implementation:
-- use loadstring for basic scripts
-- consider how callins are to be implemented
-- consider external scripts
-- consider how functions are to be written to files(savetable may have problems with this)
-
---]]
-
---os.getenv("HOME")
-
 include("keysym.h.lua")
 
-local versionNum = '0.61'
+local versionNum = '0.62'
 
 function widget:GetInfo()
   return {
