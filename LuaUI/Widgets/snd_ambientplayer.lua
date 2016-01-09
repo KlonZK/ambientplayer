@@ -35,7 +35,9 @@ TODO:
 
 --os.getenv("HOME")
 
-local versionNum = '0.5'
+include("keysym.h.lua")
+
+local versionNum = '0.61'
 
 function widget:GetInfo()
   return {
@@ -101,6 +103,7 @@ local LOG_FILENAME = 'ambient_log.txt' -- "
 -------------------------------------------------------------------------------------------------------------------------
 -- PACKAGE
 -------------------------------------------------------------------------------------------------------------------------
+
 
 local logfile
 local _log = [[]]
@@ -228,6 +231,12 @@ options = {}
 -- MODULES
 -------------------------------------------------------------------------------------------------------------------------
 
+settings = {paths = {}}
+
+local luastuff = {pairs = pairs, ipairs = ipairs, type = type, string = string, tostring = tostring, tonumber = tonumber, 
+	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, assert = assert, os = os, 
+		math = math, select = select, table = table}
+
 -- SetupGUI() builds controls so we can't import keys yet
 Echo ("Loading modules...")	
 
@@ -257,9 +266,27 @@ do
 	end
 end
 
+local unitools = {getfenv = getfenv, string = string, math = math}
+
+do
+	local file = PATH_LUA..PATH_UTIL..'unicode.lua'
+	Echo(file)
+	if vfsExist(file, VFSMODE) then
+		unitools = vfsInclude(file, unitools, VFSMODE)		
+		if unitools then Echo("unicode utils loaded")			
+		else Echo("failed to load unicode utils") end
+	else
+		Echo("could not find unicode utils")
+	end	
+end
+
 local gui = {widget = widget, Echo = Echo, options = options, config = config, sounditems = sounditems, emitters = emitters,
 				tracklist_controls = tracklist_controls, emitters_controls = emitters_controls, UpdateMarkerList = draw.UpdateMarkerList,
-					DrawIcons = draw.DrawIcons, i_o = i_o}
+					DrawIcons = draw.DrawIcons, i_o = i_o, KEYSYMS = KEYSYMS, VFS = VFS, unitools = unitools}
+for k, v in pairs(luastuff) do
+	gui[k] = v
+end
+					
 do				
 	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
 	if vfsExist(file, VFSMODE) then
@@ -438,6 +465,8 @@ options.delay_tooltip = {
 }
 
 
+
+
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
 -- LOCALS
@@ -602,6 +631,7 @@ end
 -------------------------------------------------------------------------------------------------------------------------
 
 function widget:KeyPress(...)
+	if Spring.IsGUIHidden() then return false end
 	return gui.KeyPress(...)
 	--return true
 end
@@ -609,7 +639,7 @@ end
 function widget:TextInput(...)
 	--Echo("catch")	
 	if Spring.IsGUIHidden() then return false end
-	gui.TextInput(...)
+	return gui.TextInput(...)
 	--if Chili.Screen0.TextInput then
 		--Echo("call")		
 	--	return Chili.Screen0:TextInput(utf8, ...), true
@@ -663,7 +693,7 @@ function widget:MousePress(x, y, button)
 	--if button == 4 or button == 5 then return false end
 	--if MouseOnGUI() then return false end
 	--if MouseOver(mx, mz_inv) then return true end
-	Echo("main")	
+	--Echo("main")	
 	if button == 1 then		
 		if drag._type.spawn then
 			return true
@@ -674,25 +704,46 @@ function widget:MousePress(x, y, button)
 			drag.params.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)
 			Echo("drag timer started")
 			return true	
-		elseif modkeys.space and controls.tracklist:IsMouseOver(mx, mz_inv) then -- this needs to check for layer too, somehow : /
-			Echo("mouse over")
-			local tl = controls.tracklist
-			--Echo(tl.name..tostring(tl.selectedItems))
-			local selection = tl.selectedItems
-			-- only trues but no order 
-			if selection then
-				Echo("selection")				
-				for k, _ in pairs(selection) do
-					local sel = tl.children[k]
-					assert (sel.refer, "selection "..tostring(sel).." missing item reference")
-					drag.objects[#drag.objects + 1] = sel.refer --< why is this not a string
-					Echo("added "..tostring(sel.refer).." to drag")
-				end				
-				drag.params.source = tl
-				drag.params.templates = true
-				drag._type.sounditems = true
-				Echo("drag timer started")
-				return true
+		elseif modkeys.space then
+			if controls.tracklist:IsMouseOver(mx, mz_inv) then -- this needs to check for layer too, somehow : /
+				--Echo("mouse over")
+				local tl = controls.tracklist
+				--Echo(tl.name..tostring(tl.selectedItems))
+				local selection = tl.selectedItems
+				-- only trues but no order 
+				if selection then
+					--Echo("selection")				
+					for k, _ in pairs(selection) do
+						local sel = tl.children[k]
+						assert (sel.refer, "selection "..tostring(sel).." missing item reference")
+						drag.objects[#drag.objects + 1] = sel.refer --< why is this not a string
+						Echo("added "..tostring(sel.refer).." to drag")
+					end				
+					drag.params.source = tl
+					drag.params.templates = true
+					drag._type.sounditems = true
+					Echo("drag timer started")
+					return true
+				end
+			elseif controls.browser.layout_files:IsMouseOver(mx, mz_inv) then
+				--Echo("mouse over")
+				local fl = controls.browser.layout_files
+				local selection = fl.selectedItems
+				if selection then
+					--Echo("selection")				
+					for k, _ in pairs(selection) do
+						local sel = fl.children[k]
+						assert (sel.fulltext, "selection "..tostring(sel).." missing item reference")
+						drag.objects[#drag.objects + 1] = {text = sel.text, fulltext = sel.fulltext, legit = sel.legit}
+						Echo("added "..tostring(sel.fulltext).." to drag")
+					end				
+					drag.params.source = fl
+					-- drag.params.templates = true
+					drag._type.files = true
+					Echo("drag timer started")
+					return true
+				end
+				
 			end
 		end		
 	elseif button == 3 and (mouseOverEmitter or drag._type.spawn) then return true
@@ -748,6 +799,13 @@ function widget:MouseRelease(x, y, button)
 				else Echo("drag dropped")
 				-- else just drop it			
 				end
+			end
+		elseif drag._type.files then			
+			local target = controls.browser.layout_templates:IsMouseOver(mx, mz_inv) 
+				and controls.browser.layout_templates
+			if target then
+				target:AddTemplates(drag.objects)
+			else Echo("drag dropped")
 			end
 		end
 	end		
@@ -949,6 +1007,31 @@ end
 -- INIT
 -------------------------------------------------------------------------------------------------------------------------
 
+function widget:GetConfigData()
+	Echo("exporting widget config...")	
+	return settings
+end
+
+function widget:SetConfigData(data)
+	Echo("importing widget config...")
+	if type(data) == 'table' then
+		for k, v in pairs(data) do
+			settings[k] = v
+		end
+	end
+	
+	--[[
+	if (data and type(data) == 'table') then
+		if data.versionmin and data.versionmin >= 50 then
+			settings = data
+		end
+	end
+	WG.music_volume = settings.music_volume or 0.5
+	LoadKeybinds()
+	--]]
+end
+
+
 function widget:Initialize()
 
 	gui.DoPlay = DoPlay
@@ -1028,7 +1111,11 @@ function widget:Initialize()
 			Echo("sounds file was empty", true)
 		else
 			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.instances[s] = params end			
+			for s, params in pairs(list.Sounditems) do 
+				i = i + 1
+				sounditems.instances[s] = params
+				--sounditems.instances[s].endTimer = 0
+			end			
 			Echo ("found "..i.." sounds", true)					
 		end		
 	else
@@ -1040,16 +1127,32 @@ function widget:Initialize()
 		local tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
 		if tmp then
 			local i = 0
-			for e, params in pairs(tmp) do i = i + 1; emitters[e] = params end					
+			for e, params in pairs(tmp) do 
+				i = i + 1 
+				emitters[e] = params 
+				params.isPlaying = nil
+				for _, v in ipairs(params.sounds) do
+					v.endTimer = 0
+					-- ...
+				end
+			end					
 			Echo ("found "..i.." emitters", true)
 		else Echo ("emitters file was empty", true)
 		end	
 	end	
 	
-	Echo("Updating local config...")	
+	Echo("updating map config...")	
 	if not (config.path_map) then config.path_map = 'maps/'..Game.mapName..'.sdd/' end
 	config.mapX = Game.mapSizeX
 	config.mapZ = Game.mapSizeZ
+	
+	if not (config.path_spring) or #VFS.DirList(config.path_spring) == 0 then
+		Echo("searching spring folder...")
+		if VFS.FileExists('infolog.txt', VFSMODE) then			
+			config.path_spring = i_o.GetSpringDir()
+		end	
+	end
+	
 		
 	--logfile = io.open(config.path_map..PATH_LUA..PATH_CONFIG..LOG_FILENAME, 'w')	
 	logfile = io.open(LOG_FILENAME, 'w')
@@ -1361,17 +1464,19 @@ local function Invoke(args)
 		
 		Echo ("----- "..path.." -----")		
 		for dir, text in pairs(subdirs) do
+			Echo("*dir*")
 			if (pattern == "%." or pattern == ".+%.") then
-				if (string.match(text, "[%.]")) then Echo(text) end
+				if (string.match(text, "[%.]")) then Echo(dir.." - "..text) end
 			else
-				if (string.match(text, pattern)) then Echo(text) end
+				if (string.match(text, pattern)) then Echo(dir.." - "..text) end
 			end	
 		end
 		for file, text in pairs(files) do
+			Echo("*file*")
 			if (pattern == "%." or pattern == ".+%.") then
-				if not (string.match(text, "[%.]")) then Echo(text) end
+				if not (string.match(text, "[%.]")) then Echo(file.." - "..text) end
 			else
-				if (string.match(text, pattern)) then Echo(text) end
+				if (string.match(text, pattern)) then Echo(file.." - "..text) end
 			end	
 		end
 		return true
@@ -1508,7 +1613,7 @@ local function Invoke(args)
 		return
 	end
 	Echo("not a valid command")	
-	
+
 end
 
 

@@ -15,7 +15,7 @@ local Emitters = {
 		},
 		sounds = {
 			[1] = {
-				endTimer = -36,
+				endTimer = -1,
 				isPlaying = false,
 				item = "$center$ wind_mighty_3",
 				startTimer = 1,
@@ -93,32 +93,32 @@ local Emitters = {
 		sounds = {},
 	},
 	test = {
-		isPlaying = true,
+		isPlaying = false,
 		gl = {
-			delta = 3.2499980926514,
-			u = 33.179943084717,
-			v = 45.200099945068,
+			delta = 16.650032043457,
+			u = 10.500003814697,
+			v = 38.600074768066,
 		},
 		pos = {
-			x = 4461.50390625,
-			y = 219.005859375,
-			z = 2386.6391601563,
+			x = 4434.1938476563,
+			y = 219.14819335938,
+			z = 2368.4323730469,
 		},
 		sounds = {
 			[1] = {
-				endTimer = 52,
+				endTimer = -1,
 				isPlaying = false,
 				item = "$test$ brook_4",
 				startTimer = 1,
 			},
 			[2] = {
-				endTimer = -17,
+				endTimer = -1,
 				isPlaying = false,
 				item = "$test$ brook_2",
 				startTimer = 1,
 			},
 			[3] = {
-				endTimer = -17,
+				endTimer = -1,
 				isPlaying = false,
 				item = "$test$ brook_1",
 				startTimer = 1,

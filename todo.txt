@@ -1,11 +1,11 @@
-reconsider module environments (add basic lua functions to all environments)
+reconsider module environments (add basic lua functions to all environments) x
 remove or fix console
 finish options/settings window
 
 continue gui and io implementation:
 - implement saving via gui X
 - implement adding emitters via gui X
-- implement loading sounds (file browser?)
+- implement loading sounds (file browser?) x
 - implement localizing sounds, if possible
 - implement getting track length from files, if possible
 - improve main window: add tabs for emitters, global, possibly instances
@@ -20,6 +20,6 @@ emitter script implementation:
 - consider external scripts
 - consider how functions are to be written to files(savetable may have problems with this)
 
-i love you.
+i love you. :)
 
 

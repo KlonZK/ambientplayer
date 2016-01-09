@@ -9,23 +9,11 @@
 ------------------------------------------------------------------------------------------
 
 
-local pairs = widget.pairs
-local ipairs = widget.ipairs
-local type = widget.type
-local string = widget.string
-local tostring = widget.tostring
-local tonumber = widget.tonumber
-local setmetatable = widget.setmetatable
-local getfenv = widget.getfenv
-local setfenv = widget.setfenv
-local rawset = widget.rawset
-local assert = widget.assert
-local os = widget.os
-local math = widget.math
-local select = widget.select
+
 
 local PATH_LUA = widget.LUAUI_DIRNAME
 
+local settings = widget.settings
 local options = options
 local config = config
 local emitters = emitters
@@ -47,25 +35,34 @@ local Trackbar
 local Label
 local Line
 local FilterEditBox
+local MouseOverTextBox
 local ClickyTextBox
 local gl_AnimatedImage
 --local color2incolor
 --local incolor2color
 
+local icons = {}
+
 -- these dont really have to be locals? as images are just loaded once
-local SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
-local HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
-local CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
-local PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
-local PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
---local PLAYER_CONTROLS_ICON = PATH_LUA..'Images/Commands/Bold/'..'drop_beacon.png'
-local CLOSE_ICON = PATH_LUA..'Images/close.png'
-local CLOSEALL_ICON = PATH_LUA..'Images/closeall.png'
-local CONFIRM_ICON = PATH_LUA..'Images/arrow_green.png'
---local UNDO_ICON = PATH_LUA..'Images/undo.png'
-local COGWHEEL_ICON = PATH_LUA..'Images/cogwheel.png'
-local SAVE_ICON = PATH_LUA..'Images/disc_save_2.png'
-local LOAD_ICON = PATH_LUA..'Images/disc_load_2.png'
+icons.SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
+icons.HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
+icons.CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
+icons.PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
+icons.PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
+--icons.PLAYER_CONTROLS_ICON = PATH_LUA..'Images/Commands/Bold/'..'drop_beacon.png'
+icons.CLOSE_ICON = PATH_LUA..'Images/close.png'
+icons.CLOSEALL_ICON = PATH_LUA..'Images/closeall.png'
+icons.CONFIRM_ICON = PATH_LUA..'Images/arrow_green.png'
+icons.UNDO_ICON = PATH_LUA..'Images/undo.png'
+icons.COGWHEEL_ICON = PATH_LUA..'Images/cogwheel.png'
+icons.SAVE_ICON = PATH_LUA..'Images/disc_save_2.png'
+icons.LOAD_ICON = PATH_LUA..'Images/disc_load_2.png'
+icons.MUSIC_ICON = PATH_LUA..'Images/music.png'
+icons.SPRING_ICON = PATH_LUA..'Images/spring_logo.png'
+icons.FILE_ICON = PATH_LUA..'Images/file.png'
+icons.FOLDER_ICON = PATH_LUA..'Images/folder.png'
+icons.NEWFOLDER_ICON = PATH_LUA..'Images/folder_add.png'
+icons.MUSICFOLDER_ICON = PATH_LUA..'Images/folder_music.png'
 
 local HELPTEXT = [[generic info here]]
 
@@ -102,11 +99,11 @@ local scroll_emitters
 
 local window_console
 local scroll_console
-local ClickyTextBox_console
+local MouseOverTextBox_console
 
 local window_help
 local scroll_help
-local ClickyTextBox_help
+local MouseOverTextBox_help
 
 local window_settings
 local tabbar_settings
@@ -121,6 +118,7 @@ local tabs_settings = {}
 --local label_inspect
 
 local col_green_1 = {0.4, 1, 0.1, 1}
+local col_red_1 = {1, 0.2, 0.1, 1}
 local col_green_06 = {0, 0.6, 0.2, 0.9}
 local col_yellow = {0.9, 0.9, 0, 0.9}
 local col_white_09 = {0.9, 0.9, 0.9, 1}
@@ -234,7 +232,7 @@ local function DeclareControls()
 		width = "100%",
 		height = "100%",
 		--caption = '',
-		--file = COGWHEEL_ICON,
+		--file = icons.COGWHEEL_ICON,
 	}
 
 	
@@ -251,7 +249,7 @@ local function DeclareControls()
 			Image:New {
 				width = "100%",
 				height = "100%",				
-				file = HELP_ICON,
+				file = icons.HELP_ICON,
 			},
 		}
 	}
@@ -278,7 +276,7 @@ local function DeclareControls()
 			Image:New {
 				width = "100%",
 				height = "100%",				
-				file = SETTINGS_ICON,
+				file = icons.SETTINGS_ICON,
 			}
 		}	
 	}
@@ -304,7 +302,7 @@ local function DeclareControls()
 			Image:New {
 				width = "100%",
 				height = "100%",				
-				file = SAVE_ICON,
+				file = icons.SAVE_ICON,
 			}
 		}	
 	}
@@ -324,13 +322,19 @@ local function DeclareControls()
 		padding = {8,8,8,8,},
 		
 		OnClick = {function() --< it is kinda hidden away here but should do.
-
+			window_browser:ToggleVisibility()
+			if window_browser.visible then 
+				controls.browser.label_path.text = (config.path_map or '')..config.path_sound
+				controls.browser.layout_files:Refresh() 
+				--controls.browser.layout_files.list.home_img.tooltip = 
+				--	'spring home directory:\n\n\255\255\255\0'..(config.path_spring or '')..'\255\255\255\255'
+			end
 		end},
 		children = {
 			Image:New {
 				width = "100%",
 				height = "100%",				
-				file = LOAD_ICON,
+				file = icons.LOAD_ICON,
 			}
 		}	
 	}
@@ -347,7 +351,7 @@ local function DeclareControls()
 			Image:New {
 				width = "100%",
 				height = "100%",				
-				file = CONSOLE_ICON,
+				file = icons.CONSOLE_ICON,
 			},
 		}
 	}	
@@ -425,20 +429,22 @@ local function DeclareControls()
 		resizable = true,
 		autosize = true,
 	}
-	ClickyTextBox_console = ClickyTextBox:New {
+	MouseOverTextBox_console = MouseOverTextBox:New {
 		x = 4,
 		y = 0,
 		autosize = true,
 		parent = scroll_console,
 		align = 'left',
 		textColor = col_yellow,
+		textColorNormal = col_yellow,
+		textColorError = col_red_1,
 		backgroundColor = col_grey_02,
 		borderColor = col_grey_03,
 		text = '',	
 	}
 	
 	containers.console = window_console
-	controls.log = ClickyTextBox_console
+	controls.log = MouseOverTextBox_console
 	
 	---------------------------------------------------- help window ------------------------------------------------
 
@@ -469,7 +475,7 @@ local function DeclareControls()
 		resizable = true,
 		autosize = true,
 	}
-	ClickyTextBox_help = ClickyTextBox:New {
+	MouseOverTextBox_help = MouseOverTextBox:New {
 		x = 4,
 		y = 0,
 		autosize = true,
@@ -602,8 +608,8 @@ defaults to 0]],
 		clientHeight = 216,
 		--backgroundColor = col_grey_08,	
 		controls_props = {},
-	}		
-	controls.properties.file = ClickyTextBox:New {
+	}
+	controls.properties.file = MouseOverTextBox:New {
 		textColor = col_green_1,
 		y = 16,
 		x = 12,
@@ -653,7 +659,7 @@ defaults to 0]],
 	
 	
 	for i, prop in ipairs(props) do					
-		ClickyTextBox:New { 
+		MouseOverTextBox:New { 
 			--refer = i,			
 			padding = {0,4,0,0},
 			clientWidth = 80,
@@ -681,7 +687,7 @@ defaults to 0]],
 		Image:New {					
 			refer = i,
 			parent = layout_properties,
-			file = COGWHEEL_ICON,
+			file = icons.COGWHEEL_ICON,
 			margin = {0,0,10,0},
 			width = 14,
 			height = 14,
@@ -714,7 +720,7 @@ defaults to 0]],
 	controls.properties.in3_defaultBtn = Image:New {					
 		--refer = i,
 		parent = window_properties,
-		file = COGWHEEL_ICON,
+		file = icons.COGWHEEL_ICON,
 		y = 184 + label_height,
 		x = 70,
 		width = 14,
@@ -733,9 +739,10 @@ defaults to 0]],
 			self:Invalidate()
 		end,			
 	}
-	local button_discard = Image:New {					
+	-- local button_discard = Image:New {
+	Image:New {
 		parent = window_properties,
-		file = CLOSE_ICON,
+		file = icons.CLOSE_ICON,
 		x = 315,
 		y = -30,
 		width = 20,
@@ -748,9 +755,10 @@ defaults to 0]],
 			end
 		},					
 	}	
-	local button_confirm = Image:New {					
+	-- local button_confirm = Image:New {
+	Image:New {
 		parent = window_properties,
-		file = CONFIRM_ICON,
+		file = icons.CONFIRM_ICON,
 		x = 350,
 		y = -30,
 		width = 20,
@@ -768,6 +776,531 @@ defaults to 0]],
 	
 	window_properties:Hide()
 	containers.properties = window_properties
+	
+	---------------------------------------------------- browser window ------------------------------------------------
+	
+	controls.browser = {}
+	
+	window_browser = Window:New {
+		x = "25%",
+		y = "25%",
+		parent = screen0,
+		caption = "Load Sound Files",
+		draggable = true,
+		resizable = false,
+		dragUseGrip = true,
+		clientWidth = 600,
+		clientHeight = 400,
+		autosize = false,
+		--[[
+		Refresh = function(self, ...) 
+			controls.browser.layout_files:Refresh()
+			local list = controls.browser.layout_templates.children
+			for i = 1, #list do
+				list[i]:Dispose()			
+			end
+			self:Invalidate()
+		end,--]]
+	}
+	controls.browser.button_userpath = Image:New{
+		parent = window_browser,
+		file = icons.NEWFOLDER_ICON,
+		x = 25,
+		y = 18,
+		width = 18,
+		height = 18,
+		tooltip = 'install a permanent link to this folder that will be stored in the editor configuration.\n\nuse this to remember the location of your sound collection, drive letters, mounts, etc...',
+		OnClick = {
+			function(self, ...)
+				local btn = select(3,...)
+				if btn == 1 then
+					local legit = #VFS.SubDirs(controls.browser.label_path.text) > 0 
+						or #VFS.DirList(controls.browser.label_path.text) > 0		
+					controls.browser.label_path.legit = legit
+					controls.browser.label_path.font:SetColor(legit and col_green_1 or col_red_1)	
+					if legit and not settings.paths[controls.browser.label_path.text] then
+						-- we storing a double reference for this, so we can both use indizes and lookup by name
+						-- we cant just use pairs later because an options table contains all kinds of crap
+						settings.paths[controls.browser.label_path.text] = true
+						settings.paths[#settings.paths + 1] = controls.browser.label_path.text
+						controls.browser.layout_files:Refresh()
+					end
+				end
+			end,
+		},		
+	}
+	
+	controls.browser.label_path = FilterEditBox:New {
+		parent = window_browser,
+		x = 47,
+		y = 16,
+		clientWidth = 522,	
+		draggable = false,
+		resiziable = false,
+		fontsize = 10,
+		backgroundColor = {.1,.1,.1,.5},
+		borderColor = {.4,.4,.4,.5},
+		--textColor = {.8,.8,.8,.9},
+		textColor = col_green_1,
+		text = '',
+		legit = true,	
+		Confirm = function(self,...) -- this probably triggers when its changed externally?			
+			--self.text = #self.text < 1 and './' or self.text			
+			--if not string.sub(self.text, -1) == '/' then self.text = self.text..'/' end
+			controls.browser.layout_files.path = self.text
+			self.legit = controls.browser.layout_files:Refresh()
+			self.font:SetColor(self.legit and col_green_1 or col_red_1)
+			--local dirs, files	= VFS.SubDirs(self.text), VFS.DirList(self.text)
+			--if #dirs > 0 or #files > 0 then controls.browser.layout_files.path = self.text end			
+		end,
+		Discard = function(self,...)
+			self.text = controls.browser.layout_files.path
+		end,
+	}	
+	controls.browser.scroll_files = ScrollPanel:New {
+		parent = window_browser,
+		x = 25,
+		y = 45,			
+		padding = {5,5,5,5},
+		clientWidth = 240,
+		clientHeight = 290,
+		scrollPosX = -16,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,		
+	}	
+	controls.browser.layout_files = LayoutPanel:New {
+		parent = controls.browser.scroll_files,
+		minWidth = 230,
+		--maxWidth = 230,
+		--clientWidth = 250,
+		--clientHeight = 300,
+		autosize = true,
+		resizable = false,
+		draggable = false,
+		centerItems = false,
+		selectable = true,
+		multiSelect = true,
+		align = 'left',
+		columns = 2,
+		itemPadding = {3,2,3,2},
+		itemMargin = {0,0,0,0},
+		list = {},
+		OnSelectItem = {
+			function(self, index, state)								
+				local c = self.children[index]				
+				if c and c.AllowSelect then c:AllowSelect(index, state) end
+				-- Echo("layout: "..index)
+			end				
+		},
+		IsMouseOver	= function(self, mx, my) 
+			local x, y = self:LocalToScreen(self.x, self.y)
+			Echo("layout_files testing: "..mx..", "..my)
+			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))
+			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+		end,		
+		Refresh = function(self)
+			self.path = self.path or config.path_map..config.path_sound			
+			--Echo("path is: "..self.path)
+			--self.list = self.list or {}
+			local list = self.list
+			for i = 1, #list do
+				--Echo("disposing of index "..i)
+				list[i]:Dispose()
+				list[i]:Invalidate()
+				list[i] = nil
+			end	
+			
+			for i, v in ipairs(settings.paths) do
+				if type(v) == 'string' then
+					Echo("adding link: "..i.." : "..v)
+					local label
+					list[#list + 1] = Image:New {
+						parent = controls.browser.layout_files,
+						file = icons.NEWFOLDER_ICON,
+						width = 12,
+						height = 12,					
+						tooltip = 'right click to remove',
+						refer = v,
+						OnClick = {
+							function(self, ...)
+								local btn = select(3,...)
+								if btn == 1 then
+									self.parent.path = self.refer
+									self.parent:Refresh()					
+									controls.browser.label_path:SetText(self.refer)
+								elseif btn == 3 then													
+									settings.paths[v] = nil
+									table.remove(settings.paths, i)
+									self.parent:Refresh()
+								end
+							end,
+						},
+					}		 
+					list[#list + 1] = ClickyTextBox:New {
+						parent = controls.browser.layout_files,
+						clientWidth = 500, --226,	
+						fontsize = 10,					
+						textColor = {.8,.8,.8,.9},
+						refer = v,
+						text = v, --string.upper(k),
+						OnClick = {function(self,...)
+							local btn = select(3,...)
+							if btn == 1 then
+								self.parent.path = self.refer
+								self.parent:Refresh()					
+								controls.browser.label_path:SetText(self.refer)
+							end
+						end,
+						},			
+					}
+				end
+			end	
+			
+			--controls.browser.layout_files.list.home_img = Image:New {
+			list[#list + 1] = Image:New { 
+				parent = controls.browser.layout_files,
+				file = icons.SPRING_ICON,
+				width = 12,
+				height = 12,
+				tooltip = 'the spring home directory.\n\nthis path is the real location of your spring engine and is not to be confused with the vfs root directory.\n\n'
+				..'\255\255\255\0'..(config.path_spring or '')..'\255\255\255\255',
+				OnClick = {
+					function(self, ...)
+						local btn = select(3,...)
+						if btn == 1 then
+							self.parent.path = config.path_spring or ''
+							self.parent:Refresh()					
+							controls.browser.label_path:SetText(config.path_spring or '')
+						end
+					end,
+				},
+			}
+			--controls.browser.layout_files.list.home = ClickyTextBox:New {
+			list[#list + 1] = ClickyTextBox:New {	
+				parent = controls.browser.layout_files,
+				clientWidth = 500, --226,	
+				fontsize = 10,					
+				textColor = {.8,.8,.8,.9},
+				text = '$SPRING',
+				OnClick = {function(self,...)
+					local btn = select(3,...)
+					if btn == 1 then
+					self.parent.path = config.path_spring or ''
+					self.parent:Refresh()					
+					controls.browser.label_path:SetText(config.path_spring or '')
+					end
+				end,
+				},			
+			}		
+			--controls.browser.layout_files.list.vfs_img = Image:New {
+			list[#list + 1] = Image:New {			
+				parent = controls.browser.layout_files,
+				file = icons.SPRING_ICON,
+				width = 12,
+				height = 12,
+				tooltip = 'root of the virtual file system. equals ".", "./", "/" and the empty string. \n\nwidgets can only write into the virtual file system, ie. subfolders of the spring directory.\n\nall write paths must be specified relative to the vfs root, not as absolute paths, eg. \n\n \255\255\255\0\'/sounds/ambient/\'\n\n\255\255\255\255instead of\n\n\255\255\255\0\'C:/someplace/.../sounds/ambient/\'\255\255\255\255\n\nnormally, the widget handles this process.\n\n\255\255\150\0if you find that you are unable to save into your working directory with this widget, try running spring with the --write-dir command line parameter pointing to the spring directory\255\255\255\255',
+				OnClick = {
+					function(self, ...)
+						local btn = select(3,...)
+						if btn == 1 then
+							self.parent.path = ''
+							self.parent:Refresh()					
+							controls.browser.label_path:SetText('')					
+						end
+					end,
+				},
+			}
+			--controls.browser.layout_files.list.vfs = ClickyTextBox:New {
+			list[#list + 1] = ClickyTextBox:New {	
+				parent = controls.browser.layout_files,
+				clientWidth = 500, --226,	
+				fontsize = 10,					
+				textColor = {.8,.8,.8,.9},
+				text = '$VFS_ROOT',			
+				OnClick = {function(self,...)
+					local btn = select(3,...)
+					if btn == 1 then
+						self.parent.path = ''
+						self.parent:Refresh()					
+						controls.browser.label_path:SetText('')					
+					end
+				end,
+				},			
+			}
+			--controls.browser.layout_files.list.sound_img = ClickyTextBox:New {
+			list[#list + 1] = Image:New {
+				parent = controls.browser.layout_files,
+				file = icons.MUSICFOLDER_ICON,
+				width = 12,
+				height = 12,
+				tooltip = 'the ambient sound folder inside the map directory, inside the vfs.\n\nall sounds the player will be using in the finished map will be stored here.\n\n'..
+					'\255\255\255\0$VFS_ROOT/'..config.path_map..config.path_sound..'\255\255\255\255',
+				OnClick = {function(self,...)
+					self.parent.path = config.path_map..config.path_sound
+					self.parent:Refresh()					
+					controls.browser.label_path:SetText(config.path_map..config.path_sound)
+				end,
+				},				
+			}
+			--controls.browser.layout_files.list.sound = ClickyTextBox:New {
+			list[#list + 1] = ClickyTextBox:New {
+				parent = controls.browser.layout_files,
+				clientWidth = 500, --226,	
+				fontsize = 10,					
+				textColor = {.8,.8,.8,.9},
+				text = '$MAP/sounds/ambient',				
+				OnClick = {function(self,...)
+					self.parent.path = config.path_map..config.path_sound
+					self.parent:Refresh()					
+					controls.browser.label_path:SetText(config.path_map..config.path_sound)
+				end,
+				},
+			}			
+			--controls.browser.layout_files.list.back_img = Image:New {
+			list[#list + 1] = Image:New {
+				parent = controls.browser.layout_files,
+				file = icons.UNDO_ICON,
+				width = 12,
+				height = 12,					
+			}
+			--controls.browser.layout_files.list.back = ClickyTextBox:New {
+			list[#list + 1] = ClickyTextBox:New {
+				parent = controls.browser.layout_files,
+				clientWidth = 500, --226,	
+				fontsize = 10,					
+				textColor = {.8,.8,.8,.9},
+				text = '..',
+				OnClick = {function(self,...)
+					local btn = select(3,...)
+					if btn == 1 then
+						local path = self.parent.path
+						if #path > 0 then
+							local lastchar = string.sub(path, -1)
+							if not (lastchar == '\/' or lastchar == '\\') then
+								path = path..'\/'
+							end					
+							local a,b,remain = string.find(path, '[^\/\\]+[\/\\]$') -- "([^\/\\]+)$"
+							--Echo(path)
+							remain = string.sub(path, 1, a - 1)
+							if remain then
+								self.parent.path = remain
+								self.parent:Refresh()					
+								controls.browser.label_path:SetText(remain)
+							end	
+						end	
+					end
+				end,
+				},
+			}
+
+
+			
+			
+			local dirs, files = VFS.SubDirs(self.path), VFS.DirList(self.path)				
+				
+			for i = 1, #dirs do
+				--Echo(dirs[i])
+				local _,_,dirname = string.find(dirs[i], "([^\/\\]+)[\/\\]$")
+				list[#list + 1] = Image:New {
+					parent = self,
+					file = icons.FOLDER_ICON,
+					width = 12,
+					height = 12,					
+				} 
+				list[#list + 1] = ClickyTextBox:New {
+					parent = self,
+					clientWidth = 500, --226,	
+					fontsize = 10,					
+					textColor = {.8,.8,.8,.9},
+					fulltext = dirs[i],
+					text = dirname,
+					OnClick = {function(self,...)
+						local btn = select(3,...)
+						if btn == 1 then
+							self.parent.path = self.fulltext
+							if not self.parent:Refresh() then
+								Echo("Error: corrupt path "..self.fulltext)								
+							else								
+								controls.browser.label_path:SetText(self.fulltext)
+							end
+						end
+					end,					
+					},
+				}
+			end					
+			for i = 1, #files do
+				--Echo(files[i])
+				local ending = string.find(files[i], "ogg$") or string.find(files[i], "wav$")
+				if ending or not self.showOnlySoundFiles then -- this could be an option				 
+					local _,_,filename = string.find(files[i], "([^\/\\]+)$")
+					list[#list + 1] = Image:New {
+						parent = self,
+						file = ending and icons.MUSIC_ICON or icons.FILE_ICON,
+						width = 12,
+						height = 12,					
+					} 
+					list[#list + 1] = MouseOverTextBox:New {
+						parent = self,
+						clientWidth = 500, --226,	
+						fontsize = 10,						
+						textColor = {.8,.8,.8,.9},
+						textColorSelected = col_green_1,
+						textColorForbidden = col_red_1,
+						textColorNormal = {.8,.8,.8,.9},
+						fulltext = files[i],
+						text = filename,	
+						AllowSelect = function(self, idx, select)							
+							if select then 
+								self.legit = ending
+								self.font:SetColor(ending and self.textColorSelected or self.textColorForbidden)
+							else 
+								self.legit = nil
+								self.font:SetColor(self.textColorNormal) 
+							end
+							self:Invalidate()
+						end,						
+					}
+				end			
+			end				
+			self:Invalidate()
+			return #dirs > 0 or #files > 0
+		end,
+	}
+	--controls.browser.layout_files.list = {}	
+	
+		
+	
+	controls.browser.scroll_templates = ScrollPanel:New {
+		parent = window_browser,
+		x = 325,
+		y = 45,		
+		padding = {5,5,5,5},
+		clientWidth = 240,
+		clientHeight = 290,
+		scrollPosX = -16,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+	}
+	controls.browser.layout_templates = LayoutPanel:New {		
+		parent = controls.browser.scroll_templates,
+		minWidth = 230,
+		maxWidth = 520,
+		minHeight = 280,
+		--clientWidth = 250,
+		--clientHeight = 300,	
+		autosize = true,
+		resizable = false,
+		draggable = false,	
+		centerItems = false,
+		orientation = 'vertical',
+		align = 'left',
+		columns = 2,
+		itemPadding = {3,2,3,2},
+		itemMargin = {0,0,0,0},
+		list = {},	
+		IsMouseOver	= function(self, mx, my) 
+			local x, y = self:LocalToScreen(self.x, self.y)
+			Echo("layout_templates testing: "..mx..", "..my)
+			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))			
+			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+		end,
+		AddTemplates = function(self, items)
+			Echo("call")
+			if not items then return end
+			local list = self.list
+			Echo("adding templates")
+			for i = 1, #items do
+				if items[i].legit and not list[items[i].fulltext] then
+					local ending = string.find(items[i].text, "%.ogg$") or string.find(items[i].text, "%.wav$")
+					local name = string.sub(items[i].text, 1, ending - 1)
+					list[items[i].fulltext] = {
+						button = Image:New {
+							parent = controls.browser.layout_templates,
+							file = icons.CLOSE_ICON,
+							width = 12,
+							height = 12,							
+							tooltip = 'remove from selection',
+							refer = items[i].fulltext,
+							color = col_red_1,
+						},					
+						box = FilterEditBox:New {
+							parent = controls.browser.layout_templates,
+							clientHeight = 12,
+							clientWidth = 500, --226,	
+							fontsize = 10,					
+							borderColor = {.2,.2,.2,.5},
+							borderColor2 = {.2,.2,.2,.5},
+							padding = {2,0,2,0},
+							textColor = {.8,.8,.8,.9},
+							text = name,
+							refer = items[i].fulltext,
+							tooltip = items[i].fulltext,
+							InputFilter = function(unicode)
+								return string.find(unicode, "[%w_-]")								
+							end,
+						},
+					}
+				end
+			end
+			self:Invalidate()
+		end,
+	}
+	-- local button_discard = Image:New {
+	Image:New {
+		parent = window_browser,
+		file = icons.CLOSE_ICON,
+		x = -90,
+		y = -45,
+		width = 20,
+		height = 20,
+		tooltip = 'cancel',
+		color = {0.8,0.3,0.1,0.7}, --
+		OnClick = {
+			function(self,...)
+				self.parent:Hide()
+			end
+		},					
+	}	
+	-- local button_confirm = Image:New {
+	Image:New {
+		parent = window_browser,
+		file = icons.CONFIRM_ICON,
+		x = -45,
+		y = -45,
+		width = 20,
+		height = 20,
+		tooltip = 'add templates',		
+		OnClick = {
+			function(self,...)
+				self.parent:Confirm()
+			end
+		},					
+	}	
+
+
+--[[
+		OnSelectItem = {
+			function(self, index, state)								
+				local c = self.children[index]				
+				if c and c.AllowSelect then c:AllowSelect(index, state) end
+				Echo("layout: "..index)
+				--if c.refer then Echo(c.refer) end
+				--for k,v in pairs(self.selectedItems) do
+				--	Echo(k..", "..tostring(v))
+				--end
+			end				
+		},
+		IsMouseOver	= function(self, mx, my) 
+			local x, y = self:LocalToScreen(self.x, self.y)
+			Echo("test: "..mx..", "..my)
+			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))
+			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+		end,
+--]]	
+	
+	
+	window_browser:Hide()
+	containers.browser = window_browser
 	
 	---------------------------------------------------- settings window ------------------------------------------------
 	window_settings = Window:New {
@@ -1077,7 +1610,7 @@ local function DeclareFunctions()
 		--local i = controls.main and #controls.main or 1 --< cant index the table properly if things get removed
 			if not controls.main['label_'..item] then -- make new controls for newly added items
 				valid = false
-				controls.main['label_'..item] = ClickyTextBox:New { --< should make custom clickie ClickyTextBox for this
+				controls.main['label_'..item] = MouseOverTextBox:New { --< should make custom clickie MouseOverTextBox for this
 					refer = item,					
 					clientWidth = 200,
 					parent = layout_main,
@@ -1110,7 +1643,7 @@ local function DeclareFunctions()
 						self:Invalidate()
 					end,					
 				}
-				controls.main['length_'..item] = ClickyTextBox:New {
+				controls.main['length_'..item] = MouseOverTextBox:New {
 					refer = item,
 					x = 204,
 					clientWidth = 26,
@@ -1128,7 +1661,7 @@ local function DeclareFunctions()
 				controls.main['editBtn_'..item] = Image:New {
 					refer = item,
 					parent = layout_main,
-					file = PROPERTIES_ICON,
+					file = icons.PROPERTIES_ICON,
 					width = 20,
 					height = 20,
 					tooltip = 'Sounditem Properties',
@@ -1147,7 +1680,7 @@ local function DeclareFunctions()
 				controls.main['playBtn_'..item] = Image:New {
 					refer = item,
 					parent = layout_main,
-					file = PLAYSOUND_ICON,
+					file = icons.PLAYSOUND_ICON,
 					width = 20,
 					height = 20,
 					tooltip = 'Play',
@@ -1233,12 +1766,12 @@ local function DeclareFunctions()
 									self.tooltip=ttip
 								end
 							}							
-						controls[name]['label_'..item] = ClickyTextBox:New (t)						
+						controls[name]['label_'..item] = MouseOverTextBox:New (t)						
 						t = {}
 							t.name = 'editBtn_'..item
 							t.refer = item
 							t.parent = layout
-							t.file = PROPERTIES_ICON			
+							t.file = icons.PROPERTIES_ICON			
 							t.width = 20
 							t.height = 20			
 							t.tooltip = 'Sound Properties'
@@ -1257,7 +1790,7 @@ local function DeclareFunctions()
 							t.name = 'playBtn_'..item
 							t.refer = item
 							t.parent = layout
-							t.file = PLAYSOUND_ICON		
+							t.file = icons.PLAYSOUND_ICON		
 							t.width = 20
 							t.height = 20
 							t.tooltip = 'Play at Location'
@@ -1326,6 +1859,7 @@ local function DeclareFunctions()
 
 	window_properties.Refresh = function(self, ...)		
 		if self.refer then 			
+			self.caption = self.refer
 			local item
 			if sounditems.templates[self.refer] then
 				item = sounditems.templates[self.refer]
@@ -1343,6 +1877,7 @@ local function DeclareFunctions()
 				return
 			end
 			controls.properties.file:SetText(item.file)-- = item.file
+			controls.properties.file.font:SetColor(item.file_external and col_red_1 or col_green_1)			
 			controls.properties.file:Invalidate()
 			layout_properties:Refresh()
 			if not controls.properties[0].checked == item.in3d then controls.properties[0]:Toggle() end
@@ -1378,6 +1913,12 @@ local function DeclareFunctions()
 		self:Invalidate()
 		self:Hide()
 	end
+	
+	--------------------------------------------------------------------------------------------------
+	-- browser window
+	--
+	
+
 	
 	
 	--------------------------------------------------------------------------------------------------
@@ -1426,8 +1967,8 @@ local function DeclareFunctions()
 			w:AddChild(label)
 			w:AddChild(btnA)
 			w:AddChild(btnB)
-			btnA:AddChild(Image:New {width = "100%",	height = "100%", file = CLOSE_ICON, padding = {0,0,0,0}, margin = {0,0,0,0}})
-			btnB:AddChild(Image:New {width = "100%",	height = "100%", file = CLOSEALL_ICON, padding = {0,0,0,0}, margin = {0,0,0,0}})
+			btnA:AddChild(Image:New {width = "100%",	height = "100%", file = icons.CLOSE_ICON, padding = {0,0,0,0}, margin = {0,0,0,0}})
+			btnB:AddChild(Image:New {width = "100%",	height = "100%", file = icons.CLOSEALL_ICON, padding = {0,0,0,0}, margin = {0,0,0,0}})
 			w:AddChild(scroll)
 			scroll:AddChild(layout)
 			
@@ -1450,14 +1991,14 @@ local function DeclareFunctions()
 	--------------------------------------------------------------------------------------------------
 	
 	--[[
-	function Chili.ClickyTextBox:OnMouseDown(...)
+	function Chili.MouseOverTextBox:OnMouseDown(...)
 		--self.state.pressed = true
 		inherited.MouseDown(self, ...)
 		--self:Invalidate()
 		return self
 	end
 	
-	function Chili.ClickyTextBox:OnMouseUp(...)
+	function Chili.MouseOverTextBox:OnMouseUp(...)
 		--if (self.state.pressed) then
 		--self.state.pressed = false
 		inherited.MouseUp(self, ...)
@@ -1548,6 +2089,59 @@ function SetupGUI()
 			self:Invalidate()
 		end,
 		
+		KeyPress = function(self, key, mods, isRepeat, label, unicode, ...)
+			local cp = self.cursor
+			local txt = self.text
+			if key == KEYSYMS.RETURN then
+				if self.Confirm then self:Confirm() end
+				self.state.focused = false
+				screen0.focusedControl = nil
+				return false
+			elseif key == KEYSYMS.ESCAPE then				
+				if self.Discard then self:Discard() end
+				self.state.focused = false
+				screen0.focusedControl = nil
+				return false
+			elseif key == KEYSYMS.BACKSPACE then --FIXME use Spring.GetKeyCode("backspace")
+				self.text, self.cursor = unitools.Utf8BackspaceAt(txt, cp)
+			elseif key == KEYSYMS.DELETE then
+				self.text   = unitools.Utf8DeleteAt(txt, cp)
+			elseif key == KEYSYMS.LEFT then
+				self.cursor = unitools.Utf8PrevChar(txt, cp)
+			elseif key == KEYSYMS.RIGHT then
+				self.cursor = unitools.Utf8NextChar(txt, cp)
+			elseif key == KEYSYMS.HOME then
+				self.cursor = 1
+			elseif key == KEYSYMS.END then
+				self.cursor = #txt + 1			
+			else
+				local utf8char = unitools.UnicodeToUtf8(unicode)
+				if (not self.allowUnicode) then
+					local success
+					success, utf8char = pcall(string.char, unicode)
+					if success then
+						success = not utf8char:find("%c")
+					end
+					if (not success) then
+						utf8char = nil
+					end
+				end
+
+				if utf8char then
+					self.text = txt:sub(1, cp - 1) .. utf8char .. txt:sub(cp, #txt)
+					self.cursor = cp + utf8char:len()
+				--else
+				--	return false
+				end
+				
+			end
+			self._interactedTime = widget.Spring.GetTimer()
+			--inherited.KeyPress(self, key, mods, isRepeat, label, unicode, ...)
+			self:UpdateLayout()
+			self:Invalidate()
+			return self
+		end,
+		
 		TextInput = function(self, utf8char, ...)			
 			local unicode = utf8char
 			if (not self.allowUnicode) then
@@ -1579,12 +2173,14 @@ function SetupGUI()
 	}
 	
 	
-	ClickyTextBox = Chili.TextBox:Inherit{
-		classname = "clickytextbox",
+	MouseOverTextBox = Chili.TextBox:Inherit{
+		classname = "mouseovertextbox",
 		HitTest = function(self, x,y)
 			return self
 		end,
-		--[[
+	}
+	ClickyTextBox = MouseOverTextBox:Inherit{
+		classname = 'clickytextbox',		
 		MouseDown = function(self,...)
 		  local btn = select(3,...)
 		  Echo(btn)		  
@@ -1605,6 +2201,7 @@ function SetupGUI()
 			return self
 		  end
 		end,
+		--[[
 		OnClick = {function(self,...)
 			local btn = select(3,...)
 			if not btn == 3 then return nil end
@@ -1744,14 +2341,14 @@ function SpawnDialog(px, pz, py)
 		clientWidth = 140,
 		text = '',
 		InputFilter = function(unicode)
-			return string.find(unicode, "[%w_]")
+			return string.find(unicode, "[%w_-]")
 			--if string.find(unicode, "%A%D") then return false end
 			---return true
 		end,
 	}
 	Image:New {
 		parent = window_name,
-		file = CLOSE_ICON,
+		file = icons.CLOSE_ICON,
 		x = 50,
 		y = 34,
 		width = 20,
@@ -1767,7 +2364,7 @@ function SpawnDialog(px, pz, py)
 	}
 	Image:New {
 		parent = window_name,
-		file = CONFIRM_ICON,
+		file = icons.CONFIRM_ICON,
 		x = 80,
 		y = 34,
 		width = 20,
@@ -1839,7 +2436,7 @@ return gui
 		x = 434,
 		y = 30,
 		parent = window_settings,
-		file = SETTINGS_ICON,				
+		file = icons.SETTINGS_ICON,				
 		width = 14,
 		height = 14,
 		tooltip = 'Reset to default',
@@ -1853,7 +2450,7 @@ return gui
 		x = 434,
 		y = 56,
 		parent = window_settings,
-		file = SETTINGS_ICON,				
+		file = icons.SETTINGS_ICON,				
 		width = 14,
 		height = 14,
 		tooltip = 'Reset to default',
@@ -1887,7 +2484,7 @@ return gui
 			Image:New {
 				width = "100%",
 				height = "100%",				
-				file = CLOSE_ICON,
+				file = icons.CLOSE_ICON,
 			},
 		},
 	}

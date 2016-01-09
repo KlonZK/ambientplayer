@@ -236,6 +236,30 @@ end
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+function GetSpringDir()
+	local file = io.open('infolog.txt', 'r')	
+	repeat	
+		local str = file:read('*line')
+		if str and string.find(str, "Using configuration source:") then
+			--Echo(str)
+			local _,_,path = string.find(str, '\"(.+)\"')
+			if path then 
+				--Echo("config file is: "..path) 
+				_,_, path = string.find(path, "(.+[\/\\])[^\/\\]+$")
+				Echo("spring home directory is: "..path) 
+				file:close()
+				return path
+			else 
+				file:close()
+				Echo("could not find spring folder")
+				return nil
+			end
+			
+		end
+	until(not str)
+	file:close()
+end
+
 function SaveAll()
 	local wpath = config.path_map..PATH_LUA..PATH_CONFIG
 
