@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.621'
+local versionNum = '0.622'
 
 function widget:GetInfo()
   return {
@@ -66,7 +66,6 @@ local LOG_FILENAME = 'ambient_log.txt' -- "
 -------------------------------------------------------------------------------------------------------------------------
 -- PACKAGE
 -------------------------------------------------------------------------------------------------------------------------
-
 
 local logfile
 local _log = [[]]
@@ -1120,6 +1119,8 @@ function widget:Initialize()
 	Echo("Updating GUI...")	
 	UpdateGUI()
 	Echo("Init done!")
+	
+
 end
 
 

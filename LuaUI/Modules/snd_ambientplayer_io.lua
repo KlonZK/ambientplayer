@@ -250,8 +250,8 @@ function BinaryCopy(source, target)
 	until(not block)
 	sfile:close()
 	tfile:close()
-	local duration = Spring.DiffTimers(Spring.GetTimer(), timer)
-	Echo("done copying "..source..", spent "..duration.." seconds")
+	local duration = string.format("%.4f",Spring.DiffTimers(Spring.GetTimer(), timer))
+	Echo("done copying "..source..", spent "..duration.." seconds") --string.format("%.0f", e.pos.x)
 	return true
 end
 

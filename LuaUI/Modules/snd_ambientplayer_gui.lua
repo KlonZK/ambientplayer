@@ -13,7 +13,7 @@
 
 local PATH_LUA = widget.LUAUI_DIRNAME
 
-local settings = widget.settings
+local settings = settings
 local options = options
 local config = config
 local emitters = emitters
@@ -34,10 +34,15 @@ local Trackbar
 --local Node
 local Label
 local Line
+
+local MouseOverWindow
+local DragDropLayoutPanel
 local FilterEditBox
 local MouseOverTextBox
 local ClickyTextBox
 local gl_AnimatedImage
+
+
 --local color2incolor
 --local incolor2color
 
@@ -64,6 +69,42 @@ icons.FOLDER_ICON = PATH_LUA..'Images/folder.png'
 icons.NEWFOLDER_ICON = PATH_LUA..'Images/folder_add.png'
 icons.MUSICFOLDER_ICON = PATH_LUA..'Images/folder_music.png'
 
+local colors = {
+	Code = function(c, r, g, b)
+		local floor = math.floor
+		local char = string.char
+		if c and type(c) == 'table' then
+			return '\255'..char(floor(c[1]*255))..char(floor(c[2]*255))..char(floor(c[3]*255))
+		else			
+			local r = r or 0
+			local g = g or 0
+			local b = b or 0
+			return '\255'..char(floor(r*255))..char(floor(g*255))..char(floor(b*255))
+		end
+	end,
+	green_1 = {0.4, 1, 0.1, 1},
+	green_06 = {0, 0.6, 0.2, 0.9},
+	red_1 = {1, 0.2, 0.1, 1},
+	orange_06 = {1, 0.6, 0.0, 0.9},
+	yellow_09 = {0.9, 0.9, 0, 0.9},
+	white_1 = {1,1,1,1},
+	white_09 = {0.9, 0.9, 0.9, 1},
+	grey_08 = {0.8, 0.8, 0.8, 0.7},
+	grey_03 = {0.3, 0.3, 0.3, 0.5},
+	grey_02 = {0.2, 0.2, 0.2, 0.5},
+	blue_07 = {0.7, 0.7, 0.8, 0.7},
+}
+
+
+for k, v in pairs(colors) do
+	if type(v) ~= 'function' then
+		setmetatable(v, {
+			__index = colors, -- this allows colors.col:Code()
+		})
+	end
+end
+
+
 local HELPTEXT = [[generic info here]]
 
 local inspectionWindows = {}
@@ -71,6 +112,7 @@ local containers = {}
 local controls = {}	
 
 -- attention needs to be paid what is added to containers
+-- why am i using this?
 setmetatable(controls, {
 	__index = function(t, k)
 		if containers[k] then rawset(t, k, {}) return t[k]
@@ -117,23 +159,238 @@ local tabs_settings = {}
 --local window_inspect
 --local label_inspect
 
-local col_green_1 = {0.4, 1, 0.1, 1}
-local col_red_1 = {1, 0.2, 0.1, 1}
-local col_green_06 = {0, 0.6, 0.2, 0.9}
-local col_yellow = {0.9, 0.9, 0, 0.9}
-local col_white_09 = {0.9, 0.9, 0.9, 1}
-local col_grey_08 = {0.8, 0.8, 0.8, 0.7}
-local col_grey_02 = {0.2, 0.2, 0.2, 0.5}
-local col_grey_03 = {0.3, 0.3, 0.3, 0.5}
-local col_blue_07 = {0.7, 0.7, 0.8, 0.7}
+
 
 --local drag
+
+----------------------------------------------------------------------------------------------------------------------
+------------------------------------------------ CHILI SUBCLASSES ----------------------------------------------------
+----------------------------------------------------------------------------------------------------------------------
+
+local function DeclareClasses()
+
+	-------------------------------------------- Generic Window with MouseOver Hook ----------------------------------
+	-- these windows will be used to prevent mouse events from passing through them into world space
+	-- 
+	
+	MouseOverWindow = Chili.Window:Inherit{
+		classname = 'mouseoverwindow',
+		IsMouseOver	= function(self, mx, my) 
+			local x, y = self:LocalToScreen(self.x, self.y)			
+			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+		end,		
+	}
+	
+	
+	-------------------------------------------- Instanced Prototype-based Window ------------------------------------
+	-- 
+	
+	
+	------------------------------------------- filtered Drag & Drop Layout Panel ------------------------------------
+	-- drag is controlled externally by chili and the widgets main module, this panel simply checks for mouse over status
+	-- secondly, it asks child components for permission before selecting them 
+	
+	DragDropLayoutPanel = Chili.LayoutPanel:Inherit{
+		classname = 'dragdroplayoutpanel',
+		IsMouseOver	= function(self, mx, my) 
+			local x, y = self:LocalToScreen(self.x, self.y)
+			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+		end,
+		OnSelectItem = {
+			function(self, index, state)								
+				local c = self.children[index]				
+				if c and c.AllowSelect then c:AllowSelect(index, state) end
+			end				
+		},		
+	}
+	
+	
+	------------------------------------------- Edit Box with optional Input Filter ----------------------------------
+	-- also knows a few tricks:
+	-- calls self:OnTab(), self:Discard(), self:Confirm() on tab, escape, enter 
+	-- the latter of the 2 automatically remove focus
+	
+	
+	FilterEditBox = Chili.EditBox:Inherit{
+		classname = 'FilterEditBox',
+		allowUnicode = true,
+		cursorColor = {0,1.3,1,0.7},		
+		Update = function(self, ...)
+			Chili.Control.Update(self, ...)
+			if self.state.focused then
+				self:RequestUpdate()
+				if (os.clock() >= (self._nextCursorRedraw or -math.huge)) then
+					self._nextCursorRedraw = os.clock() + 0.1 --10FPS
+					
+				end
+			elseif self.visible then 
+				self:Invalidate()
+			end			
+		end,		
+		KeyPress = function(self, key, mods, isRepeat, label, unicode, ...)
+			local cp = self.cursor
+			local txt = self.text
+			if key == KEYSYMS.RETURN then
+				if self.Confirm then self:Confirm() end
+				self.state.focused = false
+				screen0.focusedControl = nil
+				return false
+			elseif key == KEYSYMS.ESCAPE then				
+				if self.Discard then self:Discard() end
+				self.state.focused = false
+				screen0.focusedControl = nil
+				return false
+			elseif key == KEYSYMS.BACKSPACE then --FIXME use Spring.GetKeyCode("backspace")
+				self.text, self.cursor = unitools.Utf8BackspaceAt(txt, cp)
+			elseif key == KEYSYMS.DELETE then
+				self.text   = unitools.Utf8DeleteAt(txt, cp)
+			elseif key == KEYSYMS.LEFT then
+				self.cursor = unitools.Utf8PrevChar(txt, cp)
+			elseif key == KEYSYMS.RIGHT then
+				self.cursor = unitools.Utf8NextChar(txt, cp)
+			elseif key == KEYSYMS.HOME then
+				self.cursor = 1
+			elseif key == KEYSYMS.END then
+				self.cursor = #txt + 1
+			elseif key == KEYSYMS.TAB then
+				if self.OnTab then self:OnTab() end
+			else
+				local utf8char = unitools.UnicodeToUtf8(unicode)
+				if (not self.allowUnicode) then
+					local success
+					success, utf8char = pcall(string.char, unicode)
+					if success then
+						success = not utf8char:find("%c")
+					end
+					if (not success) then
+						utf8char = nil
+					end
+				end
+
+				if utf8char then
+					self.text = txt:sub(1, cp - 1) .. utf8char .. txt:sub(cp, #txt)
+					self.cursor = cp + utf8char:len()
+				--else
+				--	return false
+				end
+				
+			end
+			self._interactedTime = widget.Spring.GetTimer()
+			--inherited.KeyPress(self, key, mods, isRepeat, label, unicode, ...)
+			self:UpdateLayout()
+			self:Invalidate()
+			return self
+		end,		
+		TextInput = function(self, utf8char, ...)			
+			local unicode = utf8char
+			if (not self.allowUnicode) then
+				local success
+				success, unicode = widget.pcall(string.char, utf8char)
+				if success then
+					success = not unicode:find("%c")
+				end
+				if (not success) then
+					unicode = nil
+				end
+			end
+
+			if unicode and not self.InputFilter or self.InputFilter(unicode) then
+				local cp  = self.cursor
+				local txt = self.text
+				self.text = txt:sub(1, cp - 1) .. unicode .. txt:sub(cp, #txt)
+				self.cursor = cp + unicode:len()
+			--else
+			--	return false
+			end
+
+			self._interactedTime = widget.Spring.GetTimer()
+			--self.inherited.TextInput(utf8char, ...)
+			self:UpdateLayout()
+			self:Invalidate()
+			return self
+		end,
+	}
+	
+	
+	------------------------------------------- Text Box with Tooltip Support --------------------------------------------
+	MouseOverTextBox = Chili.TextBox:Inherit{
+		classname = "mouseovertextbox",
+		HitTest = function(self, x,y)
+			return self
+		end,
+	}
+	
+	
+	------------------------------------------- Text Box with Button Functionality ---------------------------------
+	ClickyTextBox = MouseOverTextBox:Inherit{
+		classname = 'clickytextbox',		
+		MouseDown = function(self,...)
+		  local btn = select(3,...)
+		  Echo(btn)		  
+		  if not btn == 3 then return nil end
+		  self.state.pressed = true
+		  self.inherited.MouseDown(self, ...)
+		  self:Invalidate()
+		  return self
+		end,
+		MouseUp = function(self,...)
+		  local btn = select(3,...)
+		  Echo(btn)		  
+		  if not btn == 3 then return nil end
+		  if (self.state.pressed) then
+			self.state.pressed = false
+			self.inherited.MouseUp(self, ...)
+			self:Invalidate()
+			return self
+		  end
+		end,
+	}
+	
+	
+	------------------------------------------- Custom Draw Control Image --------------------------------------------
+	gl_AnimatedImage = Chili.Control:Inherit{
+		classname = 'gl_animatedimage',
+		defaultWidth  = 64,
+		defaultHeight = 64,
+		padding = {0,0,0,0},
+		color = {1,1,1,1},		
+		keepAspect = true;
+		OnClick  = {},
+		this = gl_AnimatedImage,
+		IsActive = function(self)
+			local onclick = self.OnClick
+			if (onclick and onclick[1]) then
+				return true
+			end
+		end,
+		HitTest = function(self)
+			return self:IsActive() and self
+		end,
+		MouseDown = function(self, ...)		
+			return Control.MouseDown(self, ...) or self:IsActive() and self
+		end,
+		MouseUp = function(self, ...)
+			return Control.MouseUp(self, ...) or self:IsActive() and self
+		end,
+		MouseClick = function(self, ...)
+			return Control.MouseClick(self, ...) or self:IsActive() and self
+		end,
+	}
+	
+
+	
+end
+
+
+----------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------- GUI CONTROLS -----------------------------------------------------
+----------------------------------------------------------------------------------------------------------------------
 
 
 local function DeclareControls()
 	---------------------------------------------------- main frame ------------------------------------------------
 	
-	window_main = Window:New {
+	window_main = MouseOverWindow:New {
 		x = '65%',
 		y = '25%',	
 		dockable = false,
@@ -152,7 +409,7 @@ local function DeclareControls()
 				parent = window_main,
 				align = 'center',
 				caption = '-Track Overview-',
-				textColor = col_yellow,		
+				textColor = colors.yellow_09,		
 			},
 		},
 	}
@@ -167,7 +424,7 @@ local function DeclareControls()
 		scrollbarSize = 6,
 		padding = {5,10,5,10},		
 	}	
-	layout_main = LayoutPanel:New {		
+	layout_main = DragDropLayoutPanel:New {		
 		name = 'tracklist',
 		parent = scroll_main,
 		orientation = 'vertical',		
@@ -182,27 +439,6 @@ local function DeclareControls()
 		columns = 4,
 		left = 0,
 		centerItems = false,
-		OnSelectItem = {
-			function(self, index, state)								
-				local c = self.children[index]				
-				if c and c.AllowSelect then c:AllowSelect(index, state) end
-				Echo("layout: "..index)
-				--if c.refer then Echo(c.refer) end
-				--for k,v in pairs(self.selectedItems) do
-				--	Echo(k..", "..tostring(v))
-				--end
-			end				
-		},
-		IsMouseOver	= function(self, mx, my) 
-			local x, y = self:LocalToScreen(self.x, self.y)
-			Echo("test: "..mx..", "..my)
-			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))
-			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
-		end,
-
-			--if self.visible and (mx > self.x and mx < self.x + self.width) and (my > self.y and my < self.y + self.height) 
-			--	then return true end end,
-		--OnMouseUp = {function(self,...) self.inherited.MouseDown(self,...) return self end},			
 	}		
 			
 	button_emitters = Button:New {
@@ -228,8 +464,14 @@ local function DeclareControls()
 		parent = button_emitters,
 		width = "100%",
 		height = "100%",
-		--caption = '',
-		--file = icons.COGWHEEL_ICON,
+		DrawControl = function(self, ...)	
+			if self.parent.state.hovered or self.state.hovered then
+				DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5, true)
+			else
+				DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5)
+			end
+			
+		end,
 	}
 
 	
@@ -401,7 +643,7 @@ local function DeclareControls()
 	--]]
 	
 	---------------------------------------------------- log window ------------------------------------------------	
-	window_console = Window:New {
+	window_console = MouseOverWindow:New {
 		x = "25%",
 		y = "5%",
 		parent = screen0,
@@ -432,11 +674,11 @@ local function DeclareControls()
 		autosize = true,
 		parent = scroll_console,
 		align = 'left',
-		textColor = col_yellow,
-		textColorNormal = col_yellow,
-		textColorError = col_red_1,
-		backgroundColor = col_grey_02,
-		borderColor = col_grey_03,
+		textColor = colors.yellow_09,
+		textColorNormal = colors.yellow_09,
+		textColorError = colors.red_1, -- not happening right now
+		backgroundColor = colors.grey_02,
+		borderColor = colors.grey_03,
 		text = '',	
 	}
 	
@@ -445,7 +687,7 @@ local function DeclareControls()
 	
 	---------------------------------------------------- help window ------------------------------------------------
 
-	window_help = Window:New {
+	window_help = MouseOverWindow:New {
 		x = "20%",
 		y = "7%",
 		parent = screen0,
@@ -455,7 +697,7 @@ local function DeclareControls()
 		dragUseGrip = true,
 		clientWidth = 400,
 		clientHeight = 490,
-		--backgroundColor = col_grey_08,
+		--backgroundColor = colors.grey_08,
 		
 	}
 	scroll_help = ScrollPanel:New {
@@ -478,9 +720,9 @@ local function DeclareControls()
 		autosize = true,
 		parent = scroll_help,
 		align = 'left',
-		textColor = col_grey_08,
-		backgroundColor = col_grey_02,
-		borderColor = col_grey_03,
+		textColor = colors.grey_08,
+		backgroundColor = colors.grey_02,
+		borderColor = colors.grey_03,
 		text = HELPTEXT,
 	}
 	window_help:Hide()
@@ -526,7 +768,7 @@ note that setting this to 0 or very low values may produce undesireable results.
 
 note also that the number of simultaneous playbacks of the track is limited by the maxconcurrent setting.
 		
-defaults to length_real, unit is seconds]].."\n\n\255\255\150\0(this has nothing to do with the \"looptime\" option that spring sounditems can use. this widget never uses that and if you use it for any of the sounditems used by the widget, things will likely break.)\255\255\255\255",
+defaults to length_real, unit is seconds]].."\n\n"..colors.orange_06:Code().."(this has nothing to do with the \"looptime\" option that spring sounditems can use. this widget never uses that and if you use it for any of the sounditems used by the widget, things will likely break.)"..colors.white_1:Code(),
 
 [[time in seconds after game starts this sound may play for the very first time. does nothing otherwise.
 
@@ -559,7 +801,7 @@ consequently, when you are out of this range when the playback would start but l
 
 similarly, if you leave the area later after the playback has started, it will not stop (albeit possibly become inaudible)
 
-defaults to 100000, unit is elmos]].."\n\n\255\255\150\0(the side length of a 1x1 map square is 512 elmos.)\255\255\255\255",
+defaults to 100000, unit is elmos]].."\n\n"..colors.orange_06:Code().."(the side length of a 1x1 map square is 512 elmos.)"..colors.white_1:Code(),
 
 [[how quickly the sound diminishes as you move further away from the source. 
 
@@ -593,7 +835,7 @@ defaults to 0]],
 	
 	controls.properties = {}
 	
-	window_properties = Window:New {
+	window_properties = MouseOverWindow:New {
 		x = "25%",
 		y = "25%",
 		parent = screen0,
@@ -603,11 +845,11 @@ defaults to 0]],
 		dragUseGrip = true,
 		clientWidth = 400,
 		clientHeight = 216,
-		--backgroundColor = col_grey_08,	
+		--backgroundColor = colors.grey_08,	
 		controls_props = {},
 	}
 	controls.properties.file = MouseOverTextBox:New {
-		textColor = col_green_1,
+		textColor = colors.green_1,
 		y = 16,
 		x = 12,
 		padding = {0,4,0,0},
@@ -636,24 +878,12 @@ defaults to 0]],
 		columns = 6,
 		left = 0,					
 		centerItems = false,
-		IsMouseOver	= function(self, mx, my) 
-			local x, y = self:LocalToScreen(self.x, self.y)
-			Echo("test: "..mx..", "..my)
-			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))
-			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
-			end,
-			--if self.visible and (mx > self.x and mx < self.x + self.width) and (my > self.y and my < self.y + self.height) 
-			--	then return true end end,
-		--OnMouseUp = {function(self,...) self.inherited.MouseDown(self,...) return self end},
 		Refresh = function(self)
 			local label_height = math.floor(controls.properties.file.font:GetTextWidth(controls.properties.file.text)/380) * 10
 			self.y = 32 + label_height
 			self:Invalidate()
 		end,
-	}				
-	--window_properties.layout = layout_properties
-	
-	
+	}
 	
 	for i, prop in ipairs(props) do					
 		MouseOverTextBox:New { 
@@ -667,6 +897,7 @@ defaults to 0]],
 		}
 		controls.properties[i] =  FilterEditBox:New { 
 			refer = prop,					
+			refer2 = i,
 			clientWidth = 44,
 			clientHeight = 16,
 			padding = {4,0,4,0},
@@ -679,6 +910,12 @@ defaults to 0]],
 			fontSize = 10,
 			InputFilter = function(unicode)
 				return tonumber(unicode) or unicode == '.'
+			end,
+			OnTab = function(self)
+				local target = controls.properties[(self.refer2 == #props and 1 or self.refer2 + 1)]
+				self.state.focused = false
+				target.state.focused = true
+				screen0.focusedControl = target			
 			end,
 		}
 		Image:New {					
@@ -714,7 +951,7 @@ defaults to 0]],
 			self:Invalidate()
 		end,
 	}	
-	controls.properties.in3_defaultBtn = Image:New {					
+	controls.properties.in3d_defaultBtn = Image:New {					
 		--refer = i,
 		parent = window_properties,
 		file = icons.COGWHEEL_ICON,
@@ -778,7 +1015,7 @@ defaults to 0]],
 	
 	controls.browser = {}
 	
-	window_browser = Window:New {
+	window_browser = MouseOverWindow:New {
 		x = "25%",
 		y = "25%",
 		parent = screen0,
@@ -852,7 +1089,7 @@ defaults to 0]],
 					local legit = #VFS.SubDirs(controls.browser.label_path.text) > 0 
 						or #VFS.DirList(controls.browser.label_path.text) > 0		
 					controls.browser.label_path.legit = legit
-					controls.browser.label_path.font:SetColor(legit and col_green_1 or col_red_1)	
+					controls.browser.label_path.font:SetColor(legit and colors.green_1 or colors.red_1)	
 					if legit and not settings.paths[controls.browser.label_path.text] then
 						-- we storing a double reference for this, so we can both use indizes and lookup by name
 						-- we cant just use pairs later because an options table contains all kinds of crap
@@ -876,7 +1113,7 @@ defaults to 0]],
 		backgroundColor = {.1,.1,.1,.5},
 		borderColor = {.4,.4,.4,.5},
 		--textColor = {.8,.8,.8,.9},
-		textColor = col_green_1,
+		textColor = colors.green_1,
 		text = '',
 		legit = true,	
 		Confirm = function(self,...) -- this probably triggers when its changed externally?			
@@ -884,7 +1121,7 @@ defaults to 0]],
 			--if not string.sub(self.text, -1) == '/' then self.text = self.text..'/' end
 			controls.browser.layout_files.path = self.text
 			self.legit = controls.browser.layout_files:Refresh()
-			self.font:SetColor(self.legit and col_green_1 or col_red_1)
+			self.font:SetColor(self.legit and colors.green_1 or colors.red_1)
 			--local dirs, files	= VFS.SubDirs(self.text), VFS.DirList(self.text)
 			--if #dirs > 0 or #files > 0 then controls.browser.layout_files.path = self.text end			
 		end,
@@ -903,7 +1140,7 @@ defaults to 0]],
 		verticalSmartScroll = true,	
 		scrollbarSize = 6,		
 	}	
-	controls.browser.layout_files = LayoutPanel:New {
+	controls.browser.layout_files = DragDropLayoutPanel:New {
 		parent = controls.browser.scroll_files,
 		minWidth = 230,
 		--maxWidth = 230,
@@ -919,20 +1156,7 @@ defaults to 0]],
 		columns = 2,
 		itemPadding = {3,2,3,2},
 		itemMargin = {0,0,0,0},
-		list = {},
-		OnSelectItem = {
-			function(self, index, state)								
-				local c = self.children[index]				
-				if c and c.AllowSelect then c:AllowSelect(index, state) end
-				-- Echo("layout: "..index)
-			end				
-		},
-		IsMouseOver	= function(self, mx, my) 
-			local x, y = self:LocalToScreen(self.x, self.y)
-			Echo("layout_files testing: "..mx..", "..my)
-			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))
-			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
-		end,		
+		list = {},		
 		Refresh = function(self)
 			self.path = self.path or config.path_map..config.path_sound			
 			--Echo("path is: "..self.path)
@@ -1176,8 +1400,8 @@ defaults to 0]],
 						clientWidth = 500, --226,	
 						fontsize = 10,						
 						textColor = {.8,.8,.8,.9},
-						textColorSelected = col_green_1,
-						textColorForbidden = col_red_1,
+						textColorSelected = colors.green_1,
+						textColorForbidden = colors.red_1,
 						textColorNormal = {.8,.8,.8,.9},
 						fulltext = files[i],
 						text = filename,	
@@ -1213,7 +1437,7 @@ defaults to 0]],
 		verticalSmartScroll = true,	
 		scrollbarSize = 6,
 	}
-	controls.browser.layout_templates = LayoutPanel:New {		
+	controls.browser.layout_templates = DragDropLayoutPanel:New {		
 		parent = controls.browser.scroll_templates,
 		minWidth = 230,
 		maxWidth = 520,
@@ -1230,12 +1454,6 @@ defaults to 0]],
 		itemPadding = {3,2,3,2},
 		itemMargin = {0,0,0,0},
 		list = {},	
-		IsMouseOver	= function(self, mx, my) 
-			local x, y = self:LocalToScreen(self.x, self.y)
-			Echo("layout_templates testing: "..mx..", "..my)
-			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))			
-			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
-		end,
 		AddTemplates = function(self, items)
 			Echo("call")
 			if not items then return end
@@ -1254,7 +1472,7 @@ defaults to 0]],
 							height = 12,							
 							tooltip = 'remove from selection',
 							refer = items[i].fulltext,
-							color = col_red_1,
+							color = colors.red_1,
 						},					
 						box = FilterEditBox:New {
 							parent = controls.browser.layout_templates,
@@ -1263,6 +1481,7 @@ defaults to 0]],
 							fontsize = 10,					
 							borderColor = {.2,.2,.2,.5},
 							borderColor2 = {.2,.2,.2,.5},
+							backgroundColor = {.1,.1,.1,.5},
 							padding = {2,0,2,0},
 							textColor = {.8,.8,.8,.9},
 							text = name,
@@ -1317,7 +1536,7 @@ defaults to 0]],
 		width = 180,
 		height = 20,		
 		fontsize = 10,
-		textColor = col_grey_08,
+		textColor = colors.grey_08,
 		checked = settings.browser.showSoundsOnly,
 		caption = 'show sound files only (.wav/.ogg)',
 		OnChange = {function(self, checked) 
@@ -1333,7 +1552,7 @@ defaults to 0]],
 		width = 100,
 		height = 20,		
 		fontsize = 10,
-		textColor = col_grey_08,
+		textColor = colors.grey_08,
 		checked = settings.browser.autoLocalize,
 		caption = 'autolocalize files',
 		tooltip = 'when this is enabled, selected files will be automatically copied into your maps\' sound folder once your close this window.\n\nnote that internally, the old file & location will be used until the next time you run spring.\n\nthis process may take some time.',
@@ -1368,7 +1587,7 @@ defaults to 0]],
 	containers.browser = window_browser
 	
 	---------------------------------------------------- settings window ------------------------------------------------
-	window_settings = Window:New {
+	window_settings = MouseOverWindow:New {
 		x = "25%",
 		y = "25%",
 		parent = screen0,
@@ -1379,7 +1598,7 @@ defaults to 0]],
 		clientWidth = 440,
 		clientHeight = 210,
 		autosize = true,
-		--backgroundColor = col_grey_08,
+		--backgroundColor = colors.grey_08,
 	}
 	tabbar_settings = TabBar:New {
 		parent = window_settings,
@@ -1399,9 +1618,9 @@ defaults to 0]],
 	
 	for i = 1, #tabbar_settings.children do
 		p = tabbar_settings.children[i]
-		p.backgroundColor = col_grey_02
-		p.borderColor = col_grey_03
-		p.font:SetColor(col_blue_07)
+		p.backgroundColor = colors.grey_02
+		p.borderColor = colors.grey_03
+		p.font:SetColor(colors.blue_07)
 		
 		c = tabbar_settings.children[i].caption
 		--if not c == 'Player' then return end	
@@ -1459,7 +1678,7 @@ defaults to 0]],
 		fontSize = 11,
 		--padding = {22,22,2,22},
 		margin = {2,12,2,12},
-		textColor = col_grey_08,
+		textColor = colors.grey_08,
 		SetValue = function(self, val)
 			if not self.checked == val then self:Toggle() end
 		end,
@@ -1480,7 +1699,7 @@ defaults to 0]],
 		Label:New{
 			caption = o.name,
 			fontSize = 11,
-			textColor = col_grey_08,
+			textColor = colors.grey_08,
 			parent = tabs_settings['Display'].layout,
 		}
 		controls.settings[o.name] = Trackbar:New {
@@ -1628,7 +1847,7 @@ defaults to 0]],
 		caption = '',
 		width = 300,				
 		align = 'center',		
-		textColor = col_yellow,
+		textColor = colors.yellow_09,
 	}
 	SCROLL_INSPECT_PROTOTYPE = {				
 		y = 40,
@@ -1661,11 +1880,47 @@ defaults to 0]],
 	--WINDOW_INSPECT_PROTOTYPE = Window:New(INSPECT_BUILDTABLE)
 	--WINDOW_INSPECT_PROTOTYPE:Hide()
 	--containers.inspect = window_inspect
+	
+	window_chili = Window:New{
+		x = "50%",
+		y = "75%",
+		parent = screen0,
+		caption = "Chili",
+		draggable = true,
+		resizable = false,
+		dragUseGrip = true,
+		clientWidth = 200,
+		clientHeight = 150,
+	}
+	label_focus = Label:New{
+		parent = window_chili,
+		x = 5,
+		y = 20,
+		fontsize = 11,		
+	}
+	label_hover = Label:New{
+		parent = window_chili,
+		x = 5,
+		y = 35,
+		fontsize = 11,
+	}
+	label_active = Label:New{
+		parent = window_chili,
+		x = 5,
+		y = 50,
+		fontsize = 11,		
+	}
 end
 
 
 
-local function DeclareFunctions()
+----------------------------------------------------------------------------------------------------------------------
+--------------------------------------------- POST-INIT CONTROL SETUP ------------------------------------------------
+----------------------------------------------------------------------------------------------------------------------
+-- for one reasson or another, the functions here have to be injected into existing controls after gui is setup
+
+
+local function DeclareFunctionsAfter()
 
 	--------------------------------------------------------------------------------------------------
 	-- main frame
@@ -1682,10 +1937,10 @@ local function DeclareFunctions()
 					align = 'left',
 					text = item,
 					fontSize = 10,
-					textColor = col_white_09,
-					textColorNormal = col_white_09,
-					textColorSelected = col_green_1,
-					--backgroundColor = col_grey_02,
+					textColor = colors.white_09,
+					textColorNormal = colors.white_09,
+					textColorSelected = colors.green_1,
+					--backgroundColor = colors.grey_02,
 					--backgroundFlip = {0.6,0.6,0.9,0.5},
 					--borderColor = {0.3,0.3,0.3,0.5},
 					--borderFlip = {0.7,0.7,1,0.5},
@@ -1716,9 +1971,9 @@ local function DeclareFunctions()
 					align = 'right',
 					text = ''..params.length_real,
 					fontSize = 10,
-					textColor = col_white_09,
-					backgroundColor = col_grey_02,
-					borderColor = col_grey_03,
+					textColor = colors.white_09,
+					backgroundColor = colors.grey_02,
+					borderColor = colors.grey_03,
 					tooltip = [[The length of the item in seconds. As this information can't currently be obtained by the Widget, you may want to insert it manually.]],
 					-- this needs a refresh function for playback
 					--AllowSelect = function(self, idx, select) layout_main.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
@@ -1749,7 +2004,7 @@ local function DeclareFunctions()
 					width = 20,
 					height = 20,
 					tooltip = 'Play',
-					color = col_green_06,
+					color = colors.green_06,
 					margin = {-6,0,0,0},
 					OnClick = {
 						function()
@@ -1814,9 +2069,9 @@ local function DeclareFunctions()
 							t.align = 'left'
 							t.text = txt or 'error: no item' --< that shouldnt happen
 							t.fontSize = 10
-							t.textColor = col_white_09
-							t.backgroundColor = col_grey_02
-							t.borderColor = col_grey_03
+							t.textColor = colors.white_09
+							t.backgroundColor = colors.grey_02
+							t.borderColor = colors.grey_03
 							t.OnMouseOver = {
 								function(self) 
 									local _, endprefix = string.find(item, "[%$].*[%$%s]")
@@ -1859,7 +2114,7 @@ local function DeclareFunctions()
 							t.width = 20
 							t.height = 20
 							t.tooltip = 'Play at Location'
-							t.color = col_green_06
+							t.color = colors.green_06
 							t.margin = {-6,0,0,0}
 							t.OnClick = {
 								function()
@@ -1942,7 +2197,7 @@ local function DeclareFunctions()
 				return
 			end
 			controls.properties.file:SetText(item.file)-- = item.file
-			controls.properties.file.font:SetColor(item.file_external and col_red_1 or col_green_1)			
+			controls.properties.file.font:SetColor(item.file_external and colors.red_1 or colors.green_1)			
 			controls.properties.file:Invalidate()
 			layout_properties:Refresh()
 			if not controls.properties[0].checked == item.in3d then controls.properties[0]:Toggle() end
@@ -2084,49 +2339,7 @@ function SetupGUI()
 		Echo("<ambient gui> Chili not found")
 		return false
 	end
-	--[[
-	for k,v in pairs(Chili) do
-		if type(v) == 'function' then Echo(k) end
-	end
 
-	Chili.TextInput = function(self,utf8, ...)
-		Echo("called")
-		if Spring.IsGUIHidden() then return false end		
-		return Chili.Screen0:TextInput(utf8, ...)
-		
-	end
-	Chili.widgetHandler:UpdateCallIn("TextInput") 
-	--widget.widgetHandler:UpdateWidgetCallIn("TextInput", Chili)
-	
-	Chili.Object.OnTextInput = {}
-	Chili.Object.TextInput = function(self,...)	
-		--Echo("object")
-		if (self:CallListeners(self.OnTextInput, ...)) then
-			return self
-		end
-		return false
-	end
-	Chili.Screen.TextInput = function(self,...)
-		--Echo("screen")
-		local focusedControl = Chili.UnlinkSafe(self.focusedControl)
-       -- Echo("1")
-		if focusedControl then
-				--Echo("focus")
-                return (not not focusedControl:TextInput(...))				
-        end
-		--Echo("no focus")
-        return (not not inherited:TextInput(...))
-	end
-	Chili.Control.TextInput = function(self,...)
-		--Echo("control")
-		return inherited.TextInput(self, ...)
-	end
-	Chili.EditBox.TextInput = function(self,...)
-		--Echo("box")
-		return inherited.TextInput(self, ...)
-	end--]]
-	
-	
 	
 	screen0 = Chili.Screen0
 	
@@ -2136,215 +2349,24 @@ function SetupGUI()
 	Window = Chili.Window
 	Label = Chili.Label
 	Line = Chili.Line
-	FilterEditBox = Chili.EditBox:Inherit{
-		classname = 'FilterEditBox',
-		allowUnicode = true,
-		cursorColor = {0,1.3,1,0.7},
-		--borderColor = {0.7,0.7,0.7,.5},
-		--backgroundColor = {0.8, 0.8, 1.0, 0.4},
-		Update = function(self, ...)
-			Chili.Control.Update(self, ...)
-			if self.state.focused then
-				self:RequestUpdate()
-				if (os.clock() >= (self._nextCursorRedraw or -math.huge)) then
-					self._nextCursorRedraw = os.clock() + 0.1 --10FPS
-					
-				end
-			end
-			self:Invalidate()
-		end,
-		
-		KeyPress = function(self, key, mods, isRepeat, label, unicode, ...)
-			local cp = self.cursor
-			local txt = self.text
-			if key == KEYSYMS.RETURN then
-				if self.Confirm then self:Confirm() end
-				self.state.focused = false
-				screen0.focusedControl = nil
-				return false
-			elseif key == KEYSYMS.ESCAPE then				
-				if self.Discard then self:Discard() end
-				self.state.focused = false
-				screen0.focusedControl = nil
-				return false
-			elseif key == KEYSYMS.BACKSPACE then --FIXME use Spring.GetKeyCode("backspace")
-				self.text, self.cursor = unitools.Utf8BackspaceAt(txt, cp)
-			elseif key == KEYSYMS.DELETE then
-				self.text   = unitools.Utf8DeleteAt(txt, cp)
-			elseif key == KEYSYMS.LEFT then
-				self.cursor = unitools.Utf8PrevChar(txt, cp)
-			elseif key == KEYSYMS.RIGHT then
-				self.cursor = unitools.Utf8NextChar(txt, cp)
-			elseif key == KEYSYMS.HOME then
-				self.cursor = 1
-			elseif key == KEYSYMS.END then
-				self.cursor = #txt + 1			
-			else
-				local utf8char = unitools.UnicodeToUtf8(unicode)
-				if (not self.allowUnicode) then
-					local success
-					success, utf8char = pcall(string.char, unicode)
-					if success then
-						success = not utf8char:find("%c")
-					end
-					if (not success) then
-						utf8char = nil
-					end
-				end
-
-				if utf8char then
-					self.text = txt:sub(1, cp - 1) .. utf8char .. txt:sub(cp, #txt)
-					self.cursor = cp + utf8char:len()
-				--else
-				--	return false
-				end
-				
-			end
-			self._interactedTime = widget.Spring.GetTimer()
-			--inherited.KeyPress(self, key, mods, isRepeat, label, unicode, ...)
-			self:UpdateLayout()
-			self:Invalidate()
-			return self
-		end,
-		
-		TextInput = function(self, utf8char, ...)			
-			local unicode = utf8char
-			if (not self.allowUnicode) then
-				local success
-				success, unicode = widget.pcall(string.char, utf8char)
-				if success then
-					success = not unicode:find("%c")
-				end
-				if (not success) then
-					unicode = nil
-				end
-			end
-
-			if unicode and not self.InputFilter or self.InputFilter(unicode) then
-				local cp  = self.cursor
-				local txt = self.text
-				self.text = txt:sub(1, cp - 1) .. unicode .. txt:sub(cp, #txt)
-				self.cursor = cp + unicode:len()
-			--else
-			--	return false
-			end
-
-			self._interactedTime = widget.Spring.GetTimer()
-			--self.inherited.TextInput(utf8char, ...)
-			self:UpdateLayout()
-			self:Invalidate()
-			return self
-		end,
-	}
-	
-	
-	MouseOverTextBox = Chili.TextBox:Inherit{
-		classname = "mouseovertextbox",
-		HitTest = function(self, x,y)
-			return self
-		end,
-	}
-	ClickyTextBox = MouseOverTextBox:Inherit{
-		classname = 'clickytextbox',		
-		MouseDown = function(self,...)
-		  local btn = select(3,...)
-		  Echo(btn)		  
-		  if not btn == 3 then return nil end
-		  self.state.pressed = true
-		  self.inherited.MouseDown(self, ...)
-		  self:Invalidate()
-		  return self
-		end,
-		MouseUp = function(self,...)
-		  local btn = select(3,...)
-		  Echo(btn)		  
-		  if not btn == 3 then return nil end
-		  if (self.state.pressed) then
-			self.state.pressed = false
-			self.inherited.MouseUp(self, ...)
-			self:Invalidate()
-			return self
-		  end
-		end,
-		--[[
-		OnClick = {function(self,...)
-			local btn = select(3,...)
-			if not btn == 3 then return nil end
-		end,}--]]
-	}
-	
-	gl_AnimatedImage = Chili.Control:Inherit{
-		classname = 'gl_animatedimage',
-		defaultWidth  = 64,
-		defaultHeight = 64,
-		padding = {0,0,0,0},
-		color = {1,1,1,1},		
-		keepAspect = true;
-		OnClick  = {},
-		this = gl_AnimatedImage,
-		--DrawControl = function(self)
-		--	widget.draw.DrawIcons(self.x, self.y, self.x)
-		--end,
-	}
-	
-	function gl_AnimatedImage:DrawControl()	
-		--self:_DrawInClientArea(widget.draw.DrawIcons, self.x, self.y, self.x)
-		--local activeControl = Chili.UnlinkSafe(Chili.Screen0.activeControl)       
-		--if activeControl and (activeControl == self.parent or activeControl == self) then
-		if self.parent.state.hovered or self.state.hovered then
-			DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5, true)
-		else
-			DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5)
-		end
-		--widget.draw.DrawIcons(list)		
-	end
-	
-	function gl_AnimatedImage:IsActive()
-		local onclick = self.OnClick
-		if (onclick and onclick[1]) then
-			return true
-		end
-	end
-
-	function gl_AnimatedImage:HitTest()
-		  --FIXME check if there are any eventhandlers linked (OnClick,OnMouseUp,...)
-		return self:IsActive() and self
-	end
-
-	function gl_AnimatedImage:MouseDown(...)
-		  --// we don't use `this` here because it would call the eventhandler of the button class,
-		  --// which always returns true, but we just want to do so if a calllistener handled the event
-		return Control.MouseDown(self, ...) or self:IsActive() and self
-	end
-
-	function gl_AnimatedImage:MouseUp(...)
-		return Control.MouseUp(self, ...) or self:IsActive() and self
-	end
-
-	function gl_AnimatedImage:MouseClick(...)
-		return Control.MouseClick(self, ...) or self:IsActive() and self
-	end
-	
-	
 	Panel = Chili.Panel
 	ScrollPanel = Chili.ScrollPanel
 	LayoutPanel = Chili.LayoutPanel
-	StackPanel = Chili.StackPanel
-	--TreeView = Chili.TreeView
+	StackPanel = Chili.StackPanel	
 	Grid = Chili.Grid
 	TabBar = Chili.TabBar
-	Trackbar = Chili.Trackbar
-	--Node = Chili.TreeViewNode
+	Trackbar = Chili.Trackbar	
 	color2incolor = Chili.color2incolor
 	incolor2color = Chili.incolor2color
-	
-	--drag = getfenv().drag
-
+		
+	DeclareClasses()
 	DeclareControls()
-	DeclareFunctions()
+	DeclareFunctionsAfter()
 	
 	tabbar_settings:Select('Player')
+	---window_chili:Show()
 end
+
 
 
 function UpdateGUI()
@@ -2358,6 +2380,18 @@ function UpdateGUI()
 	for _, window in pairs(inspectionWindows) do window:Refresh() end
 	--for _, tab in pairs(tabs_settings) do tab:Refresh() end
 	button_emitters_anim:Invalidate()
+	
+	--local focusedControl = Chili.UnlinkSafe(Chili.Screen0.focusedControl)
+	--local hoveredControl = Chili.UnlinkSafe(Chili.Screen0.hoveredControl)
+	--local activeControl = Chili.UnlinkSafe(Chili.Screen0.activeControl)
+	
+	
+	--label_focus:SetCaption(focusedControl and focusedControl.classname or 'none'); label_focus:Invalidate()
+	--label_hover:SetCaption(hoveredControl and hoveredControl.classname or 'none'); label_hover:Invalidate()
+	--label_active:SetCaption(activeControl and activeControl.classname or 'none'); label_active:Invalidate()
+	--window_chili:Invalidate()	
+
+	
 end
 
 
@@ -2405,6 +2439,9 @@ function SpawnDialog(px, pz, py)
 		y = 12,
 		clientWidth = 140,
 		text = '',
+		backgroundColor = {.1,.1,.1,.5},
+		borderColor = {.3,.3,.3,.3},
+		borderColor2 = {.4,.4,.4,.4},
 		InputFilter = function(unicode)
 			return string.find(unicode, "[%w_-]")
 			--if string.find(unicode, "%A%D") then return false end
@@ -2458,197 +2495,3 @@ gui.containers = containers
 
 	
 return gui
-
-
---[[
-
-	
-	editbox_mapfolder = EditBox : New {
-		x = 123,
-		y = 26,
-		clientWidth = 297,
-		align = 'left',
-		text = config.path_map,
-		OnChange = 	{	function()
-						config.path_map=text
-						end
-					},
-		parent = window_settings,
-		--fontSize = 10,
-		textColor = {0.9,0.9,0.9,1},
-		borderColor = {0.2,0.2,0.2,0.5},
-		backgroundColor = {0.3,0.3,0.3,0.5},
-		tooltip = The .sdd folder this map resides in. By default, the Widget will save all its data in the maps folder structure. If you are running from an archive, ...,
-	}
-	editbox_soundfolder = EditBox : New {
-		x = 132,
-		y = 52,
-		clientWidth = 288,
-		align = 'left',
-		text = config.path_sound,
-		OnChange = 	{	function()
-							config.path_sound=text
-						end
-					},
-		parent = window_settings,
-		--fontSize = 10,
-		textColor = {0.9,0.9,0.9,1},
-		borderColor = {0.2,0.2,0.2,0.5},
-		backgroundColor = {0.3,0.3,0.3,0.5},
-		tooltip = Where our sound files are read from. Note that while you can load sound files from anywhere on your computer, you eventually need to put them here if you wish to incorporate them into your map.,
-	}
-	buttonimage_mapfolder = Image : New {
-		x = 434,
-		y = 30,
-		parent = window_settings,
-		file = icons.SETTINGS_ICON,				
-		width = 14,
-		height = 14,
-		tooltip = 'Reset to default',
-		--color = {0,0.8,0.2,0.9},		
-		OnClick = {	function()		
-					config.path_map = 'maps/'..Game.mapName..'.sdd/'					
-					end
-				},				
-	}
-	buttonimage_soundfolder = Image : New {
-		x = 434,
-		y = 56,
-		parent = window_settings,
-		file = icons.SETTINGS_ICON,				
-		width = 14,
-		height = 14,
-		tooltip = 'Reset to default',
-		--color = {0,0.8,0.2,0.9},		
-		OnClick = {	function()		
-					config.path_sound = 'Sounds/Ambient/'					
-					end
-				},				
-	}		
-	
-
-
-
-
-
-
-	WINDOW_INSPECT_PROTOTYPE.button_close = Button:New{
-		x = -32,
-		y = 32,				
-		tooltip = 'Close',
-		clientWidth = 10,
-		clientHeight = 10,
-		caption = '',
-		OnClick = {
-			function() 
-				window_inspect.inspect = nil
-				window_inspect:Refresh()				
-			end
-		},
-		children = {
-			Image:New {
-				width = "100%",
-				height = "100%",				
-				file = icons.CLOSE_ICON,
-			},
-		},
-	}
-	WINDOW_INSPECT_PROTOTYPE.label = Label:New {
-		x = 0,
-		y = 20,
-		parent = window_inspect,
-		cation = '',
-		width = window_inspect.clientWidth,
-		--height = 20,
-		align = 'center',		
-		textColor = {1,1,0,0.9},
-	}
-	scroll_inspect = ScrollPanel:New {
-		x = 0,
-		y = 40,
-		clientWidth = window_inspect.width - 38,
-		clientHeight = window_inspect.height - 90,
-		parent = window_inspect,
-		scrollPosX = -16,
-		horizontalScrollbar = false,
-		verticalScrollbar = true,
-		verticalSmartScroll = false,	
-		scrollbarSize = 6,
-		padding = {5,10,5,10},
-		--autosize = true,
-		--itemPadding = {5,10,5,10},
-		--margin = {20,20,20,20},			
-	}
-	layout = LayoutPanel:New {
-		x = 0,
-		y = 0,
-		clientWidth = window_inspect.panel.width-20,
-		clientHeight = window_inspect.panel.width-20,
-		parent = scroll_inspect,
-		orientation = 'vertical',
-		--orientation = 'left',
-		selectable = false,		
-		multiSelect = false,
-		maxWidth = window_inspect.panel.width,
-		minWidth = window_inspect.panel.width,
-		itemPadding = {6,2,6,2},
-		itemMargin = {0,0,0,0},
-		autosize = true,
-		align = 'left',
-		columns = 3,
-		left = 0,
-		centerItems = false,	
-	}	
-
-
-
-
-
-OnMouseDown = { -- should set a cursor too!
-						function(self,...)
-							if drag.objects[1] then return nil end
-							local selection = layout_main.selectedItems
-							if selection and #selection > 0 then
-								for i = 1, #selection do -- hope they are sorted, and only trues in here : /
-									local sel = layout_main.children[i]
-									drag.objects[i] = sel.refer --< this will crash for things that arent meant to be dragged
-									drag.params.templates = true
-									drag.params.source = layout_main
-								end
-							end
-							drag._type.sounditems = true
-							Echo("drag timer started")
-							self.inherited.MouseDown(self,...)
-							return self
-						end	
-					},
-					OnMouseUp = {function(self,...) self.inherited.MouseDown(self,...) return self end},
-					SetHighlight = function(self, select) 						
-						if select then self.font:SetColor(self.textColorSelected)
-						else self.font:SetColor(self.textColorNormal) end						
-						self:Invalidate()
-					end,
-
-
-
-OnMouseDown = { -- should set a cursor too!
-			function(self,...)
-				Echo("layout")
-				self.inherited.MouseDown(self,...)
-				if drag.objects[1] then return nil end
-				local selection = self.selectedItems
-				if selection and #selection > 0 then
-					for i = 1, #selection do -- hope they are sorted, and only trues in here : /
-						local sel = self.children[i]
-						assert (sel.refer, "selection "..tostring(sel).." missing item reference")
-						drag.objects[i] = sel.refer --< this will crash for things that arent meant to be dragged
-						drag.params.templates = true
-						drag.params.source = layout_main
-					end
-				end
-				drag._type.sounditems = true
-				Echo("drag timer started")				
-				return self
-			end	
-		},					
-	--]]	

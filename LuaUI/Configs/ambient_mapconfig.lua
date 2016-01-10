@@ -8,8 +8,11 @@ local Config = {
 	autosave = true,
 	mapX = 9216,
 	mapZ = 7168,
+	path_map = "maps/white_rabbit_v30.sdd/",
+	path_read = "maps/white_rabbit_v30.sdd/Sounds/Ambient/",
 	path_sound = "Sounds/Ambient/",
 	path_sounds = "Sounds/Ambient/",
+	path_spring = "c:\\users\\bogus\\documents\\my games\\spring\\",
 	showEmitters = true,
 	verbose = true,
 }
