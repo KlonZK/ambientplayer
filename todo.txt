@@ -13,8 +13,8 @@ continue gui and io implementation:
 - consider creating $map.sdd folder and subfolders
 - also consider/test if installing the editor into spring/luaui would be possible
 - consider more chili subclasses for shared functions (mouseover for layout, ..) x
-- rework instanced windows, this is coming up. concept so far is to subclass a InstancedWindow class,
-- each subclass holds its own prototype, while the super class controls the instancing
+- rework instanced windows, this is coming up. concept so far is to subclass a InstancedWindow class, 
+- each subclass holds its own prototype, while the super class controls the instancing x
 
 player implementation:
 - consider player module

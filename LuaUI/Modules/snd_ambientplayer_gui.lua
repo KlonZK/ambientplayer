@@ -82,13 +82,14 @@ local colors = {
 			return '\255'..char(floor(r*255))..char(floor(g*255))..char(floor(b*255))
 		end
 	end,
-	green_1 = {0.4, 1, 0.1, 1},
+	green_1 = {0.4, 1.0, 0.1, 1.0},
 	green_06 = {0, 0.6, 0.2, 0.9},
-	red_1 = {1, 0.2, 0.1, 1},
+	red_1 = {1, 0.2, 0.1, 1.0},
 	orange_06 = {1, 0.6, 0.0, 0.9},
 	yellow_09 = {0.9, 0.9, 0, 0.9},
-	white_1 = {1,1,1,1},
+	white_1 = {1.0,1.0,1.0,1.0},
 	white_09 = {0.9, 0.9, 0.9, 1},
+	grey_879 = {0.8,0.7,0.9,0.9},
 	grey_08 = {0.8, 0.8, 0.8, 0.7},
 	grey_03 = {0.3, 0.3, 0.3, 0.5},
 	grey_02 = {0.2, 0.2, 0.2, 0.5},
@@ -169,39 +170,28 @@ local tabs_settings = {}
 
 local function DeclareClasses()
 
-	-------------------------------------------- Generic Window with MouseOver Hook ----------------------------------
-	-- these windows will be used to prevent mouse events from passing through them into world space
-	-- 
-	
-	MouseOverWindow = Chili.Window:Inherit{
-		classname = 'mouseoverwindow',
-		IsMouseOver	= function(self, mx, my) 
-			local x, y = self:LocalToScreen(self.x, self.y)			
-			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
-		end,		
-	}
-	
-	
-	-------------------------------------------- Instanced Prototype-based Window ------------------------------------
-	-- 
-	
-	
 	------------------------------------------- filtered Drag & Drop Layout Panel ------------------------------------
 	-- drag is controlled externally by chili and the widgets main module, this panel simply checks for mouse over status
 	-- secondly, it asks child components for permission before selecting them 
 	
 	DragDropLayoutPanel = Chili.LayoutPanel:Inherit{
-		classname = 'dragdroplayoutpanel',
+		classname = 'dragdroplayoutpanel',		
 		IsMouseOver	= function(self, mx, my) 
+			--Echo(mx.." - "..my)			
 			local x, y = self:LocalToScreen(self.x, self.y)
+			--Echo(x.." : "..y)
 			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
 		end,
 		OnSelectItem = {
 			function(self, index, state)								
 				local c = self.children[index]				
 				if c and c.AllowSelect then c:AllowSelect(index, state) end
-			end				
-		},		
+			end,				
+		},
+		OnHide = function(...)
+			inherited.OnHide(...)
+			self.visible = false
+		end,
 	}
 	
 	
@@ -215,6 +205,11 @@ local function DeclareClasses()
 		classname = 'FilterEditBox',
 		allowUnicode = true,
 		cursorColor = {0,1.3,1,0.7},		
+		OnFocusUpdate = {
+			function(self)
+				self:Invalidate()
+			end,	
+		},
 		Update = function(self, ...)
 			Chili.Control.Update(self, ...)
 			if self.state.focused then
@@ -223,8 +218,8 @@ local function DeclareClasses()
 					self._nextCursorRedraw = os.clock() + 0.1 --10FPS
 					
 				end
-			elseif self.visible then 
-				self:Invalidate()
+			--elseif self.visible then 
+			--	self:Invalidate()
 			end			
 		end,		
 		KeyPress = function(self, key, mods, isRepeat, label, unicode, ...)
@@ -253,7 +248,7 @@ local function DeclareClasses()
 			elseif key == KEYSYMS.END then
 				self.cursor = #txt + 1
 			elseif key == KEYSYMS.TAB then
-				if self.OnTab then self:OnTab() end
+				if self.OnTab then return self:OnTab() end				
 			else
 				local utf8char = unitools.UnicodeToUtf8(unicode)
 				if (not self.allowUnicode) then
@@ -377,10 +372,287 @@ local function DeclareClasses()
 		end,
 	}
 	
-
 	
+	-------------------------------------------- Generic Window with MouseOver Hook ----------------------------------
+	-- these windows will be used to prevent mouse events from passing through them into world space
+	-- 
+	
+	MouseOverWindow = Chili.Window:Inherit{
+		classname = 'mouseoverwindow',
+		IsMouseOver	= function(self, mx, my) 						
+			local x, y = self.x, self.y -- for some odd reason LocalToScreen() breaks window coordinates			
+			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+		end,		
+	}	
+	
+
+	-------------------------------------------- Instanced Prototype-based Window ------------------------------------
+	-- 
+	
+	InstancedWindow = MouseOverWindow:Inherit{
+		classname = 'instancedwindow',
+		New = function(self, obj) -- not sure if needed
+			self.inherited.New(self, obj)
+			return obj
+		end,
+		Inherit = function(self, class)			
+			class = self.inherited:Inherit(class)
+			class.instances = {}
+			setmetatable(class.instances, {
+				__mode = 'v',
+				__index = function(t, k)
+					if not rawget(t, k) then
+						t[k] = class:New(k)
+						containers[class.classname..k] = t[k]
+						--rawset(t, k, class:new(key))
+					end
+					return t[k]
+				end,
+			})
+			return class	
+		end,
+	}
+	
+	
+	-------------------------------------------- Emitter Inspection Window Prototype ------------------------------------
+	
+	EmitterInspectionWindow = InstancedWindow:Inherit{
+		classname = 'emitterinspectionwindow',
+		New = function(self, key)
+			local obj = {
+				refer = key,
+				parent = screen0,
+				x = "50%",
+				y = "50%",				
+				caption = "Details",
+				draggable = true,
+				resizable = false,
+				dragUseGrip = true,
+				clientWidth = 300,
+				clientHeight = 250,
+				visible = false,
+			}
+			
+			obj = self.inherited.New(self, obj)			
+			
+			local closeBtn = Button:New{
+				parent = obj,
+				x = -28,
+				y = 4,				
+				tooltip = 'Close',
+				clientWidth = 14,
+				clientHeight = 14,
+				caption = '',
+				padding = {8,8,8,8},
+				margin = {2,2,2,2},
+				OnClick = {
+					function(self)
+						self.parent:Hide()
+						self.parent.layout.visible = false
+					end,
+				},	
+			}
+			Image:New {
+				parent = closeBtn,
+				width = "100%",
+				height = "100%",
+				file = icons.CLOSE_ICON,
+				padding = {0,0,0,0},
+				margin = {0,0,0,0}
+			}
+			local closeallBtn =	Button:New{					
+				parent = obj,
+				x = -60,
+				y = 4,				
+				tooltip = 'Close All',
+				clientWidth = 16,
+				clientHeight = 16,
+				caption = '',
+				padding = {7,7,7,7},
+				margin = {2,2,2,2},
+				OnClick = {
+					function(self)
+						for _, window in pairs(EmitterInspectionWindow.instances) do 
+							window:Hide()
+							window.layout.visible = false
+						end
+					end,
+				},
+			}	
+			Image:New {
+				parent = closeallBtn,
+				width = "100%",
+				height = "100%",
+				file = icons.CLOSEALL_ICON,
+				padding = {0,0,0,0},
+				margin = {0,0,0,0}
+			}	
+			local label = Label:New{
+				parent = obj,
+				y = 20,				
+				width = 300,				
+				align = 'center',		
+				caption = key,
+				textColor = colors.yellow_09,
+				Refresh = function(self)
+					if not self.caption == self.parent.refer then 
+						self.caption = parent.refer
+						self:Invalidate()
+					end
+					return false						
+				end,
+			}
+			local scrlPanel = ScrollPanel:New{
+				parent = obj,
+				y = 40,
+				clientWidth = 300 - 8,
+				clientHeight = 250 - 90,				
+				scrollPosX = -16,
+				horizontalScrollbar = false,
+				verticalScrollbar = true,
+				verticalSmartScroll = false,	
+				scrollbarSize = 6,
+				padding = {5,10,5,10},
+				Refresh = function(self)
+					for _, c in pairs(self.children) do
+						return c.Refresh and c:Refresh() or false
+					end
+				end,				
+			}	
+			local layout = DragDropLayoutPanel:New{							
+				parent = scrlPanel,
+				clientWidth = 300,
+				clientHeight = 250,
+				maxWidth = 300,
+				minWidth = 0,
+				minHeight = 160,
+				orientation = 'vertical',				
+				selectable = false,		
+				multiSelect = false,
+				itemPadding = {6,2,6,2},
+				itemMargin = {0,0,0,0},
+				autosize = true,
+				align = 'left',
+				columns = 3,
+				left = 0,
+				centerItems = false,
+				list = {},
+				Refresh = function(self)
+					Echo("refreshing layout")
+					self.refer = obj.refer					
+					local e = emitters[self.refer]
+					if not e then 
+						obj:Dispose()
+						return false
+					end
+					local list = self.list
+					local hasValidLayout = true
+					for i = 1, #e.sounds do
+						Echo("sounds")
+						local sound = e.sounds[i]
+						local iname = sound.item
+						local item = sounditems.instances[iname]
+						
+						if not list[iname] then
+							list[iname] = {}
+							local _, endprefix = string.find(iname, "[%$].*[%$%s]")
+							local txt = colors.yellow_09:Code()..string.sub(iname, 0, endprefix)
+								..colors.white_1:Code()..string.sub(iname, endprefix + 1)
+							list[iname].label = MouseOverTextBox:New{
+								refer = iname,
+								width = obj.width - 140,
+								parent = self,
+								align = 'left',
+								text = txt,
+								fontsize = 10,
+								textColor = colors.white_09,
+								backgroundColor = colors.grey_02,
+								borderColor = colors.grey_03,
+								OnMouseOver = {
+									function(self) 													
+										local _, endprefix = string.find(iname, "[%$].*[%$%s]")
+										local ttip = colors.yellow_09:Code()..string.sub(iname, 0, endprefix)
+											..colors.white_1:Code()..string.sub(iname, endprefix + 1).."\n\n"
+												..(item.file_local and colors.orange_06:Code() or colors.green_1:Code())
+													..item.file..colors.white_1:Code().."\n\n"										
+										for k, _ in pairs(sounditems.default) do											
+											if k ~= 'file' then												
+												ttip = ttip..k..": "..tostring(item[k]).."\n"
+											end
+										end
+										self.tooltip=ttip
+									end,
+								},
+							}
+							list[iname].editBtn = Image:New {
+								refer = iname,
+								parent = self,
+								file = icons.PROPERTIES_ICON,
+								width = 20,
+								height = 20,
+								tooltip = 'Sound Properties',
+								color = colors.grey_879, 
+								OnClick = { -- this needs a look at
+									function(self,...)									
+										local w = window_properties
+										if w.refer then w:Confirm() end
+										w.refer = self.refer
+										w:Refresh()
+										w:Show()									
+									end,
+								},											
+							}
+							list[iname].playBtn = Image:New {
+								refer = iname,
+								parent = self,
+								file = icons.PLAYSOUND_ICON,
+								width = 20,
+								height = 20,
+								tooltip = 'Play at Location',
+								color = colors.green_06,
+								margin = {-6,0,0,0},
+								OnClick = { -- hope e exists at this point?
+									function()													
+										return DoPlay(iname, options.volume.value, e)
+									end,
+								},
+							}
+							-- what about animated play button
+							hasValidLayout = false
+						end								
+					end							
+					for k, t in pairs(list) do
+						if not e.sounds[k] then
+							t.label:Dispose()
+							t.editBtn:Dispose()
+							t.playBtn:Dipose()
+							hasValidLayout = false
+						end
+					end
+					-- if not hasValidLayout then self:Invalidate()
+					return not hasValidLayout
+				end,
+			}
+			obj.Refresh = function(self)
+				Echo("refreshing")
+				local key = self.refer
+				local e = emitters[key]
+				if not e then 
+					Echo("no e")
+					self:Dispose() 
+					return
+				end	
+				
+				label:Refresh()
+				layout:Refresh()								
+			end
+			obj.layout = layout	
+			return obj
+		end,
+	}		
 end
 
+	
 
 ----------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------- GUI CONTROLS -----------------------------------------------------
@@ -1562,26 +1834,6 @@ defaults to 0]],
 			end
 		},	
 	}
---[[
-		OnSelectItem = {
-			function(self, index, state)								
-				local c = self.children[index]				
-				if c and c.AllowSelect then c:AllowSelect(index, state) end
-				Echo("layout: "..index)
-				--if c.refer then Echo(c.refer) end
-				--for k,v in pairs(self.selectedItems) do
-				--	Echo(k..", "..tostring(v))
-				--end
-			end				
-		},
-		IsMouseOver	= function(self, mx, my) 
-			local x, y = self:LocalToScreen(self.x, self.y)
-			Echo("test: "..mx..", "..my)
-			Echo("against:  X:"..x.." X+W:"..(x + self.width).." Y:"..y.." Y+H:"..(y + self.height))
-			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
-		end,
---]]	
-	
 	
 	window_browser:Hide()
 	containers.browser = window_browser
@@ -1794,93 +2046,7 @@ defaults to 0]],
 
 	
 	---------------------------------------------------- inspect emitter window ------------------------------------------------
-	WINDOW_INSPECT_PROTOTYPE = {
-		x = "50%",
-		y = "50%",
-		--parent = screen0,
-		caption = "Details",
-		draggable = true,
-		resizable = false,
-		dragUseGrip = true,
-		clientWidth = 300,
-		clientHeight = 250,
-		--backgroundColor = {0.8,0.8,0.8,0.9},
-		inspect = nil,
-		--Refresh = function(self) end,
-	}	
-	BUTTON_CLOSE_INSPECT_PROTOTYPE = {
-		name = 'closebutton',
-		x = -28,
-		y = 4,				
-		tooltip = 'Close',
-		clientWidth = 14,
-		clientHeight = 14,
-		caption = '',
-		padding = {8,8,8,8},
-		margin = {2,2,2,2},
-		OnClick = {
-			function(self)
-				self.listener.inspect = nil
-				--self.listener():Refresh()				
-			end
-		},		
-	}
-	BUTTON_CLOSEALL_INSPECT_PROTOTYPE = {
-		name = 'closeallbutton',
-		x = -60,
-		y = 4,				
-		tooltip = 'Close All',
-		clientWidth = 16,
-		clientHeight = 16,
-		caption = '',
-		padding = {7,7,7,7},
-		margin = {2,2,2,2},
-		OnClick = {
-			function(self)
-				for _, window in pairs(inspectionWindows) do window.inspect = nil end
-			end
-		},		
-	}	
-	LABEL_INSPECT_PROTOTYPE = {		
-		name = 'label',
-		y = 20,				
-		caption = '',
-		width = 300,				
-		align = 'center',		
-		textColor = colors.yellow_09,
-	}
-	SCROLL_INSPECT_PROTOTYPE = {				
-		y = 40,
-		clientWidth = 300 - 8,
-		clientHeight = 250 - 90,				
-		scrollPosX = -16,
-		horizontalScrollbar = false,
-		verticalScrollbar = true,
-		verticalSmartScroll = false,	
-		scrollbarSize = 6,
-		padding = {5,10,5,10},		
-	}
-	LAYOUT_INSPECT_PROTOTYPE =  {	
-		name = 'layout',
-		clientWidth = 300,
-		clientHeight = 250, -- this was width too. ?
-		maxWidth = 300,
-		minWidth = 0, -- same here						
-		orientation = 'vertical',				
-		selectable = false,		
-		multiSelect = false,
-		itemPadding = {6,2,6,2},
-		itemMargin = {0,0,0,0},
-		autosize = true,
-		align = 'left',
-		columns = 3,
-		left = 0,
-		centerItems = false,	
-	}		
-	--WINDOW_INSPECT_PROTOTYPE = Window:New(INSPECT_BUILDTABLE)
-	--WINDOW_INSPECT_PROTOTYPE:Hide()
-	--containers.inspect = window_inspect
-	
+
 	window_chili = Window:New{
 		x = "50%",
 		y = "75%",
@@ -2032,121 +2198,6 @@ local function DeclareFunctionsAfter()
 		if not valid then self:Invalidate() end	
 	end
 	
-	--------------------------------------------------------------------------------------------------
-	-- inspection window
-	
-	WINDOW_INSPECT_PROTOTYPE.Refresh = function(self)
-		local this = self -- userdata
-		local name = self.name -- string :)
-		
-		-- could/should check for visibility here and only update then
-		if self.inspect then
-			--Echo("check")
-			local valid = true
-			local inspect = self.inspect -- string?
-			--Echo(type(inspect))
-			local label = self.label
-			local layout = self.layout
-			--Echo (layout.name)
-			--Echo("check 2")
-			if emitters[inspect] then
-				local e = emitters[inspect]
-				label:SetCaption(inspect)
-				
-				for i = 1, #e.sounds do
-					local sound = e.sounds[i]
-					local item = sound.item
-					if not controls[name]['label_'..item] then
-						valid = false						
-						local _, endprefix = string.find(item, "[%$].*[%$%s]")
-						local txt = '\255\230\255\100'..string.sub(item, 0, endprefix)
-							..'\255\255\255\255'..string.sub(item, endprefix + 1)
-						local t = {}
-							t.name = 'label_'..item							
-							t.refer = item
-							t.width = this.width - 140
-							t.parent = layout
-							t.align = 'left'
-							t.text = txt or 'error: no item' --< that shouldnt happen
-							t.fontSize = 10
-							t.textColor = colors.white_09
-							t.backgroundColor = colors.grey_02
-							t.borderColor = colors.grey_03
-							t.OnMouseOver = {
-								function(self) 
-									local _, endprefix = string.find(item, "[%$].*[%$%s]")
-									local ttip = '\255\230\255\100'..string.sub(item, 0, endprefix)
-										..'\255\125\230\255'..string.sub(item, endprefix + 1).."\255\255\255\255\n\n"
-										
-									--local ttip = "\255\125\230\255"..item.."\255\255\255\255\n\n"--.."\n--------------------------------------------------------------\n\n"
-									for key, _ in pairs(sounditems.default) do ttip = ttip..key..": "..
-											tostring(sounditems.instances[sound.item][key]).."\n" 
-									end
-									-- ttip = ttip..'\n(right-click to edit)' -- that is not true :/
-									self.tooltip=ttip
-								end
-							}							
-						controls[name]['label_'..item] = MouseOverTextBox:New (t)						
-						t = {}
-							t.name = 'editBtn_'..item
-							t.refer = item
-							t.parent = layout
-							t.file = icons.PROPERTIES_ICON			
-							t.width = 20
-							t.height = 20			
-							t.tooltip = 'Sound Properties'
-							t.color = {0.8,0.7,0.9,0.9}				
-							t.OnClick = {
-								function(self,...)									
-									local w = window_properties
-									if w.refer then w:Confirm() end
-									w.refer = self.refer
-									w:Refresh()
-									w:Show()									
-								end
-							}
-						controls[name]['editBtn_'..item] = Image:New (t)
-						t = {}
-							t.name = 'playBtn_'..item
-							t.refer = item
-							t.parent = layout
-							t.file = icons.PLAYSOUND_ICON		
-							t.width = 20
-							t.height = 20
-							t.tooltip = 'Play at Location'
-							t.color = colors.green_06
-							t.margin = {-6,0,0,0}
-							t.OnClick = {
-								function()
-									--local px, py, pz = e.pos.x, e.pos.y, e.pos.z									
-									return DoPlay(sound.item, options.volume.value, e) -- pos is false for global emitter, for some silly reason. needs change
-								end
-							}									
-						controls[name]['playBtn_'..item] = Image:New (t)
-					else						
-						local _, endprefix = string.find(item, "[%$].*[%$%s]")
-						local txt = '\255\230\255\100'..string.sub(item, 0, endprefix)
-							..'\255\255\255\255'..string.sub(item, endprefix + 1)
-						controls[name]['label_'..item].text = txt						
-					end				
-				end
-				
-				for control, params in pairs(controls[name]) do				
-					if not e.sounds[params.refer] then -- dispose of controls for items that were removed						
-						params.refer = nil
-						params:Dispose()
-						controls[name][control] = nil
-						valid = false
-					end	
-				end											
-			elseif true then do end
-			else --< if it is some kind of object that isnt meant to be here
-				assert (false, "invalid or misplaced inspect object: "..type(object).." - "..tostring(object))
-			end
-		elseif self.visible then self:SetVisibility(false) end		
-		
-		if not valid then self:Invalidate() end
-	end
 	
 	--------------------------------------------------------------------------------------------------
 	-- settings window
@@ -2202,7 +2253,7 @@ local function DeclareFunctionsAfter()
 			layout_properties:Refresh()
 			if not controls.properties[0].checked == item.in3d then controls.properties[0]:Toggle() end
 			controls.properties[0]:Refresh()
-			controls.properties.in3_defaultBtn:Refresh()
+			controls.properties.in3d_defaultBtn:Refresh()
 			for i, control in ipairs(controls.properties) do
 				local txt = item[control.refer]
 				control.text = type(txt) == 'number' and tostring(txt) or 'default'				
@@ -2239,71 +2290,6 @@ local function DeclareFunctionsAfter()
 	--
 	
 
-	
-	
-	--------------------------------------------------------------------------------------------------
-	-- inspection windows shared handle	
-	-- 
-	
-	-- this is misleading they dont actually dispose, but close. still might be useful
-	--[[
-	inspectionWindows.DisposeAll = function(self)
-		for w, params in pairs(self) do
-			if type(params) ~= 'function' then params.inspect = nil end --there should be a more elegant way to exclude these functions
-			 -- windows without inspect selfdestruct
-		end
-	end
-	inspectionWindows.RefreshAll = function(self)
-		for w, params in pairs(self) do
-			if type(params) ~= 'function' then params:Refresh() end -- same here
-			
-		end
-	end	
-	--]]
-	setmetatable(inspectionWindows, {
-		__mode = 'v',
-		__index = function(t, k)		
-			Echo("new inspection window - key: "..tostring(k).."("..type(k)..")")
-			local function Copy(_t) -- recursive table copy. these prototypes only go 1 level deep atm
-				local w = {}
-				for _k, v in pairs(_t) do	
-					if type(v) == 'table' then w[_k] = Copy(v) else w[_k] = v end
-				end
-				return w
-			end					
-			local wt = Copy(WINDOW_INSPECT_PROTOTYPE)
-			wt.name = 'inspect_'..tostring(k)
-			wt.refer = tostring(k)
-			
-			w = Window:New (wt)
-			-- these will not go out of scope if local will they?
-			local label = Label:New (Copy(LABEL_INSPECT_PROTOTYPE))			
-			local btnA = Button:New (Copy(BUTTON_CLOSE_INSPECT_PROTOTYPE))		
-			local btnB = Button:New (Copy(BUTTON_CLOSEALL_INSPECT_PROTOTYPE))
-			local scroll = ScrollPanel:New (Copy(SCROLL_INSPECT_PROTOTYPE))
-			local layout = LayoutPanel:New (Copy(LAYOUT_INSPECT_PROTOTYPE))
-						
-			screen0:AddChild(w)
-			w:AddChild(label)
-			w:AddChild(btnA)
-			w:AddChild(btnB)
-			btnA:AddChild(Image:New {width = "100%",	height = "100%", file = icons.CLOSE_ICON, padding = {0,0,0,0}, margin = {0,0,0,0}})
-			btnB:AddChild(Image:New {width = "100%",	height = "100%", file = icons.CLOSEALL_ICON, padding = {0,0,0,0}, margin = {0,0,0,0}})
-			w:AddChild(scroll)
-			scroll:AddChild(layout)
-			
-			w.label = label -- userdata
-			w.layout = layout -- userdata
-			btnA.listener = w
-			--w:Invalidate()
-			containers[wt.name] = w
-			--controls[wt.name] = {} -- this is built automatically
-			w:Refresh()
-			
-			rawset(t, k, w)
-			return t[k]		
-		end,
-	}) 
 	
 	--------------------------------------------------------------------------------------------------
 	--------------------------------------------------------------------------------------------------
@@ -2377,6 +2363,8 @@ function UpdateGUI()
 	layout_main:Refresh()
 	--inspectionWindows:RefreshAll()
 	
+	-- is there any reason why they have to refresh on every tick?
+	-- maybe the counters? they could be frefreshed individually tho	
 	for _, window in pairs(inspectionWindows) do window:Refresh() end
 	--for _, tab in pairs(tabs_settings) do tab:Refresh() end
 	button_emitters_anim:Invalidate()
@@ -2397,11 +2385,15 @@ end
 
 function MouseOver(mx, my)
 	--Echo ("call")
-	for c, params in pairs(containers) do		
-		--if params.noSelfHitTest then Echo(c.." has no self hit test") end
-		local w = params		
-		if params.visible and (mx > w.x and mx < w.x + w.width) and (my > w.y and my < w.y + w.height) then return containers[c] end
-	end
+	--for _, c in pairs(EmitterInspectionWindow.instances) do
+	--	if c.visible and c.IsMouseOver and c:IsMouseOver(mx, my) then return c end
+	--end
+	for _, c in pairs(containers) do		
+		if c.layout then				
+			if c.layout.IsMouseOver and c.layout:IsMouseOver(mx, my) then return c.layout end
+		end		
+		if c.IsMouseOver and c:IsMouseOver(mx, my) then return c end		
+	end	
 	return false
 end
 
@@ -2488,10 +2480,240 @@ end
 --
 
 local gui = getfenv()
-gui.inspectionWindows = inspectionWindows
+gui.EmitterInspectionWindow = EmitterInspectionWindow
 gui.controls = controls
 gui.containers = containers
 
 
 	
 return gui
+
+
+	--[[
+		prototype = {
+			children = {
+				Button:New{
+					x = -28,
+					y = 4,				
+					tooltip = 'Close',
+					clientWidth = 14,
+					clientHeight = 14,
+					caption = '',
+					padding = {8,8,8,8},
+					margin = {2,2,2,2},
+					OnClick = {
+						function(self)
+							self.parent:Hide()
+						end,
+					},
+					children = {
+						Image:New {
+							width = "100%",
+							height = "100%",
+							file = icons.CLOSE_ICON,
+							padding = {0,0,0,0},
+							margin = {0,0,0,0}
+						},
+					},
+				},
+				Button:New{					
+					x = -60,
+					y = 4,				
+					tooltip = 'Close All',
+					clientWidth = 16,
+					clientHeight = 16,
+					caption = '',
+					padding = {7,7,7,7},
+					margin = {2,2,2,2},
+					OnClick = {
+						function(self)
+							for _, window in pairs(EmitterInspectionWindow.instances) do 
+								window:Hide()
+							end
+						end,
+					},
+					children = {
+						Image:New {
+							width = "100%",
+							height = "100%",
+							file = icons.CLOSEALL_ICON,
+							padding = {0,0,0,0},
+							margin = {0,0,0,0}
+						},
+					},
+				},
+				Label:New{
+					y = 20,				
+					--caption = parent.refer, -- this could be the reason i did it the other way?
+					width = 300,				
+					align = 'center',		
+					textColor = colors.yellow_09,
+					Refresh = function(self)
+						if not self.caption == self.parent.refer then 
+							self.caption = parent.refer
+							self:Invalidate()
+						end
+						return false						
+					end,
+				},
+				ScrollPanel:New{
+					y = 40,
+					clientWidth = 300 - 8,
+					clientHeight = 250 - 90,				
+					scrollPosX = -16,
+					horizontalScrollbar = false,
+					verticalScrollbar = true,
+					verticalSmartScroll = false,	
+					scrollbarSize = 6,
+					padding = {5,10,5,10},
+					children = {
+						DragDropLayoutPanel:New{							
+							clientWidth = 300,
+							clientHeight = 250,
+							maxWidth = 300,
+							minWidth = 0,
+							orientation = 'vertical',				
+							selectable = false,		
+							multiSelect = false,
+							itemPadding = {6,2,6,2},
+							itemMargin = {0,0,0,0},
+							autosize = true,
+							align = 'left',
+							columns = 3,
+							left = 0,
+							centerItems = false,
+							list = {},
+							Refresh = function(self)
+								Echo("refreshing layout")
+								self.refer = parent.parent.refer
+								local e = emitters[self.refer]
+								if not e then 
+									parent.parent:Dispose()
+									return false
+								end
+								local hasValidLayout = true
+								for i = 1, #e.sounds do
+									Echo("sounds")
+									local sound = e.sounds[i]
+									local iname = sound.iname
+									
+									if not list[iname] then
+										list[iname] = {}
+										local _, endprefix = string.find(iname, "[%$].*[%$%s]")
+										local txt = colors.yellow_09:Code()..string.sub(iname, 0, endprefix)
+											..colors.white_1:Code()..string.sub(iname, endprefix + 1)
+										list[iname].label = MouseOverTextBox:New{
+											refer = iname,
+											width = parent.parent.width - 140,
+											parent = self,
+											align = 'left',
+											text = txt,
+											fontsize = 10,
+											textColor = colors.white_09,
+											backgroundColor = colors.grey_02,
+											borderColor = colors.grey_03,
+											OnMouseOver = {
+												function(self) 													
+													local _, endprefix = string.find(iname, "[%$].*[%$%s]")
+													local ttip = colors.yellow_09:Code()..string.sub(iname, 0, endprefix)
+														..'\255\125\230\255'..string.sub(iname, endprefix + 1)..colors.white_1:Code().."\n\n"													
+													-- i need to check for local file here
+													ttip = ttip..sounditems.instances[sound.item].file.."\n\n"
+													for key, _ in pairs(sounditems.default) do 
+														if not key == 'file' then
+															ttip = ttip..key..": "..tostring(sounditems.instances[sound.item][key]).."\n" 
+														end
+													end													
+													self.tooltip=ttip
+												end,
+											},
+										}
+										list[iname].editBtn = Image:New {
+											refer = iname,
+											parent = self,
+											file = icons.PROPERTIES_ICON,
+											width = 20,
+											height = 20,
+											tooltip = 'Sound Properties',
+											color = colors.grey_879, 
+											OnClick = { -- this needs a look at
+												function(self,...)									
+													local w = window_properties
+													if w.refer then w:Confirm() end
+													w.refer = self.refer
+													w:Refresh()
+													w:Show()									
+												end,
+											},											
+										}
+										list[iname].playBtn = Image:New {
+											refer = iname,
+											parent = self,
+											file = icons.PLAYSOUND_ICON,
+											width = 20,
+											height = 20,
+											tooltip = 'Play at Location',
+											color = colors.green_06,
+											margin = {-6,0,0,0},
+											OnClick = { -- hope e exists at this point?
+												function()													
+													return DoPlay(sound.item, options.volume.value, e)
+												end,
+											},
+										}
+										-- what about animated play button
+										hasValidLayout = false
+									end								
+								end							
+								for k, t in pairs(list) do
+									if not e.sounds[k] then
+										t.label:Dispose()
+										t.editBtn:Dispose()
+										t.playBtn:Dipose()
+										hasValidLayout = false
+									end
+								end
+								-- if not hasValidLayout then self:Invalidate()
+								return not hasValidLayout
+							end,
+						},
+					},
+					Refresh = function(self)
+						for _, c in pairs(self.children) do
+							return c.Refresh and c:Refresh() or false
+						end
+					end,
+				},
+			},
+			-- what needs to be done here?
+			-- refresh this only when something changes, and once at start			
+			Refresh = function(self)
+				Echo("refreshing")
+				local key = self.refer
+				local e = emitters[key]
+				if not e then 
+					Echo("no e")
+					self:Dispose() 
+					return
+				end				
+				local needsUpdate = false
+				for _, c in pairs(self.children) do
+					needsUpdate = c.Refresh and c:Refresh() or false
+				end
+				-- do i even need to do this? children can udpate their layout just fine if they need to
+				-- and stuff isnt moving around or anything
+				Echo("refresh was ran")
+				if needsUpdate then 
+					self:Invalidate() 
+					Echo("and updated")
+				end
+				
+			end,
+			-- this shouldnt be necessary, the table is weak and the key will not be accessed anymore if the emitter is dead
+			-- UNLESS they key gets reused by another emitter, in which case the table points to a disposed window?
+			-- not sure that can happen, the object will just be nil then i think?
+			--Dispose = function(self, ...)
+				-- EmitterInspectionWindows.instances[self.refer] = nil 				
+				--self.inherited:Dipose()
+			--end,
+		}--]]

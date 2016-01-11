@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.622'
+local versionNum = '0.63'
 
 function widget:GetInfo()
   return {
@@ -197,9 +197,10 @@ options = {}
 settings = {paths = {}, browser = {}}
 
 local common = {pairs = pairs, ipairs = ipairs, type = type, string = string, tostring = tostring, tonumber = tonumber, 
-	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, assert = assert, os = os, 
-		math = math, io = io, table = table, next = next, error = error, select = select, widget = widget, Echo = Echo, 
-			options = options, config = config, settings = settings, sounditems = sounditems, emitters = emitters, Spring = Spring}
+	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, rawget = rawget, assert = assert, 
+		os = os, math = math, io = io, table = table, next = next, error = error, select = select, 
+			widget = widget, Echo = Echo, options = options, config = config, settings = settings, 
+				sounditems = sounditems, emitters = emitters, Spring = Spring}
 
 -- SetupGUI() builds controls so we can't import keys yet
 Echo ("Loading modules...")	
@@ -718,21 +719,22 @@ end
 function widget:MouseRelease(x, y, button)
 	Echo("release")
 	if button == 3 then	-- we implicitly cancel spawn placement here. we should reset the button tho, maybe?
-		if mouseOverEmitter and not drag._type.spawn then		
-			if inspectionWindows[mouseOverEmitter].inspect then -- window already existed a moment ago
-				--Echo("kill")
-				inspectionWindows[mouseOverEmitter].inspect = nil -- kill it
+		if mouseOverEmitter and not drag._type.spawn then
+			if EmitterInspectionWindow.instances[mouseOverEmitter].visible then
+				Echo("was visible")
+				EmitterInspectionWindow.instances[mouseOverEmitter]:Hide()				
+				EmitterInspectionWindow.instances[mouseOverEmitter]:Invalidate()				
+				EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = false -- silly but layout panels never hide
 			else
-				--Echo("make")
-				inspectionWindows[mouseOverEmitter].inspect = mouseOverEmitter -- make a new one
-				inspectionWindows[mouseOverEmitter]:Show() -- refresh should be automatic lets just show it
-				local xp = mx > (screen0.width / 2) and (mx - inspectionWindows[mouseOverEmitter].width) or mx
-				--local mz_inv = math.abs(screen0.height- mz) 
-				local yp = mz_inv > (screen0.height / 2) and (mz_inv - inspectionWindows[mouseOverEmitter].height) or mz_inv		
-				inspectionWindows[mouseOverEmitter]:SetPos(xp, yp)
-				--Echo(type(mouseOverEmitter).." - "..type(inspectionWindows[mouseOverEmitter]))
-			end
-		return
+				Echo("was hidden")
+				EmitterInspectionWindow.instances[mouseOverEmitter]:Refresh()
+				EmitterInspectionWindow.instances[mouseOverEmitter]:Show()
+				EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = true
+				local xp = mx > (screen0.width / 2) and (mx - EmitterInspectionWindow.instances[mouseOverEmitter].width) or mx
+				local yp = mz_inv > (screen0.height / 2) and (mz_inv - EmitterInspectionWindow.instances[mouseOverEmitter].height) or mz_inv
+				EmitterInspectionWindow.instances[mouseOverEmitter]:SetPos(xp, yp)
+				return
+			end	
 		end		
 	elseif button == 1 then
 		--Echo("hello")
@@ -748,7 +750,9 @@ function widget:MouseRelease(x, y, button)
 				for i = 1, #drag.objects do
 					local item = drag.objects[i] -- string
 					AddItemToEmitter(mouseOverEmitter, item)
-				end				
+				end	
+				EmitterInspectionWindow.instances[mouseOverEmitter]:Refresh()				
+				EmitterInspectionWindow.instances[mouseOverEmitter]:Show()
 			else -- add to a window
 				local target = MouseOver(mx, mz_inv)				
 				if target and target.refer and emitters[target.refer] then --< the emitter window has a refer, and containers only contains windows. this -should- work
@@ -758,6 +762,7 @@ function widget:MouseRelease(x, y, button)
 						local item = drag.objects[i] -- string
 						AddItemToEmitter(e, item)
 					end	
+					target:Refresh()
 				else Echo("drag dropped")
 				-- else just drop it			
 				end
