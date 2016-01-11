@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.63'
+local versionNum = '0.631'
 
 function widget:GetInfo()
   return {
@@ -594,9 +594,24 @@ end
 -------------------------------------------------------------------------------------------------------------------------
 
 function widget:KeyPress(...)
+	if drag._type.spawn then
+		local key = select(1, ...)
+		if key == KEYSYMS.RETURN or key == KEYSYMS.ESCAPE then
+			if key == KEYSYMS.RETURN then
+				local p = mcoords or select(2,TraceRay(mx,mz,true))
+				gui.SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + drag.params.hoff)
+			end
+			drag.timer = options.delay_drag.value
+			drag.objects = {}
+			drag._type = {} 
+			drag.params = {}
+			drag.started = false
+			Echo("drag ended")
+			return true			
+		end
+	end
 	if Spring.IsGUIHidden() then return false end
 	return gui.KeyPress(...)
-	--return true
 end
 
 function widget:TextInput(...)
@@ -656,10 +671,10 @@ function widget:MousePress(x, y, button)
 	--if button == 4 or button == 5 then return false end
 	--if MouseOnGUI() then return false end
 	--if MouseOver(mx, mz_inv) then return true end
-	--Echo("main")	
+	--Echo("mouse press")	
 	if button == 1 then		
-		if drag._type.spawn then
-			return true
+		if drag._type.spawn then			
+			return not MouseOnGUI()
 		elseif mouseOverEmitter then
 			local e = emitters[mouseOverEmitter]
 			drag.objects[1] = e
@@ -717,19 +732,19 @@ end
 
 
 function widget:MouseRelease(x, y, button)
-	Echo("release")
+	--Echo("mouse release")
 	if button == 3 then	-- we implicitly cancel spawn placement here. we should reset the button tho, maybe?
 		if mouseOverEmitter and not drag._type.spawn then
 			if EmitterInspectionWindow.instances[mouseOverEmitter].visible then
-				Echo("was visible")
+				--Echo("was visible")
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Hide()				
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Invalidate()				
-				EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = false -- silly but layout panels never hide
+				--EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = false -- silly but layout panels never hide
 			else
-				Echo("was hidden")
+				--Echo("was hidden")
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Refresh()
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Show()
-				EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = true
+				--EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = true
 				local xp = mx > (screen0.width / 2) and (mx - EmitterInspectionWindow.instances[mouseOverEmitter].width) or mx
 				local yp = mz_inv > (screen0.height / 2) and (mz_inv - EmitterInspectionWindow.instances[mouseOverEmitter].height) or mz_inv
 				EmitterInspectionWindow.instances[mouseOverEmitter]:SetPos(xp, yp)
@@ -739,7 +754,7 @@ function widget:MouseRelease(x, y, button)
 	elseif button == 1 then
 		--Echo("hello")
 		if drag._type.spawn then						
-			Echo("wub")
+			--Echo("wub")
 			local p = mcoords or select(2,TraceRay(mx,mz,true))
 			gui.SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + drag.params.hoff)
 			--Echo("wub wub")
@@ -755,8 +770,9 @@ function widget:MouseRelease(x, y, button)
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Show()
 			else -- add to a window
 				local target = MouseOver(mx, mz_inv)				
-				if target and target.refer and emitters[target.refer] then --< the emitter window has a refer, and containers only contains windows. this -should- work
-					local e = target.refer
+				if target and target.emitter and emitters[target.emitter] then --< the emitter window has a refer, and containers only contains windows. this -should- work
+					-- problem is that other things also have refers
+					local e = target.emitter
 					Echo("target emitter: "..e)
 					for i = 1, #drag.objects do
 						local item = drag.objects[i] -- string

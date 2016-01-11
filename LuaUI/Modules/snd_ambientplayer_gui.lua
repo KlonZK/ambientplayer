@@ -205,22 +205,21 @@ local function DeclareClasses()
 		classname = 'FilterEditBox',
 		allowUnicode = true,
 		cursorColor = {0,1.3,1,0.7},		
+		--[[
 		OnFocusUpdate = {
 			function(self)
 				self:Invalidate()
 			end,	
-		},
+		},--]]
 		Update = function(self, ...)
 			Chili.Control.Update(self, ...)
 			if self.state.focused then
 				self:RequestUpdate()
 				if (os.clock() >= (self._nextCursorRedraw or -math.huge)) then
 					self._nextCursorRedraw = os.clock() + 0.1 --10FPS
-					
 				end
-			--elseif self.visible then 
-			--	self:Invalidate()
-			end			
+			end	
+			self:Invalidate()
 		end,		
 		KeyPress = function(self, key, mods, isRepeat, label, unicode, ...)
 			local cp = self.cursor
@@ -378,7 +377,7 @@ local function DeclareClasses()
 	-- 
 	
 	MouseOverWindow = Chili.Window:Inherit{
-		classname = 'mouseoverwindow',
+		classname = 'mouseoverwindow',		
 		IsMouseOver	= function(self, mx, my) 						
 			local x, y = self.x, self.y -- for some odd reason LocalToScreen() breaks window coordinates			
 			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
@@ -420,11 +419,12 @@ local function DeclareClasses()
 		classname = 'emitterinspectionwindow',
 		New = function(self, key)
 			local obj = {
-				refer = key,
+				emitter = key,
 				parent = screen0,
 				x = "50%",
 				y = "50%",				
 				caption = "Details",
+				textColor = colors.grey_08,
 				draggable = true,
 				resizable = false,
 				dragUseGrip = true,
@@ -495,8 +495,8 @@ local function DeclareClasses()
 				caption = key,
 				textColor = colors.yellow_09,
 				Refresh = function(self)
-					if not self.caption == self.parent.refer then 
-						self.caption = parent.refer
+					if not self.caption == self.parent.emitter then 
+						self.caption = parent.emitter
 						self:Invalidate()
 					end
 					return false						
@@ -538,9 +538,9 @@ local function DeclareClasses()
 				centerItems = false,
 				list = {},
 				Refresh = function(self)
-					Echo("refreshing layout")
-					self.refer = obj.refer					
-					local e = emitters[self.refer]
+					--Echo("refreshing layout")
+					self.emitter = obj.emitter					
+					local e = emitters[self.emitter]
 					if not e then 
 						obj:Dispose()
 						return false
@@ -548,7 +548,7 @@ local function DeclareClasses()
 					local list = self.list
 					local hasValidLayout = true
 					for i = 1, #e.sounds do
-						Echo("sounds")
+						--Echo("sounds")
 						local sound = e.sounds[i]
 						local iname = sound.item
 						local item = sounditems.instances[iname]
@@ -634,11 +634,11 @@ local function DeclareClasses()
 				end,
 			}
 			obj.Refresh = function(self)
-				Echo("refreshing")
-				local key = self.refer
+				--Echo("refreshing")
+				local key = self.emitter
 				local e = emitters[key]
 				if not e then 
-					Echo("no e")
+					Echo("emitter "..key.." no longer exists, disposing of window")
 					self:Dispose() 
 					return
 				end	
@@ -668,6 +668,7 @@ local function DeclareControls()
 		dockable = false,
 		parent = screen0,
 		caption = "Ambient Sound Editor",
+		textColor = colors.grey_08,
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
@@ -920,6 +921,7 @@ local function DeclareControls()
 		y = "5%",
 		parent = screen0,
 		caption = "Message Log",
+		textColor = colors.grey_08,
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
@@ -1112,6 +1114,7 @@ defaults to 0]],
 		y = "25%",
 		parent = screen0,
 		caption = "Properties",
+		textColor = colors.grey_08,
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
@@ -1292,6 +1295,7 @@ defaults to 0]],
 		y = "25%",
 		parent = screen0,
 		caption = "Load Sound Files",
+		textColor = colors.grey_08,
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
@@ -1844,6 +1848,7 @@ defaults to 0]],
 		y = "25%",
 		parent = screen0,
 		caption = "Settings",
+		textColor = colors.grey_08,
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
@@ -2045,37 +2050,7 @@ defaults to 0]],
 	window_settings:Hide()
 
 	
-	---------------------------------------------------- inspect emitter window ------------------------------------------------
 
-	window_chili = Window:New{
-		x = "50%",
-		y = "75%",
-		parent = screen0,
-		caption = "Chili",
-		draggable = true,
-		resizable = false,
-		dragUseGrip = true,
-		clientWidth = 200,
-		clientHeight = 150,
-	}
-	label_focus = Label:New{
-		parent = window_chili,
-		x = 5,
-		y = 20,
-		fontsize = 11,		
-	}
-	label_hover = Label:New{
-		parent = window_chili,
-		x = 5,
-		y = 35,
-		fontsize = 11,
-	}
-	label_active = Label:New{
-		parent = window_chili,
-		x = 5,
-		y = 50,
-		fontsize = 11,		
-	}
 end
 
 
@@ -2109,15 +2084,20 @@ local function DeclareFunctionsAfter()
 					--backgroundColor = colors.grey_02,
 					--backgroundFlip = {0.6,0.6,0.9,0.5},
 					--borderColor = {0.3,0.3,0.3,0.5},
-					--borderFlip = {0.7,0.7,1,0.5},
-					OnMouseOver = { 
-						function(self)
-							local ttip = "\255\80\255\50"..self.text.."\255\255\255\255\n\n"--.."\n--------------------------------------------------------------\n\n"
-							for key, _ in pairs(sounditems.default) do ttip = ttip..key..": "..tostring(params[key]).."\n" end
-							ttip = ttip..'\n(right-click to edit)'
+					--borderFlip = {0.7,0.7,1,0.5},							
+					OnMouseOver = {
+						function(self)							
+							local ttip = self.text.."\n\n"
+									..(params.file_local and colors.orange_06:Code() or colors.green_1:Code())
+										..params.file..colors.white_1:Code().."\n\n"										
+							for k, _ in pairs(sounditems.default) do											
+								if k ~= 'file' then												
+									ttip = ttip..k..": "..tostring(params[k]).."\n"
+								end
+							end
 							self.tooltip=ttip
-						end
-					},
+						end,
+					},					
 					AllowSelect = function(self, idx, select) 						
 						--self.backgroundColor, self.backgroundFlip = self.backgroundFlip, self.backgroundColor
 						--self.borderColor, self.borderFlip = self.borderFlip, self.borderColor
@@ -2439,6 +2419,13 @@ function SpawnDialog(px, pz, py)
 			--if string.find(unicode, "%A%D") then return false end
 			---return true
 		end,
+		Confirm = function(self)
+			widget.SpawnEmitter(#self.text > 0 and self.text or nil , px, pz, py)
+			window_name:Dispose()			
+		end,
+		Discard = function(self)
+			window_name:Dispose()
+		end,		
 	}
 	Image:New {
 		parent = window_name,
@@ -2473,7 +2460,15 @@ function SpawnDialog(px, pz, py)
 		},					
 	}
 	window_name:Show()
+	box.state.focused = true
+	screen0.focusedControl = box	
+	--box:Update()
+	--box:Invalidate()
 	--box:SetFocus()
+	
+				--self.state.focused = false
+				--target.state.focused = true
+				--screen0.focusedControl = target	
 end
 
 
