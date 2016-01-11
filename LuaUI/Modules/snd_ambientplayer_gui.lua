@@ -82,6 +82,8 @@ local colors = {
 			return '\255'..char(floor(r*255))..char(floor(g*255))..char(floor(b*255))
 		end
 	end,
+	blue_579 = {0.5, 0.7, 0.9, 0.9},	
+	blue_07 = {0.7, 0.7, 0.8, 0.7},	
 	green_1 = {0.4, 1.0, 0.1, 1.0},
 	green_06 = {0, 0.6, 0.2, 0.9},
 	red_1 = {1, 0.2, 0.1, 1.0},
@@ -91,12 +93,12 @@ local colors = {
 	white_09 = {0.9, 0.9, 0.9, 1},
 	grey_879 = {0.8,0.7,0.9,0.9},
 	grey_08 = {0.8, 0.8, 0.8, 0.7},
+	grey_05 = {0.5,0.5,0.5,0.5},
+	grey_035 = {0.35,0.35,0.35,0.5},
 	grey_03 = {0.3, 0.3, 0.3, 0.5},
+	grey_03_04 = {0.3,0.3,0.3,0.4},
 	grey_02 = {0.2, 0.2, 0.2, 0.5},
-	blue_07 = {0.7, 0.7, 0.8, 0.7},
 }
-
-
 for k, v in pairs(colors) do
 	if type(v) ~= 'function' then
 		setmetatable(v, {
@@ -121,14 +123,6 @@ setmetatable(controls, {
 	end	
 })	
 
-local WINDOW_INSPECT_PROTOTYPE
-local BUTTON_CLOSE_INSPECT_PROTOTYPE
-local BUTTON_CLOSEALL_INSPECT_PROTOTYPE
---local BUTTON_CLOSE_IMG_INSPECT_PROTOTYPE
-local SCROLL_INSPECT_PROTOTYPE
-local LAYOUT_INSPECT_PROTOTTYPE
-
-
 
 local window_main
 local scroll_main
@@ -136,9 +130,6 @@ local layout_main
 local button_console
 local button_help
 local button_settings
-
-local window_emitters -- unsure this will be used
-local scroll_emitters
 
 local window_console
 local scroll_console
@@ -718,7 +709,8 @@ local function DeclareControls()
 		x = 10,
 		y = -52,
 		parent = window_main,		
-		tooltip = 'spawn new emitter and place it on the map, cancel with right-click\n\npress shift and turn the mousewheel to adjust height(use shift + ctrl/alt make it go faster/slower)\n\nyou can also do this later: hover over an emitter on the map, press shift and any of the modkeys and turn the mousewheel\n\nyou can drag around emitters on the map with left-drag. inspect them with right-click',
+		-- tooltip = colors.green_1:Code()..'spawn new emitter and place it on the map, cancel with '..colors.blue_579:Code()..'ESC'..colors.green_1:Code()..' or '..colors.blue_579:Code()..'right-click'..colors.green_1:Code()..'\n\npress shift and turn the mousewheel to adjust height(use shift + ctrl/alt make it go faster/slower)\n\nyou can also do this later: hover over an emitter on the map, press shift and any of the modkeys and turn the mousewheel\n\nyou can drag around emitters on the map with left-drag. inspect them with right-click',
+		tooltip = colors.green_1:Code()..'spawn new emitter and place it on the map, cancel with '..colors.blue_579:Code()..'ESC'..colors.green_1:Code()..' or '..colors.blue_579:Code()..'right-click'..colors.green_1:Code()..'.\n\npress '..colors.blue_579:Code()..'SHIFT'..colors.green_1:Code()..' and turn the mousewheel to adjust height(use '..colors.blue_579:Code()..'SHIFT + CTRL/ALT'..colors.green_1:Code()..' to make it go faster/slower).\n\nyou can also do this later: hover over an emitter on the map, press '..colors.blue_579:Code()..'SHIFT'..colors.green_1:Code()..' and any of the modkeys and turn the mousewheel\n\nyou can drag around emitters on the map with '..colors.blue_579:Code()..'left-drag'..colors.green_1:Code()..'. inspect them with '..colors.blue_579:Code()..'right-click'..colors.green_1:Code()..'.',
 		clientWidth = 30,
 		clientHeight = 30,
 		caption = '',
@@ -870,51 +862,7 @@ local function DeclareControls()
 	
 	containers.main = window_main
 	controls.tracklist = layout_main
-	
-	---------------------------------------------------- emitters window ------------------------------------------------	
-	--[[
-	window_emitters = Window:New {
-		x = '25%',
-		y = '25%',	
-		--dockable = false,
-		parent = screen0,
-		caption = "Ambient Sound Editor",
-		draggable = true,
-		resizable = false,
-		dragUseGrip = true,
-		clientWidth = 300,
-		clientHeight = 540,
-		backgroundColor = {0.8,0.8,0.8,0.9},
-		children = {
-			Label:New{
-				x = 0,
-				y = 20,
-				clientWidth = 260,
-				parent = window_emitters,
-				align = 'center',
-				caption = '-Emitters-',
-				textColor = {1,1,0,0.9},
-			},
-		},		
-	}
-	scroll_emitters = ScrollPanel:New {
-		x = 0,
-		y = 40,
-		clientWidth = 300,
-		clientHeight = 420,
-		parent = window_emitters,
-		scrollPosX = -16,
-		horizontalScrollbar = false,
-		verticalScrollbar = true,
-		verticalSmartScroll = true,	
-		scrollbarSize = 6,
-		padding = {5,10,5,10},
-		
-	}	
-	window_emitters:Hide()
-	containers.emitters = window_emitters
-	--]]
-	
+			
 	---------------------------------------------------- log window ------------------------------------------------	
 	window_console = MouseOverWindow:New {
 		x = "25%",
@@ -1870,20 +1818,42 @@ defaults to 0]],
 			[3] = 'Display',
 			[4] = 'Interface',
 			[5] = 'Misc',
-		},		
+		},
+		panels = {},
+		OnChange = { -- this gets called once on setup, automatically, same for all controls down the line
+			function(self, tab)		
+				if not self.panels[tab] then return false end
+				for k, params in pairs(self.panels) do 					
+					local hidden = params.hidden -- fuck you, chili
+					if not hidden then self.panels[k]:SetVisibility(false) end
+				end
+				self.panels[tab]:SetVisibility(true)				
+				for i = 1, #self.children do
+					local c = self.children[i]
+					if c.caption == tab then
+						c.backgroundColor = colors.grey_035 --{0.35,0.35,0.35,0.5}
+						c.borderColor = colors.grey_05 --{0.5,0.5,0.5,0.5}
+						--c:Invalidate()
+					else 
+						c.backgroundColor = colors.grey_02 --{0.2,0.2,0.2,0.5}
+						c.borderColor = colors.grey_03_04 --{0.3,0.3,0.3,0.4}					
+					end
+				end				
+			end
+		},
 	}
+	--Echo("done core")
+	local panels = tabbar_settings.panels
 	
 	for i = 1, #tabbar_settings.children do
+		--Echo("child "..i)
 		p = tabbar_settings.children[i]
 		p.backgroundColor = colors.grey_02
-		p.borderColor = colors.grey_03
-		p.font:SetColor(colors.blue_07)
-		
+		p.borderColor = colors.grey_03_04
+		p.font:SetColor(colors.blue_07)		
 		c = tabbar_settings.children[i].caption
-		--if not c == 'Player' then return end	
-		Echo (c)
-		
-		tabs_settings[c] = ScrollPanel:New {
+		--Echo("..done", true)
+		panels[c] = ScrollPanel:New {
 			name = 'tab_'..c,			
 			y = 42,
 			clientWidth = 440,
@@ -1895,90 +1865,120 @@ defaults to 0]],
 			height = 200,
 			horizontalScrollbar = false,
 			verticalScrollbar = true,
-			scrollbarSize = 6,
-			--autosize = true,
-			--Refresh = function(self)
-				--if tabbar_settings.selected_obj == self then self:SetVisibility(true) else self:SetVisibility(false) end 
-			--end,			
+			scrollbarSize = 6,		
 		}
-		window_settings:AddChild(tabs_settings[c])
-		tabs_settings[c].layout = LayoutPanel:New {
+		window_settings:AddChild(panels[c])
+		panels[c].layout = LayoutPanel:New {
 			name = 'layout_'..c,
 			autosize = true, --?
 			x = 10,
 			y = 10,
-			--clientWidth = 440,
-			--clientHeight = 205,
 			maxWidth = 440,
 			minWidth = 440,
 			itemPadding = {2,2,2,2},
 			itemMargin = {0,0,0,0},
-			parent = tabs_settings[c],
+			parent = panels[c],
 			orientation = 'vertical',
 			centerItems = false,
 			columns = 1,	
-			align = 'left',
-			--parent = tabs_settings[c],
-		},
-		Echo (tabs_settings[c].name)
+			align = 'left',			
+		}
+		--Echo (panels[c].name)
 	end						
-		
-	containers.settings = window_settings
 
-	local se = options.showemitters
-	controls.settings[se.name] = Checkbox:New{
-		parent = tabs_settings['Display'].layout,
+	containers.settings = window_settings
+	--Echo("display")
+	local data_display = {
+		[1] = {name = 'Show Emitters'},
+		[2] = {name = "Sphere Radius", min = 25, max = 100, step = 1},
+		[3] = {name = "Red", min = 0.0,	max = 1, step = 0.05, doUpdate = true},
+		[4] = {name = "Green", min = 0.0, max = 1, step = 0.05, doUpdate = true},
+		[5] = {name = "Blue", min = 0.0, max = 1, step = 0.05, doUpdate = true},
+		[6] = {name = "Alpha Sphere", min = 0.0, max = 1, step = 0.05, doUpdate = true},
+		[7] = {name = "Alpha Rings", min = 0.0, max = 1, step = 0.05, doUpdate = true},
+		[8] = {name = "Highlight factor", min = 0.1, max = 5, step = 0.05, doUpdate = true},
+	}
+				
+	Checkbox:New{
+		parent = panels['Display'].layout,
 		width = 100,
-		refer = se,
-		value = se.value,
-		caption = se.name,
-		fontSize = 11,
-		--padding = {22,22,2,22},
+		checked = settings.display[1],
+		caption = data_display[1].name,
+		fontSize = 11,		
 		margin = {2,12,2,12},
 		textColor = colors.grey_08,
-		SetValue = function(self, val)
-			if not self.checked == val then self:Toggle() end
-		end,
-		OnChange = {function(self, checked) -- this whole thing is a bit bad, maybe the update call should be different. consider memoize
-				se.value = checked
+		OnChange = {function(self, checked)
+				settings.display[1] = checked
 			end
 		},
-	}	
-	
-	local order = {red = 2, blue = 3, green = 4, alpha_inner = 5, alpha_outer = 6, highlightfactor = 7}
-	local items = {[1] = options.emitter_radius}
-	--local i = 0	
-	for o, params in pairs(options) do			
-		if string.find(o, 'color') then local color = o:sub(7);	items[order[color]] = params end
-	end
-	for i = 1, #items do
-		local o = items[i]
-		Label:New{
-			caption = o.name,
+	}		
+
+	for i = 2, #data_display do
+		local o = data_display[i]
+		local label = Label:New{
+			parent = panels['Display'].layout,
+			--caption = o.name..": "..settings.display[i],
 			fontSize = 11,
-			textColor = colors.grey_08,
-			parent = tabs_settings['Display'].layout,
+			textColor = colors.grey_08,			
 		}
-		controls.settings[o.name] = Trackbar:New {
-			refer = o,
-			--name = 'test'..o.name,
-			width = 200,				
-			parent = tabs_settings['Display'].layout,
+		local trackbar = Trackbar:New {
+			parent = panels['Display'].layout,			
+			width = 200,			
 			min = o.min,
 			max = o.max,
-			value = o.value,
 			step = o.step,
-			OnChange = {function(self) -- this whole thing is a bit bad, maybe the update call should be different. consider memoize
-					--setfenv(1, widget)
-					o.value = self.value
-					UpdateMarkerList() 
-				end
-			},				
+			value = settings.display[i],
+			OnChange = o.doUpdate 
+				and	{function(self)	
+						settings.display[i] = self.value
+						local str = i > 2 and string.format("%0.2f", self.value) or self.value
+						label:SetCaption(o.name..": "..str)
+						UpdateMarkerList()
+					end}
+				or {function(self) 
+						settings.display[i] = self.value
+						local str = i > 2 and string.format("%0.2f", self.value) or self.value
+						label:SetCaption(o.name..": "..str)
+					end}
+			,
 		}
 	end
 
-
-	Echo(#tabs_settings['Display'].layout.children)
+	--Echo("interface")
+	local data_interface = {
+		[1] = {name = 'Emitter Selection Radius', min = 50, max = 500, step = 25},
+		[2] = {name = "Drag Timer", min = 0, max = 2, step = 0.01},
+		[3] = {name = "Tooltip Timer", min = 0, max = 2, step = 0.01},
+	}
+	
+	for i = 1, #data_interface do
+		local o = data_interface[i]
+		local str = i > 1 and string.format("%0.2f", settings.interface[i]).." seconds"
+			or string.format("%0.0f", settings.interface[i]).." elmos"
+		local label = Label:New{
+			parent = panels['Interface'].layout,			
+			fontSize = 11,
+			textColor = colors.grey_08,			
+		}
+		local trackbar = Trackbar:New {
+			parent = panels['Interface'].layout,
+			width = 200,			
+			min = o.min,
+			max = o.max,
+			step = o.step,
+			value = settings.interface[i],
+			OnChange = {function(self) 
+					settings.interface[i] = self.value
+					local str = i > 1 and string.format("%0.2f", self.value).." seconds" 
+						or string.format("%0.0f", self.value).." elmos"
+					label:SetCaption(o.name..": "..str)					
+					if i == 2 then widget.GetDrag().timer = self.value end						
+				end
+			},
+		}
+	end
+	
+	--Echo(#tabs_settings['Display'].layout.children)
 	
 	--[[
 	
@@ -2058,7 +2058,7 @@ end
 ----------------------------------------------------------------------------------------------------------------------
 --------------------------------------------- POST-INIT CONTROL SETUP ------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------
--- for one reasson or another, the functions here have to be injected into existing controls after gui is setup
+-- for one reason or another, the functions here have to be injected into existing controls after gui is setup
 
 
 local function DeclareFunctionsAfter()
@@ -2066,6 +2066,8 @@ local function DeclareFunctionsAfter()
 	--------------------------------------------------------------------------------------------------
 	-- main frame
 	layout_main.Refresh = function(self) 
+		local tooltip_help = colors.green_1:Code().."\n\nselect any number of items, press "..colors.blue_579:Code().."SPACE "..colors.green_1:Code().."and drag with your mouse to add them to an emitter."
+	
 		local valid = true
 		for item, params in pairs(sounditems.templates) do
 		--local i = controls.main and #controls.main or 1 --< cant index the table properly if things get removed
@@ -2094,8 +2096,8 @@ local function DeclareFunctionsAfter()
 								if k ~= 'file' then												
 									ttip = ttip..k..": "..tostring(params[k]).."\n"
 								end
-							end
-							self.tooltip=ttip
+							end							
+							self.tooltip = ttip..tooltip_help
 						end,
 					},					
 					AllowSelect = function(self, idx, select) 						
@@ -2179,30 +2181,6 @@ local function DeclareFunctionsAfter()
 	end
 	
 	
-	--------------------------------------------------------------------------------------------------
-	-- settings window
-	
-	tabbar_settings.OnChange = {
-			function(self, tab)		
-				for k, params in pairs(tabs_settings) do 					
-					local hidden = params.hidden -- fuck you, chili
-					if not hidden then tabs_settings[k]:SetVisibility(false) end
-				end
-				tabs_settings[tab]:SetVisibility(true)
-				
-				for i = 1, #self.children do
-					local c = self.children[i]
-					if c.caption == tab then
-						c.backgroundColor = {0.35,0.35,0.35,0.5}
-						c.borderColor = {0.5,0.5,0.5,0.5}												
-						--c:Invalidate()
-					else 
-						c.backgroundColor = {0.2,0.2,0.2,0.5}
-						c.borderColor = {0.3,0.3,0.3,0.4}					
-					end
-				end				
-			end
-	}
 	
 	-----------------------------------------------------------------------------------------------------
 	-- properties window
@@ -2263,42 +2241,14 @@ local function DeclareFunctionsAfter()
 		self.refer = nil
 		self:Invalidate()
 		self:Hide()
-	end
-	
-	--------------------------------------------------------------------------------------------------
-	-- browser window
-	--
-	
-
-	
-	--------------------------------------------------------------------------------------------------
-	--------------------------------------------------------------------------------------------------
-	--------------------------------------------------------------------------------------------------
-	--------------------------------------------------------------------------------------------------
-	
-	--[[
-	function Chili.MouseOverTextBox:OnMouseDown(...)
-		--self.state.pressed = true
-		inherited.MouseDown(self, ...)
-		--self:Invalidate()
-		return self
-	end
-	
-	function Chili.MouseOverTextBox:OnMouseUp(...)
-		--if (self.state.pressed) then
-		--self.state.pressed = false
-		inherited.MouseUp(self, ...)
-		--self:Invalidate()
-		return self
-	end
-	--]]
+	end	
 end
 
 
 
 
-function SetupGUI()		
-		
+function SetupGUI()	
+	
 	Chili = widget.WG.Chili
 
 	if (not Chili) then		
@@ -2324,9 +2274,12 @@ function SetupGUI()
 	Trackbar = Chili.Trackbar	
 	color2incolor = Chili.color2incolor
 	incolor2color = Chili.incolor2color
-		
+	
+	Echo("setting up chili classes")	
 	DeclareClasses()
+	Echo("setting up controls")
 	DeclareControls()
+	Echo("injecting functions")
 	DeclareFunctionsAfter()
 	
 	tabbar_settings:Select('Player')
@@ -2478,6 +2431,7 @@ local gui = getfenv()
 gui.EmitterInspectionWindow = EmitterInspectionWindow
 gui.controls = controls
 gui.containers = containers
+gui.colors = colors
 
 
 	

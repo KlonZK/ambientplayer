@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.631'
+local versionNum = '0.633'
 
 function widget:GetInfo()
   return {
@@ -194,7 +194,7 @@ options = {}
 -- MODULES
 -------------------------------------------------------------------------------------------------------------------------
 
-settings = {paths = {}, browser = {}}
+settings = {paths = {}, browser = {}, display = {}, interface = {}}
 
 local common = {pairs = pairs, ipairs = ipairs, type = type, string = string, tostring = tostring, tonumber = tonumber, 
 	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, rawget = rawget, assert = assert, 
@@ -270,9 +270,7 @@ end
 -- Epic Menu Options
 -------------------------------------------------------------------------------------------------------------------------
 options_path = 'Settings/Audio/Ambient Sound'
-options_order = {'color_red', 'color_green', 'color_blue', 'color_alpha_inner', 'color_alpha_outer', 'color_highlightfactor', 
-					'showemitters', 'emitter_radius', 'verbose', 'autosave', 'autoreload', 'emitter_highlight_treshold', 'dragtime', 					 
-						'checkrate', 'volume', 'autoplay'}
+options_order = {'verbose', 'autosave', 'autoreload', 'checkrate', 'volume', 'autoplay'}
 
 options.checkrate = {
 	name = "Update frequency",
@@ -316,22 +314,10 @@ options.autoreload = {
 	value = true,
 	path = "Settings/Audio/Ambient Sound/Editor",
 }
-options.showemitters = {
-	name = "Show Emitters",
-	type = 'bool',
-	value = true,
-	path = "Ambient Sound Editor",
-}
-options.emitter_highlight_treshold = {
-	name = "Emitter selection radius",
-	type = 'number',
-	value = 150,
-	min = 50,
-	max = 500,
-	step = 25,
-	path = "Settings/Audio/Ambient Sound/Editor",		
-}
-options.dragtime = {
+
+
+--[[
+settings.interface.dragtime = {
 	name = "Seconds until drag starts",
 	type = 'number',
 	value = 0.5,
@@ -339,93 +325,11 @@ options.dragtime = {
 	max = 2,
 	step = 1,
 	path = "Ambient Sound Editor",		
-}	
-options.emitter_radius = {
-	name = "Emitter Radius",
-	type = 'number',
-	value = 5,
-	min = 25,
-	max = 100,
-	step = 1,
-	path = "Ambient Sound Editor",		
-}
-options.color_red = {
-	name = "Red",
-	type = 'number',
-	value = 1,
-	min = 0.0,
-	max = 1,
-	step = 0.1,
-	path = "Ambient Sound Editor/Colors",
-	OnChange = function() UpdateMarkerList() end,	
-}
-options.color_green = {
-	name = "Green",
-	type = 'number',
-	value = 1,
-	min = 0.0,
-	max = 1,
-	step = 0.1,
-	path = "Ambient Sound Editor/Colors",
-	OnChange = function() UpdateMarkerList() end,
-				
-}
-options.color_blue = {
-	name = "Blue",
-	type = 'number',
-	value = 1,
-	min = 0.0,
-	max = 1,
-	step = 0.1,
-	path = "Settings/Audio/Ambient Sound/Editor/Colors",		
-	OnChange = function() UpdateMarkerList() end,
-}
-options.color_alpha_inner = {
-	name = "Alpha inner circle",
-	type = 'number',
-	value = 0.65,
-	min = 0.0,
-	max = 1,
-	step = 0.05,
-	path = "Ambient Sound Editor/Colors",
-	OnChange = function() UpdateMarkerList() end,
-}
-options.color_alpha_outer = {
-	name = "Alpha outer circle",
-	type = 'number',
-	value = 0.25,
-	min = 0.0,
-	max = 1,
-	step = 0.05,
-	path = "Ambient Sound Editor/Colors",
-	OnChange = function() UpdateMarkerList() end,
-}
-options.color_highlightfactor = {
-	name = "Emitter highlight factor",
-	type = 'number',
-	value = 1.5,
-	min = 0.1,
-	max = 5,
-	step = 0.1,
-	path = "Ambient Sound Editor/Colors",
-	OnChange = function() UpdateMarkerList() end,
-}
-options.delay_drag = {
-	name = "Drag Timer",
-	type = 'number',
-	value = 0.15,
-	min = 0,
-	max = 2,
-	step = 0.05,
-}
-options.delay_tooltip = {
-	name = "Tooltip Timer",
-	type = 'number',
-	value = 0.3,
-	min = 0,
-	max = 2,
-	step = 0.05,
-}
+}--]]
+
+
+settings.display = {true, 5, 1, 1, 1, 0.25, 0.55, 2.5}
+settings.interface = {150, 0.15, 0.3}
 
 
 
@@ -450,17 +354,17 @@ local drag = {
 	objects = {},
 	_type = {},
 	params = {},
-	timer = options.delay_drag.value,
+	timer = settings.interface[2],
 	started = false,
 }
 --local dragObject
 --local dragType
 --local DELAY_DRAG = 0.2 -- moved to options
---local dragTimer = options.delay_drag.value
+--local dragTimer = settings.interface[2]
 --local dragStarted = false
 
 --local DELAY_TOOLTIP = 0.4 -- moved to options
-local tooltipTimer = options.delay_tooltip.value
+local tooltipTimer = settings.interface[3]
 
 local worldTooltip
 
@@ -601,7 +505,7 @@ function widget:KeyPress(...)
 				local p = mcoords or select(2,TraceRay(mx,mz,true))
 				gui.SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + drag.params.hoff)
 			end
-			drag.timer = options.delay_drag.value
+			drag.timer = settings.interface[2]
 			drag.objects = {}
 			drag._type = {} 
 			drag.params = {}
@@ -640,9 +544,12 @@ end
 
 
 local function updateTooltip()
+	local tooltip_help = gui.colors.green_1:Code().."right-click: inspect\n"
+		..gui.colors.green_1:Code().."left-click + drag: move\n"
+			..gui.colors.green_1:Code().."shift + wheel (+ctrl/alt): adjust height"
 	if mouseOverEmitter then
 		local e = emitters[mouseOverEmitter]		
-		worldTooltip = "\255\255\230\70Emitter: "..mouseOverEmitter.."\255\255\255\255\n("..
+		worldTooltip = gui.colors.yellow_09:Code().."Emitter: "..mouseOverEmitter..gui.colors.white_1:Code().."\n("..
 			"X: "..string.format("%.0f", e.pos.x)..", "..
 				"Z: "..string.format("%.0f", e.pos.z)..", "..
 					"Y: "..string.format("%.0f", e.pos.y)..")\n "
@@ -650,6 +557,7 @@ local function updateTooltip()
 		for i = 1, #e.sounds do					
 			worldTooltip = worldTooltip.."\n"..(e.sounds[i].item)
 		end
+		worldTooltip = worldTooltip.."\n \n"..tooltip_help
 		--worldTooltip:format("%.2f")
 	end
 end
@@ -659,7 +567,7 @@ function widget:GetTooltip(x, y)
 	if not worldTooltip then
 		if tooltipTimer > 0 then return end
 		updateTooltip()
-		tooltipTimer = options.delay_tooltip.value
+		tooltipTimer = settings.interface[3]
 	end
 	
 	--local e = emitters[mouseOverEmitter]	
@@ -739,12 +647,12 @@ function widget:MouseRelease(x, y, button)
 				--Echo("was visible")
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Hide()				
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Invalidate()				
-				--EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = false -- silly but layout panels never hide
+				EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = false -- silly but layout panels never hide
 			else
 				--Echo("was hidden")
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Refresh()
 				EmitterInspectionWindow.instances[mouseOverEmitter]:Show()
-				--EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = true
+				EmitterInspectionWindow.instances[mouseOverEmitter].layout.visible = true
 				local xp = mx > (screen0.width / 2) and (mx - EmitterInspectionWindow.instances[mouseOverEmitter].width) or mx
 				local yp = mz_inv > (screen0.height / 2) and (mz_inv - EmitterInspectionWindow.instances[mouseOverEmitter].height) or mz_inv
 				EmitterInspectionWindow.instances[mouseOverEmitter]:SetPos(xp, yp)
@@ -795,7 +703,7 @@ function widget:MouseRelease(x, y, button)
 
 	--if button == 4 or button == 5 then return false end
 		
-	drag.timer = options.delay_drag.value
+	drag.timer = settings.interface[2]
 	drag.objects = {}
 	drag._type = {} 
 	drag.params = {}
@@ -881,7 +789,7 @@ function widget:Update(dt)
 	_, mcoords = TraceRay(mx, mz, true)
 	modkeys.alt,modkeys.ctrl,modkeys.space,modkeys.shift = GetModKeys()
 	
-	if options.showemitters.value and not MouseOnGUI() then -- we dont want emitters to highlight if we are moving in the gui			
+	if settings.display[1] and not MouseOnGUI() then -- we dont want emitters to highlight if we are moving in the gui			
 		local dist = 100000000
 		local nearest
 		--Echo("check")
@@ -896,13 +804,13 @@ function widget:Update(dt)
 				end
 			end
 		end			
-		if nearest and dist < options.emitter_highlight_treshold.value then		
+		if nearest and dist < settings.interface[1] then		
 			mouseOverEmitter = nearest
 			if not worldTooltip then tooltipTimer = tooltipTimer - dt end
 		else		
 			mouseOverEmitter = nil			
 			worldTooltip = nil
-			tooltipTimer = options.delay_tooltip.value
+			tooltipTimer = settings.interface[3]
 		end
 	else
 		mouseOverEmitter = nil
@@ -976,7 +884,7 @@ function widget:DrawWorld() --?
 		local p = mcoords or select(2,TraceRay(mx,mz,true))
 		if not p then return end
 		p[2] = p[2] + (drag.params.hoff or 0)
-		DrawCursorToWorld(p[1], p[3], p[2], options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value) 
+		DrawCursorToWorld(p[1], p[3], p[2], settings.display[2], settings.display[2], settings.display[2]) 
 	end
 end
 

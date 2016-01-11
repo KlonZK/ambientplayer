@@ -8,7 +8,7 @@
 ------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------
 
-local options = options
+local settings = settings
 local emitters = emitters
 
 local GL = widget.GL
@@ -119,11 +119,11 @@ local function MakeLists(red, green, blue, alpha_inner, alpha_outer)
 end
 
 function UpdateMarkerList()	
-	emitMarker = MakeLists(options.color_red.value, options.color_green.value, options.color_blue.value,
-		options.color_alpha_inner.value, options.color_alpha_outer.value)
-	emitMarker_Highlight = MakeLists(options.color_red.value, options.color_green.value, options.color_blue.value, 
-		options.color_alpha_inner.value * options.color_highlightfactor.value,
-			options.color_alpha_outer.value * options.color_highlightfactor.value)		
+	emitMarker = MakeLists(settings.display[3], settings.display[4], settings.display[5],
+		settings.display[6], settings.display[7])
+	emitMarker_Highlight = MakeLists(settings.display[3], settings.display[4], settings.display[5], 
+		settings.display[6] * settings.display[8],
+			settings.display[7] * settings.display[8])		
 end
 
 --local delta = 0
@@ -176,7 +176,7 @@ function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to 
 
 	if not emitMarker then UpdateMarkerList() end
 	
-	if options.showemitters.value then	
+	if settings.display[1] then	
 		for e, params in pairs(emitters) do			
 			
 			-- this block needs to be removed when everything is set up, it is just a temp hack so i dont have to edit
@@ -214,14 +214,14 @@ function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to 
 				glDepthTest(true)
 				glDepthMask(true)
 				DrawList(list, delta, u, v, pos.x, pos.y, pos.z, 
-					options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value)				
+					settings.display[2], settings.display[2], settings.display[2])				
 		
 				local gy = GetGroundHeight(pos.x, pos.z)		
 				if pos.y >  gy then							
 					
 					glPush()						
 						glBeginEnd(GLLINES, function()
-							glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
+							glColor(settings.display[3], settings.display[4], settings.display[5], linealpha)
 							--gl.Translate(pos.x,pos.y,pos.z)
 							glVertex(pos.x, pos.y, pos.z)
 							glVertex(pos.x, gy, pos.z)
@@ -269,7 +269,7 @@ function DrawCursorToWorld(x, z, y, sx, sz, sy)
 	if y >  gy then		
 		glPush()						
 			glBeginEnd(GLLINES, function()
-				glColor(options.color_red.value, options.color_green.value, options.color_blue.value, linealpha)
+				glColor(settings.display[3], settings.display[4], settings.display[5], linealpha)
 				--gl.Translate(pos.x,pos.y,pos.z)
 				glVertex(x, y, z)
 				glVertex(x, gy, z)
@@ -288,25 +288,25 @@ return true
 				glPush()					
 					glTranslate(pos.x,pos.y,pos.z)					
 					--glPolygonOffset(-10000, -2)
-					glScale(options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value)
+					glScale(settings.display[2], settings.display[2], settings.display[2])
 					glCallList(list[1])					
 				glPop()
 				glPush()
 					glTranslate(pos.x,pos.y,pos.z)
-					glScale(options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value)
+					glScale(settings.display[2], settings.display[2], settings.display[2])
 					glRotate(6*(delta+u+v),1,1,-1)
 					glCallList(list[2])
 				glPop()
 				glPush()
 					glTranslate(pos.x,pos.y,pos.z)
-					glScale(options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value)
+					glScale(settings.display[2], settings.display[2], settings.display[2])
 					glRotate(6*(delta+v),-1,-1,0)
 					glRotate(6*(delta+u),0,0,1)
 					glCallList(list[3])
 				glPop()
 				glPush()
 					glTranslate(pos.x,pos.y,pos.z)
-					glScale(options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value)
+					glScale(settings.display[2], settings.display[2], settings.display[2])
 					glRotate(6*(delta),0,0,1)
 					glRotate(6*(u + delta),0,1,0)
 					glRotate(6*(v + u),1,0,0)
@@ -314,7 +314,7 @@ return true
 				glPop()
 				glPush()
 					glTranslate(pos.x,pos.y,pos.z)
-					glScale(options.emitter_radius.value, options.emitter_radius.value, options.emitter_radius.value)
+					glScale(settings.display[2], settings.display[2], settings.display[2])
 					glRotate(6*(delta + u),0,0,1)
 					glRotate(6*(u),0,1,0)
 					glRotate(6*(v + v),1,0,0)
