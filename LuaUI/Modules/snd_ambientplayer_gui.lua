@@ -125,8 +125,8 @@ setmetatable(controls, {
 
 
 local window_main
-local scroll_main
-local layout_main
+local scroll_main_templates
+local layout_main_templates
 local button_console
 local button_help
 local button_settings
@@ -599,7 +599,7 @@ local function DeclareClasses()
 								file = icons.PLAYSOUND_ICON,
 								width = 20,
 								height = 20,
-								tooltip = 'Play at Location',
+								tooltip = self.emitter == 'global' and 'Play' or 'Play at Location',
 								color = colors.green_06,
 								margin = {-6,0,0,0},
 								OnClick = { -- hope e exists at this point?
@@ -616,7 +616,7 @@ local function DeclareClasses()
 						if not e.sounds[k] then
 							t.label:Dispose()
 							t.editBtn:Dispose()
-							t.playBtn:Dipose()
+							t.playBtn:Dispose()
 							hasValidLayout = false
 						end
 					end
@@ -654,8 +654,8 @@ local function DeclareControls()
 	---------------------------------------------------- main frame ------------------------------------------------
 	
 	window_main = MouseOverWindow:New {
-		x = '65%',
-		y = '25%',	
+		x = -336,
+		y = 70,	
 		dockable = false,
 		parent = screen0,
 		caption = "Ambient Sound Editor",
@@ -663,39 +663,77 @@ local function DeclareControls()
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
-		clientWidth = 350,
-		clientHeight = 540,		
-		children = {
-			Label:New {
-				x = 0,
-				y = 20,
-				clientWidth = 260,
-				parent = window_main,
-				align = 'center',
-				caption = '-Track Overview-',
-				textColor = colors.yellow_09,		
-			},
+		clientWidth = 310,
+		clientHeight = 480,		
+	}	
+	tabbar_main = TabBar:New {
+		parent = window_main,
+		x = 10,
+		y = 20,
+		clientWidth = 260,
+		clientHeight = 20,		
+		--textColor = {0.7,0.7,0.7,1},
+		tabs = {
+			[1] = 'Templates',
+			[2] = 'Emitters',
+			[3] = 'Files',
+		},
+		panels = {},
+		OnChange = { 
+			function(self, tab)		
+				--Echo("onchange "..tostring(tab))
+				if not self.panels[tab] then return false end
+				for k, params in pairs(self.panels) do 					
+					local hidden = params.hidden -- fuck you, chili
+					if not hidden then self.panels[k]:SetVisibility(false) end
+				end
+				self.panels[tab]:SetVisibility(true)				
+				--Echo("setV")
+				for i = 1, #self.children do
+					local c = self.children[i]
+					if c.caption == tab then
+						c.font:SetColor(colors.green_1)
+						c.backgroundColor = colors.grey_035 --{0.35,0.35,0.35,0.5}
+						c.borderColor = colors.grey_05 --{0.5,0.5,0.5,0.5}
+						--c:Invalidate()
+					else 
+						c.font:SetColor(colors.grey_08)
+						c.backgroundColor = colors.grey_02 --{0.2,0.2,0.2,0.5}
+						c.borderColor = colors.grey_03_04 --{0.3,0.3,0.3,0.4}
+						--c:Invalidate()						
+					end
+				end				
+			end
 		},
 	}
-	scroll_main = ScrollPanel:New {
+	--Echo("done core")
+	local panels = tabbar_main.panels
+	for i = 1, #tabbar_main.children do
+		local c = tabbar_main.children[i]
+		c.font:SetColor(colors.grey_08)
+		c.borderColor = colors.grey_03_04
+		c.backgroundColor = colors.grey_02
+	end
+	scroll_main_templates = ScrollPanel:New {
 		x = 0,
 		y = 40,
-		clientWidth = 340,
-		clientHeight = 420,
+		clientWidth = 300,
+		clientHeight = 360,
 		parent = window_main,
 		scrollPosX = -16,
 		verticalSmartScroll = true,	
 		scrollbarSize = 6,
 		padding = {5,10,5,10},		
-	}	
-	layout_main = DragDropLayoutPanel:New {		
+	}
+	panels.Templates = scroll_main_templates
+	layout_main_templates = DragDropLayoutPanel:New {		
 		name = 'tracklist',
-		parent = scroll_main,
+		parent = scroll_main_templates,
 		orientation = 'vertical',		
 		selectable = true,		
 		multiSelect = true,
-		maxWidth = 340,
-		minWidth = 340,
+		maxWidth = 290,
+		minWidth = 290,
 		itemPadding = {6,2,6,2},
 		itemMargin = {0,0,0,0},
 		autosize = true,
@@ -703,7 +741,68 @@ local function DeclareControls()
 		columns = 4,
 		left = 0,
 		centerItems = false,
-	}		
+	}
+	panels.Templates.layout = layout_main_templates
+	scroll_main_emitters = ScrollPanel:New {
+		x = 0,
+		y = 40,
+		clientWidth = 300,
+		clientHeight = 360,
+		parent = window_main,
+		scrollPosX = -16,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+		padding = {5,10,5,10},		
+	}
+	panels.Emitters = scroll_main_emitters
+	layout_main_emitters = DragDropLayoutPanel:New {		
+		name = 'emitters list',
+		parent = scroll_main_emitters,
+		orientation = 'vertical',		
+		selectable = false,		
+		multiSelect = false,
+		maxWidth = 290,
+		minWidth = 290,
+		itemPadding = {6,2,6,2},
+		itemMargin = {0,0,0,0},
+		autosize = true,
+		align = 'left',
+		columns = 1,
+		left = 0,
+		centerItems = false,
+	}
+	panels.Emitters.layout = layout_main_emitters	
+	scroll_main_files = ScrollPanel:New {
+		x = 0,
+		y = 40,
+		clientWidth = 300,
+		clientHeight = 360,
+		parent = window_main,
+		scrollPosX = -16,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+		padding = {5,10,5,10},		
+	}
+	panels.Files = scroll_main_files
+	layout_main_files = DragDropLayoutPanel:New {		
+		name = 'files list',
+		parent = scroll_main_files,
+		orientation = 'vertical',		
+		selectable = true,		
+		multiSelect = true,
+		maxWidth = 290,
+		minWidth = 290,
+		itemPadding = {6,2,6,2},
+		itemMargin = {0,0,0,0},
+		autosize = true,
+		align = 'left',
+		columns = 4,
+		left = 0,
+		centerItems = false,
+	}
+	panels.Files.layout = layout_main_files
+
+	
 			
 	button_emitters = Button:New {
 		x = 10,
@@ -738,8 +837,6 @@ local function DeclareControls()
 			
 		end,
 	}
-
-	
 	button_help = Button:New {
 		x = -32,
 		y = -32,
@@ -859,9 +956,61 @@ local function DeclareControls()
 			},
 		}
 	}	
+	button_show = Button:New {
+		x = -50,
+		y = 130,
+		parent = screen0,
+		tooltip = 'Open APE Main Window',
+		clientWidth = 30,
+		clientHeight = 30,
+		caption = '',
+		OnClick = {function(self) 
+				self:Hide()
+				window_main:Show()
+				window_main:Invalidate()
+			end,
+		},
+	}
+	button_show_anim = gl_AnimatedImage:New {
+		parent = button_show,
+		width = "100%",
+		height = "100%",
+		DrawControl = function(self, ...)	
+			if self.parent.state.hovered or self.state.hovered then
+				DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5, true)
+			else
+				DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5)
+			end
+			
+		end,
+	}	
+	button_minimize = Button:New {
+		x = -36,
+		y = 0,
+		parent = window_main,		
+		tooltip = 'Close Window',
+		clientWidth = 12,
+		clientHeight = 12,
+		caption = '',
+		OnClick = {function(self) 
+				window_main:Hide() 
+				button_show:Show()
+			end,
+		},
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",
+				file = icons.CLOSE_ICON,
+			},
+		}
+	}		
 	
+	window_main:Hide()
 	containers.main = window_main
-	controls.tracklist = layout_main
+	containers.tracklist = layout_main_templates
+	containers.emitterslist = layout_main_emitters
+	containers.fileslist = layout_main_files
 			
 	---------------------------------------------------- log window ------------------------------------------------	
 	window_console = MouseOverWindow:New {
@@ -873,13 +1022,13 @@ local function DeclareControls()
 		draggable = true,
 		resizable = false,
 		dragUseGrip = true,
-		clientWidth = 640,
+		clientWidth = 600,
 		clientHeight = 140,						
 	}
 	scroll_console = ScrollPanel:New {
 		x = 0,
 		y = 12,
-		clientWidth = 640,
+		clientWidth = 600,
 		clientHeight = 126,
 		parent = window_console,
 		scrollPosX = -16,
@@ -1978,6 +2127,13 @@ defaults to 0]],
 		}
 	end
 	
+	-- autogenerate map folder / map subfolders?
+	-- autolocalize files that are witihin the vfs?
+	-- 
+	
+	
+	
+	
 	--Echo(#tabs_settings['Display'].layout.children)
 	
 	--[[
@@ -2065,18 +2221,20 @@ local function DeclareFunctionsAfter()
 
 	--------------------------------------------------------------------------------------------------
 	-- main frame
-	layout_main.Refresh = function(self) 
-		local tooltip_help = colors.green_1:Code().."\n\nselect any number of items, press "..colors.blue_579:Code().."SPACE "..colors.green_1:Code().."and drag with your mouse to add them to an emitter."
+	layout_main_templates.Refresh = function(self) 
+		local tooltip_help_templates = colors.green_1:Code().."\n\nselect any number of items, press "..colors.blue_579:Code().."SPACE "..colors.green_1:Code().."and drag with your mouse to add them to an emitter."
 	
 		local valid = true
+		
+		-- templates tab
 		for item, params in pairs(sounditems.templates) do
-		--local i = controls.main and #controls.main or 1 --< cant index the table properly if things get removed
-			if not controls.main['label_'..item] then -- make new controls for newly added items
+		--local i = controls.tracklist and #controls.tracklist or 1 --< cant index the table properly if things get removed
+			if not controls.tracklist['label_'..item] then -- make new controls for newly added items
 				valid = false
-				controls.main['label_'..item] = MouseOverTextBox:New { --< should make custom clickie MouseOverTextBox for this
+				controls.tracklist['label_'..item] = MouseOverTextBox:New { --< should make custom clickie MouseOverTextBox for this
 					refer = item,					
-					clientWidth = 200,
-					parent = layout_main,
+					clientWidth = 160,
+					parent = layout_main_templates,
 					align = 'left',
 					text = item,
 					fontSize = 10,
@@ -2097,7 +2255,7 @@ local function DeclareFunctionsAfter()
 									ttip = ttip..k..": "..tostring(params[k]).."\n"
 								end
 							end							
-							self.tooltip = ttip..tooltip_help
+							self.tooltip = ttip..tooltip_help_templates
 						end,
 					},					
 					AllowSelect = function(self, idx, select) 						
@@ -2111,11 +2269,11 @@ local function DeclareFunctionsAfter()
 						self:Invalidate()
 					end,					
 				}
-				controls.main['length_'..item] = MouseOverTextBox:New {
+				controls.tracklist['length_'..item] = MouseOverTextBox:New {
 					refer = item,
 					x = 204,
 					clientWidth = 26,
-					parent = layout_main,
+					parent = layout_main_templates,
 					align = 'right',
 					text = ''..params.length_real,
 					fontSize = 10,
@@ -2124,11 +2282,11 @@ local function DeclareFunctionsAfter()
 					borderColor = colors.grey_03,
 					tooltip = [[The length of the item in seconds. As this information can't currently be obtained by the Widget, you may want to insert it manually.]],
 					-- this needs a refresh function for playback
-					--AllowSelect = function(self, idx, select) layout_main.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
+					--AllowSelect = function(self, idx, select) layout_main_templates.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
 				}
-				controls.main['editBtn_'..item] = Image:New {
+				controls.tracklist['editBtn_'..item] = Image:New {
 					refer = item,
-					parent = layout_main,
+					parent = layout_main_templates,
 					file = icons.PROPERTIES_ICON,
 					width = 20,
 					height = 20,
@@ -2143,11 +2301,11 @@ local function DeclareFunctionsAfter()
 							w:Show()							
 						end
 					},
-					--AllowSelect = function(self, idx, select) layout_main.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
+					--AllowSelect = function(self, idx, select) layout_main_templates.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
 				}
-				controls.main['playBtn_'..item] = Image:New {
+				controls.tracklist['playBtn_'..item] = Image:New {
 					refer = item,
-					parent = layout_main,
+					parent = layout_main_templates,
 					file = icons.PLAYSOUND_ICON,
 					width = 20,
 					height = 20,
@@ -2159,23 +2317,116 @@ local function DeclareFunctionsAfter()
 							DoPlay(item, options.volume.value, emitters.global) --< this probably shouldnt return anything
 						end
 					},
-					--AllowSelect = function(self, idx, select) layout_main.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
+					--AllowSelect = function(self, idx, select) layout_main_templates.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
 				}
 			else -- update controls for exisiting items (not a whole lot to do as of now)
-				controls.main['label_'..item].text = item
-				controls.main['length_'..item].text = params.length_real
+				controls.tracklist['label_'..item].text = item
+				controls.tracklist['length_'..item].text = params.length_real
 			end				
 		end
-		
-		--if controls.main then
-		for control, params in pairs(controls.main) do				
-			if not sounditems.templates[params.refer] then -- dispose of controls for items that were removed
+		for k, control in pairs(controls.tracklist) do				
+			if not sounditems.templates[control.refer] then -- dispose of controls for items that were removed
 				valid = false
-				controls.main[control]:Dispose()
-				controls.main[control] = nil
+				control:Dispose()
+				controls.tracklist[k] = nil
 			end
 		end
-		--end
+		
+		
+		local function MakeEmitterListEntry(e) 			
+			controls.emitterslist[e] = {}
+			local set = controls.emitterslist[e]
+			set.label = ClickyTextBox:New {
+				refer = e,					
+				clientWidth = 160,
+				parent = layout_main_emitters,
+				align = 'left',
+				text = e,
+				fontSize = 10,
+				textColor = e == 'global' and colors.blue_579 or colors.yellow_09,
+				textColorNormal = e == 'global' and colors.blue_579 or colors.yellow_09,
+				textColorSelected = colors.green_1,						
+				UpdateTooltip = function(self)
+					local em = emitters[e]
+					local ttip = colors.yellow_09:Code().."Emitter: "..e..colors.white_1:Code().."\n("
+					if e == 'global' then
+						ttip = ttip..'no position)\n'
+					else
+						ttip = ttip.."X: "..string.format("%.0f", em.pos.x)..", "..
+							"Z: "..string.format("%.0f", em.pos.z)..", "..
+								"Y: "..string.format("%.0f", em.pos.y)..")\n"
+					end
+					for i = 1, #em.sounds do					
+						ttip = ttip.."\n"..(em.sounds[i].item)
+					end
+					self.tooltip = ttip.."\n \n"..colors.green_1:Code().."right-click: inspect"
+				end,				
+				OnMouseOver = {
+					function(self)							
+						--self:UpdateTooltip()
+						self.font:SetColor(self.textColorSelected)
+						--self.textColor = self.textColorSelected
+						self.parent.highlightEmitter = e
+						--self:Invalidate()
+					end,
+				},
+				OnMouseOut = {
+					function(self)
+						--self:UpdateTooltip()
+						self.font:SetColor(self.textColorNormal)
+						--self.textColor = self.textColorNormal
+						self.parent.highlightEmitter = nil
+						--self:Invalidate()
+					end,
+				},
+				OnClick = {
+					function(self, _, _, btn)
+						local mx, mz_inv = widget.GetMouseScreenCoords()
+						if btn == 3 then
+							local window = EmitterInspectionWindow.instances[self.refer]
+							if window.visible then
+								Echo("was visible")
+								window:Hide()				
+								window:Invalidate()				
+								window.layout.visible = false -- silly but layout panels never hide
+							else
+								Echo("was hidden")
+								window:Refresh()
+								window:Show()
+								window.layout.visible = true
+								local main = window_main
+								local xp = mx > (screen0.width / 2) and (main.x - window.width) or (main.x + main.width)
+								local yp = mz_inv > (screen0.height / 2) and (mz_inv - window.height) or mz_inv
+								window:SetPos(xp, yp)
+								return
+							end	
+						end
+					end,
+				},
+			}
+			set.label:UpdateTooltip()
+		end
+		
+		if not controls.emitterslist.global then
+			valid = false
+			MakeEmitterListEntry('global')
+		end
+		
+		-- emitters tab	
+		for e, _ in pairs(emitters) do
+			if not controls.emitterslist[e] and e ~= 'global' then
+				valid = false
+				MakeEmitterListEntry(e)
+			end
+		end
+		for k, set in pairs(controls.emitterslist) do
+			if not emitters[set.label.refer] then
+				valid = false
+				set.label:Dispose()
+				-- ...
+				controls.emitterslist[k] = nil
+			end
+		end
 		
 		if not valid then self:Invalidate() end	
 	end
@@ -2293,15 +2544,18 @@ function UpdateGUI()
 	--editbox_mapfolder.text = config.path_map
 	--editbox_soundfolder.text = config.path_sound
 	
-	layout_main:Refresh()
+	layout_main_templates:Refresh()
 	--inspectionWindows:RefreshAll()
 	
 	-- is there any reason why they have to refresh on every tick?
 	-- maybe the counters? they could be frefreshed individually tho	
 	for _, window in pairs(inspectionWindows) do window:Refresh() end
 	--for _, tab in pairs(tabs_settings) do tab:Refresh() end
-	button_emitters_anim:Invalidate()
-	
+	if window_main.visible then
+		button_emitters_anim:Invalidate()
+	else
+		button_show_anim:Invalidate()
+	end	
 	--local focusedControl = Chili.UnlinkSafe(Chili.Screen0.focusedControl)
 	--local hoveredControl = Chili.UnlinkSafe(Chili.Screen0.hoveredControl)
 	--local activeControl = Chili.UnlinkSafe(Chili.Screen0.activeControl)

@@ -7,7 +7,7 @@ function widget:GetInfo()
     name      = "Ambient Sound Player & Editor",
     desc      = "v"..(versionNum),
     author    = "Klon",
-    date      = "dez 2014",
+    date      = "dez 2014 - jan 2016",
     license   = "GNU GPL, v2 or later",
     layer     = -1,
     enabled   = false,
@@ -183,7 +183,7 @@ setmetatable(emitters, {
 	end	
 })
 
-emitters.global = {pos = {}, sounds = {}, gl = {delta = math.random(60), u = math.random(60), v = math.random(60)}}
+--emitters.global = {pos = {}} --sounds = {}, gl = {delta = math.random(60), u = math.random(60), v = math.random(60)}}
 
 options = {}
 
@@ -440,6 +440,7 @@ local function AddItemToEmitter(e, iname) -- <string, string> !!!
 	-- newItem.emitter = e -- needed?
 	
 	needReload = true
+	controls.emitterslist[e].label:UpdateTooltip()
 	Echo("added <"..es[#es].item..">")
 	return true
 end
@@ -484,8 +485,7 @@ function SpawnEmitter(name, x, z, y)-- yoffset)
 	-- __newindex should build our tables
 	emitters[name] = {}		
 	--emitters[name].gl = {delta = math.random(60), u = math.random(60), v = math.random(60)}
-	emitters[name].pos = {x = math.floor(x), y = math.floor(y), z = math.floor(z)}
-	
+	emitters[name].pos = {x = math.floor(x), y = math.floor(y), z = math.floor(z)}	
 	
 	--emitters[name].light = MapLight(eLightTable)
 end
@@ -510,7 +510,7 @@ function widget:KeyPress(...)
 			drag._type = {} 
 			drag.params = {}
 			drag.started = false
-			Echo("drag ended")
+			Echo(key == KEYSYMS.RETURN and "drag ended" or "drag dropped")
 			return true			
 		end
 	end
@@ -588,12 +588,13 @@ function widget:MousePress(x, y, button)
 			drag.objects[1] = e
 			drag._type.emitter = true			
 			drag.params.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)
+			drag.params.refer = mouseOverEmitter..''
 			Echo("drag timer started")
 			return true	
 		elseif modkeys.space then
-			if controls.tracklist:IsMouseOver(mx, mz_inv) then -- this needs to check for layer too, somehow : /
+			if containers.tracklist:IsMouseOver(mx, mz_inv) then -- this needs to check for layer too, somehow : /
 				--Echo("mouse over")
-				local tl = controls.tracklist
+				local tl = containers.tracklist
 				--Echo(tl.name..tostring(tl.selectedItems))
 				local selection = tl.selectedItems
 				-- only trues but no order 
@@ -698,7 +699,9 @@ function widget:MouseRelease(x, y, button)
 				target:AddTemplates(drag.objects)
 			else Echo("drag dropped")
 			end
-		end
+		elseif drag._type.emitter then
+			controls.emitterslist[drag.params.refer].label:UpdateTooltip()
+		end		
 	end		
 
 	--if button == 4 or button == 5 then return false end
@@ -734,6 +737,7 @@ function widget:MouseWheel(up, value)
 		local h = e.pos.y + value * (modkeys.alt and 1 or(modkeys.ctrl and 100 or 10))
 		e.pos.y = h < gh and gh or h 
 		updateTooltip()
+		controls.emitterslist[mouseOverEmitter].label:UpdateTooltip()
 		return true
 	end
 end
@@ -746,7 +750,7 @@ function widget:MouseMove(x, y, dx, dy, button)
 				drag.objects[1].pos.x = mcoords[1]
 				drag.objects[1].pos.z = mcoords[3]
 				drag.objects[1].pos.y = mcoords[2] + (drag.params.hoff or 0)
-				updateTooltip()	
+				updateTooltip()								
 				return true
 			end		
 		elseif drag._type.sounditems then --? anything need to be done? could render a sound icon maybe
@@ -760,6 +764,10 @@ end
 -------------------------------------------------------------------------------------------------------------------------
 -- UPDATE/MISC
 -------------------------------------------------------------------------------------------------------------------------
+
+function GetMouseScreenCoords()
+	return mx, mz_inv
+end
 
 function GetDrag()
 	return not drag.started and drag or nil
@@ -879,7 +887,12 @@ end
 -- $\luaui\modules\snd_ambientplayer_draw.lua 
 
 function widget:DrawWorld() --?		
-	DrawEmitters(mouseOverEmitter)
+	--if containers.emitterslist.IsMouseOver(mx, mz_inv) then
+	--	DrawEmitters(mouseOverEmitter, containers.emitterslist.highlightEmitter)
+	--else
+		DrawEmitters(mouseOverEmitter, containers.emitterslist.highlightEmitter)
+	--end
+	
 	if drag._type.spawn then 
 		local p = mcoords or select(2,TraceRay(mx,mz,true))
 		if not p then return end
@@ -1022,6 +1035,7 @@ function widget:Initialize()
 		else Echo ("emitters file was empty", true)
 		end	
 	end	
+	if not emitters.global then emitters.global = {pos = {}} end
 	
 	Echo("updating map config...")	
 	if not (config.path_map) then config.path_map = 'maps/'..Game.mapName..'.sdd/' end

@@ -172,7 +172,7 @@ end
 
 
 
-function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to the environment
+function DrawEmitters(mouseOverEmitter, list_highlightEmitter) -- mouseOverEmitter should be global to the environment
 
 	if not emitMarker then UpdateMarkerList() end
 	
@@ -203,7 +203,7 @@ function DrawEmitters(mouseOverEmitter) -- mouseOverEmitter should be global to 
 			local pos = params.pos
 			if pos.x then
 				local list, linealpha -- should be options.alpha_*
-				if mouseOverEmitter == e then
+				if mouseOverEmitter == e or list_highlightEmitter == e then
 					list = emitMarker_Highlight
 					linealpha = 1
 				else
