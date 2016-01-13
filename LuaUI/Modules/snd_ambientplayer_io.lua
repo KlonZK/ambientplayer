@@ -205,7 +205,7 @@ end
 local function WriteTable(t, filename, header, tname)
 	local tname = tname or tostring(t) -- this sucks
 	if not (filename) then Echo("file not found") return false end	
-	Echo("writing "..filename.." ...")
+	--Echo("writing "..filename.." ...")
 	
 	local file = io.open(filename, 'w')	
 	if (file == nil) then Echo("failed to open "..filename) return false end	
@@ -215,7 +215,7 @@ local function WriteTable(t, filename, header, tname)
 	file:write('}\nreturn '..tname)	
 	file:close()
 	
-	Echo("done!", true)
+	--Echo("done!", true)
 	return true
 end
 
@@ -307,7 +307,7 @@ function ReloadSoundDefs()
 		Echo("failed to load temp file: "..rpath..TMP_ITEMS_FILENAME) return false end
 	if not (spLoadSoundDefs(rpath..TMP_INSTANCES_FILENAME)) then
 		Echo("failed to load temp file: "..rpath..TMP_INSTANCES_FILENAME) return false end
-
+	
 	return true
 	-- update should get called on frame/draw update. also not accessible from here
 	--UpdateGUI()	

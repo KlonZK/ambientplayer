@@ -19,6 +19,7 @@ local config = config
 local emitters = emitters
 local sounditems = sounditems
 
+local C_Control
 local Image
 local Button
 local Checkbox
@@ -163,13 +164,37 @@ local tabs_settings = {}
 ----------------------------------------------------------------------------------------------------------------------
 
 local function DeclareClasses()
-
+	
+	-- chili utils
+	
+	local function ExpandRect(rect,margin)
+		return {
+			rect[1] - margin[1],              --//left
+			rect[2] - margin[2],              --//top
+			rect[3] + margin[1] + margin[3], --//width
+			rect[4] + margin[2] + margin[4], --//height
+		}
+	end
+	
+	local function AreRectsOverlapping(rect1,rect2)
+		return
+			(rect1[1] <= rect2[1] + rect2[3]) and
+			(rect1[1] + rect1[3] >= rect2[1]) and
+			(rect1[2] <= rect2[2] + rect2[4]) and
+			(rect1[2] + rect1[4] >= rect2[2])
+	end
+	
+	
 	------------------------------------------- filtered Drag & Drop Layout Panel ------------------------------------
 	-- drag is controlled externally by chili and the widgets main module, this panel simply checks for mouse over status
 	-- secondly, it asks child components for permission before selecting them 
 	
 	DragDropLayoutPanel = Chili.LayoutPanel:Inherit{
-		classname = 'dragdroplayoutpanel',		
+		classname = 'dragdroplayoutpanel',
+		hitTestAllowEmpty = true,
+		allowDragItems = true,
+		shared_Selection = nil,
+		shared_ActivePanel = nil,
 		IsMouseOver	= function(self, mx, my) 
 			--Echo(mx.." - "..my)			
 			local ca = self.parent.clientArea
@@ -186,17 +211,180 @@ local function DeclareClasses()
 			return self.visible and (mx > x and mx < x + w) and (my > y and my < y + h) 
 			--return self.visible and (mx > ca[1] and mx < ca[1] + ca[3]) and (my > ca[2] and my < ca[2] + ca[4]) 
 		end,
+		
 		OnSelectItem = {
-			function(self, index, state)								
-				local c = self.children[index]				
-				if c and c.AllowSelect then c:AllowSelect(index, state) end
-			end,				
+			function(self, index, state)
+				local c = self.children[index]
+				if c and c.OnSelect then
+					c:OnSelect(index, state)
+				else
+					Echo("child at index "..tostring(index).." does not exist.")
+				end
+			end,
 		},
-		OnHide = function(...)
-			inherited.OnHide(...)
-			self.visible = false
+		DeselectItem = function(self, itemIdx)
+			if (not self.selectedItems[itemIdx]) then
+				return
+			end
+			self.selectedItems[itemIdx] = nil
+			--self._lastSelected = itemIdx
+			self:CallListeners(self.OnSelectItem, itemIdx, false)
+			self:Invalidate()
 		end,
+		ToggleItem = function(self, itemIdx)
+			local newstate = not self.selectedItems[itemIdx]
+			self.selectedItems[itemIdx] = newstate
+			if newstate then self._lastSelected = itemIdx end
+			self:CallListeners(self.OnSelectItem, itemIdx, newstate)
+			self:Invalidate()
+		end,
+		MultiRectSelect = function (self, item1, item2, append)
+		  --// note: this functions does NOT update self._lastSelected!
+
+		  --// select all items in the convex hull of those 2 items
+			local cells = self._cells
+			local itemPadding = self.itemPadding
+
+			local cell1,cell2 = cells[item1],cells[item2]
+
+			local convexHull = {
+				math.min(cell1[1],cell2[1]),
+				math.min(cell1[2],cell2[2]),
+			}
+			convexHull[3] = math.max(cell1[1]+cell1[3],cell2[1]+cell2[3]) - convexHull[1]
+			convexHull[4] = math.max(cell1[2]+cell1[4],cell2[2]+cell2[4]) - convexHull[2]
+
+			local oldSelected = {} 
+			for k, v in pairs(self.selectedItems) do
+				oldSelected[k] = v
+			end
+			self.selectedItems = append and self.selectedItems or {}			
+			
+			for i=1,#cells do
+				local cell  = cells[i]
+				local cellbox = ExpandRect(cell,itemPadding)
+				if (AreRectsOverlapping(convexHull,cellbox)) then
+					self.selectedItems[i] = true					
+				end
+			end			
+			
+			if (not append) then								
+				for itemIdx,selected in pairs(oldSelected) do
+					if (selected)and(not self.selectedItems[itemIdx]) then
+						self:CallListeners(self.OnSelectItem, itemIdx, false)
+					end
+				end
+			end			
+			
+			for itemIdx,selected in pairs(self.selectedItems) do
+				if (selected)and(not oldSelected[itemIdx]) then
+					self:CallListeners(self.OnSelectItem, itemIdx, true)
+				end
+			end				
+			
+			self:Invalidate()
+		end,	
+		
+		MouseUp = function(self, x,  y, button, mods)
+			local clickedChild = C_Control.MouseDown(self,x,y,button,mods)
+			if (clickedChild) then
+				return clickedChild
+			end
+			if (not self.selectable) then return end			
+			
+			if (button==3) then
+				self:DeselectAll()
+				return self
+			end
+
+			local cx,cy = self:LocalToClient(x,y)
+			local itemIdx = self:GetItemIndexAt(cx,cy)
+
+			if (itemIdx>0) and self.children[itemIdx].selectable then
+				if (self.multiSelect) then
+					if (mods.shift and mods.ctrl) then
+						self:MultiRectSelect(itemIdx,self._lastSelected or 1, true)
+					elseif (mods.shift) then
+						self:MultiRectSelect(itemIdx,self._lastSelected or 1)
+					elseif (mods.ctrl) then
+						self:ToggleItem(itemIdx)
+					else
+						self:SelectItem(itemIdx)
+					end
+				else
+					self:SelectItem(itemIdx)
+				end
+			end
+		end,
+		MouseDown = function(self, x,  y, button, mods)
+			local clickedChild = C_Control.MouseDown(self,x,y,button,mods)
+			if (clickedChild) then
+				return clickedChild
+			end
+			if (not self.selectable) then return end			
+			return self			
+		end,
+		
+		
+		MouseClick = function(self, x, y, button, mods)
+		
+		end,
+		MouseDblClick = function(self, x, y, button, mods)
+			Echo("catch")
+			local clickedChild = C_Control.MouseDown(self,x,y,button,mods)
+			if (clickedChild) then
+				Echo("123")
+				return clickedChild
+			end
+
+			if (not self.selectable) then return end
+
+			local cx,cy = self:LocalToClient(x,y)
+			local itemIdx = self:GetItemIndexAt(cx,cy)
+
+			if (itemIdx>0) then
+				self:CallListeners(self.OnDblClickItem, itemIdx)
+				return self
+			end
+		end,
+		
 	}
+	
+	--[[
+	function Control:HitTest(x,y)
+  if (not self.disableChildrenHitTest) then
+    if self:InClientArea(x,y) then
+      local cax,cay = self:LocalToClient(x,y)
+      local children = self.children
+      for i=1,#children do
+        local c = children[i]
+        if (c) then
+          local cx,cy = c:ParentToLocal(cax,cay)
+          if InLocalRect(cx,cy,c.width,c.height) then
+            local obj = c:HitTest(cx,cy)
+            if (obj) then
+              return obj
+            end
+          end
+        end
+      end
+      --//an option that allow you to mouse click on empty panel
+      if self.hitTestAllowEmpty then 
+      	return self 
+      end
+    end
+  end
+
+  if (self.NCHitTest) then
+    local nchit = self:NCHitTest(x,y)
+    if (nchit) then
+      return nchit
+    end
+  end
+
+  return false
+end
+	--]]
 	
 	
 	------------------------------------------- Edit Box with optional Input Filter ----------------------------------
@@ -306,7 +494,7 @@ local function DeclareClasses()
 			self:UpdateLayout()
 			self:Invalidate()
 			return self
-		end,
+		end,		
 	}
 	
 	
@@ -784,7 +972,11 @@ local function DeclareControls()
 		align = 'left',
 		columns = 4,
 		left = 0,
-		centerItems = false,		
+		centerItems = false,
+		OnDblClickItem = {function(self, state, index) 
+				Echo(state)
+			end,
+		},
 	}
 	panels.Templates.layout = layout_main_templates
 	scroll_main_emitters = ScrollPanel:New {
@@ -1823,8 +2015,9 @@ defaults to 0]],
 						textColorForbidden = colors.red_1,
 						textColorNormal = {.8,.8,.8,.9},
 						fulltext = files[i],
-						text = filename,	
-						AllowSelect = function(self, idx, select)							
+						text = filename,
+						selectable = true,
+						OnSelect = function(self, idx, select)							
 							if select then 
 								self.legit = ending
 								self.font:SetColor(ending and self.textColorSelected or self.textColorForbidden)
@@ -2292,6 +2485,7 @@ local function DeclareFunctionsAfter()
 					--borderColor = {0.3,0.3,0.3,0.5},
 					--borderFlip = {0.7,0.7,1,0.5},							
 					padding = {0, 6, 0, 0},
+					selectable = true,
 					OnMouseOver = {
 						function(self)							
 							local ttip = self.text.."\n\n"
@@ -2305,7 +2499,7 @@ local function DeclareFunctionsAfter()
 							self.tooltip = ttip..tooltip_help_templates
 						end,
 					},					
-					AllowSelect = function(self, idx, select) 						
+					OnSelect = function(self, idx, select) 						
 						--self.backgroundColor, self.backgroundFlip = self.backgroundFlip, self.backgroundColor
 						--self.borderColor, self.borderFlip = self.borderFlip, self.borderColor
 						if select then 
@@ -2592,6 +2786,7 @@ function SetupGUI()
 	
 	screen0 = Chili.Screen0
 	
+	C_Control = Chili.Control
 	Image = Chili.Image
 	Button = Chili.Button
 	Checkbox = Chili.Checkbox
@@ -2620,7 +2815,7 @@ function SetupGUI()
 	
 	local mwWindow = Window:New{
 		parent = screen0,
-		x = 500, y = 300,
+		x = 520, y = 780,
 		width = 200,
 		height = 100,		
 	}
@@ -2628,6 +2823,13 @@ function SetupGUI()
 		parent = mwWindow,
 		caption = '',
 		fontsize = 12,
+		y = 20,
+	}
+	hvLabel = Label:New {
+		parent = mwWindow,
+		caption = '',
+		fontsize = 12,
+		y = 35,
 	}
 	mwWindow:Show()
 end
@@ -2664,6 +2866,9 @@ function UpdateGUI()
 	local mww = MouseOver(c,d)
 	mwLabel:SetCaption(mww and (mww.name or 'something') or 'none')
 	mwLabel:Invalidate()
+	local hv = Chili.UnlinkSafe(Chili.Screen0.hoveredControl) 
+	hvLabel:SetCaption(hv and (hv.name or 'something') or 'none')
+	hvLabel:Invalidate()
 end
 
 
