@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.633'
+local versionNum = '0.64'
 
 function widget:GetInfo()
   return {
@@ -375,7 +375,8 @@ local worldTooltip
 -- LOCAL FUNCTIONS
 -------------------------------------------------------------------------------------------------------------------------
 
-local function DoPlay(trk, vol, e) 
+local function DoPlay(trk, vol, ename) 
+	local e = emitters[ename]
 	local item = sounditems.templates[trk] or sounditems.instances[trk]
 	if not item then 
 		Echo("item "..tostring(trk).." not found!") 
@@ -390,7 +391,11 @@ local function DoPlay(trk, vol, e)
 			end
 			--Echo(type(e.sounds))
 			--Echo (e.sounds[item].endTimer)
-			if e.sounds[trk] then e.sounds[trk].endTimer = item.length_real end
+			if e.sounds[trk] then 
+				e.sounds[trk].endTimer = item.length_real
+				e.sounds[trk].isPlaying = true				
+				EmitterInspectionWindow.instances[ename].layout.list[trk].activeIcon:Refresh()				
+			end	
 			--Echo("length: "..sounditems.instances[item].length)
 			
 			return true		
@@ -619,6 +624,7 @@ function widget:MousePress(x, y, button)
 				if selection then
 					--Echo("selection")				
 					for k, _ in pairs(selection) do
+						Echo(k)
 						local sel = fl.children[k]
 						assert (sel.fulltext, "selection "..tostring(sel).." missing item reference")
 						drag.objects[#drag.objects + 1] = {text = sel.text, fulltext = sel.fulltext, legit = sel.legit}
@@ -856,18 +862,28 @@ function widget:Update(dt)
 					if (trk.startTimer < 0) then
 						trk.startTimer = 0
 						if (random(trk.rnd) == 1) then
-							DoPlay(item, options.volume.value, params.pos.x, params.pos.y, params.pos.z) --< this should pass nils if pos.* doesnt exist
-							trk.startTimer  = item.length_loop
+							DoPlay(item, options.volume.value, e) --< this should pass nils if pos.* doesnt exist
+							trk.startTimer  = item.length_loop							
 							--trk.endTimer = item.length
 							--Echo("length: "..item.length)
 						end
 					end
 				end	
-				hasRunningTracks = trk.endTimer > 0 and true or hasRunningTracks
+				if trk.endTimer > 0 then
+					hasRunningTracks = true
+					--trk.isPlaying = true					
+				else
+					hasRunningTracks = hasRunningTracks
+					trk.isPlaying = false										
+					--if EmitterInspectionWindow.instances[e] then						
+						EmitterInspectionWindow.instances[e].layout.list[item].activeIcon:Refresh()
+					--end	
+				end
+				-- hasRunningTracks = trk.endTimer > 0 and true or hasRunningTracks
 			end	
 		end
 		params.isPlaying = hasRunningTracks
-		if params.isPlaying then Echo(e.." is playing") end
+		--if params.isPlaying then Echo(e.." is playing") end
 	end
 end	
 

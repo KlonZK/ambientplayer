@@ -83,7 +83,9 @@ local colors = {
 		end
 	end,
 	blue_579 = {0.5, 0.7, 0.9, 0.9},	
-	blue_07 = {0.7, 0.7, 0.8, 0.7},	
+	blue_579_6 = {0.5, 0.7, 0.9, 0.6},
+	blue_579_4 = {0.5, 0.7, 0.9, 0.4},
+	blue_07 = {0.7, 0.7, 0.8, 0.7},		
 	green_1 = {0.4, 1.0, 0.1, 1.0},
 	green_06 = {0, 0.6, 0.2, 0.9},
 	red_1 = {1, 0.2, 0.1, 1.0},
@@ -98,6 +100,7 @@ local colors = {
 	grey_03 = {0.3, 0.3, 0.3, 0.5},
 	grey_03_04 = {0.3,0.3,0.3,0.4},
 	grey_02 = {0.2, 0.2, 0.2, 0.5},
+	grey_01 = {0.1, 0.1, 0.1, 0.3},
 }
 for k, v in pairs(colors) do
 	if type(v) ~= 'function' then
@@ -169,9 +172,19 @@ local function DeclareClasses()
 		classname = 'dragdroplayoutpanel',		
 		IsMouseOver	= function(self, mx, my) 
 			--Echo(mx.." - "..my)			
-			local x, y = self:LocalToScreen(self.x, self.y)
+			local ca = self.parent.clientArea
+			--if not ca then return nil end
+			local x, y = self.parent:LocalToScreen(ca[1], ca[2])
+			local w, h = ca[3], ca[4]
+			--local x, y = self.parent:LocalToScreen(self.parent.x, self.parent.y)
+			--local x, y = self:LocalToScreen(self.x, self.y)
+			--local w, h = self.minHeight, self.minWidth
+			--y = y + self.parent.padding[2]
+			--h = h - self.parent.padding[4]
 			--Echo(x.." : "..y)
-			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+			--return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
+			return self.visible and (mx > x and mx < x + w) and (my > y and my < y + h) 
+			--return self.visible and (mx > ca[1] and mx < ca[1] + ca[3]) and (my > ca[2] and my < ca[2] + ca[4]) 
 		end,
 		OnSelectItem = {
 			function(self, index, state)								
@@ -372,7 +385,7 @@ local function DeclareClasses()
 		IsMouseOver	= function(self, mx, my) 						
 			local x, y = self.x, self.y -- for some odd reason LocalToScreen() breaks window coordinates			
 			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
-		end,		
+		end,
 	}	
 	
 
@@ -514,8 +527,8 @@ local function DeclareClasses()
 				parent = scrlPanel,
 				clientWidth = 300,
 				clientHeight = 250,
-				maxWidth = 300,
-				minWidth = 0,
+				--maxWidth = 300,
+				minWidth = 292,
 				minHeight = 160,
 				orientation = 'vertical',				
 				selectable = false,		
@@ -524,7 +537,7 @@ local function DeclareClasses()
 				itemMargin = {0,0,0,0},
 				autosize = true,
 				align = 'left',
-				columns = 3,
+				columns = 4,
 				left = 0,
 				centerItems = false,
 				list = {},
@@ -559,6 +572,7 @@ local function DeclareClasses()
 								textColor = colors.white_09,
 								backgroundColor = colors.grey_02,
 								borderColor = colors.grey_03,
+								padding = {0, 6, 0, 0},
 								OnMouseOver = {
 									function(self) 													
 										local _, endprefix = string.find(iname, "[%$].*[%$%s]")
@@ -576,12 +590,12 @@ local function DeclareClasses()
 								},
 							}
 							list[iname].editBtn = Image:New {
-								refer = iname,
+								refer = iname,								
 								parent = self,
 								file = icons.PROPERTIES_ICON,
 								width = 20,
 								height = 20,
-								tooltip = 'Sound Properties',
+								tooltip = 'Edit',
 								color = colors.grey_879, 
 								OnClick = { -- this needs a look at
 									function(self,...)									
@@ -595,6 +609,7 @@ local function DeclareClasses()
 							}
 							list[iname].playBtn = Image:New {
 								refer = iname,
+								refer2 = key,
 								parent = self,
 								file = icons.PLAYSOUND_ICON,
 								width = 20,
@@ -603,11 +618,29 @@ local function DeclareClasses()
 								color = colors.green_06,
 								margin = {-6,0,0,0},
 								OnClick = { -- hope e exists at this point?
-									function()													
-										return DoPlay(iname, options.volume.value, e)
+									function(self)										
+										return DoPlay(iname, options.volume.value, self.refer2)
 									end,
 								},
 							}
+							list[iname].activeIcon = Image:New {
+								refer = sound,
+								parent = self,
+								file = icons.MUSIC_ICON,
+								width = 18,
+								height = 18,
+								tooltip = 'not currently playing',
+								color = {0.3,0.5,0.7,0.0},
+								activeColor = {0.5,0.8,0.9,0.9},
+								inactiveColor = {0.3,0.5,0.7,0.0},
+								margin = {-6,1,0,1},
+								--padding = {0, 0, 0, 0},
+								OnClick = {},
+								Refresh = function(self)
+									self.color = sound.isPlaying and self.activeColor or self.inactiveColor
+									self:Invalidate()
+								end,
+							}							
 							-- what about animated play button
 							hasValidLayout = false
 						end								
@@ -637,7 +670,9 @@ local function DeclareClasses()
 				label:Refresh()
 				layout:Refresh()								
 			end
-			obj.layout = layout	
+			obj.layout = layout
+			obj:Refresh()			
+			obj:Hide()
 			return obj
 		end,
 	}		
@@ -684,22 +719,28 @@ local function DeclareControls()
 				--Echo("onchange "..tostring(tab))
 				if not self.panels[tab] then return false end
 				for k, params in pairs(self.panels) do 					
-					local hidden = params.hidden -- fuck you, chili
-					if not hidden then self.panels[k]:SetVisibility(false) end
+					--local hidden = params.hidden -- fuck you, chili
+					if not params.hidden then 
+						self.panels[k]:SetVisibility(false)
+						self.panels[k].layout.visible = false
+					end
 				end
-				self.panels[tab]:SetVisibility(true)				
+				self.panels[tab]:SetVisibility(true)
+				self.panels[tab].layout.visible = true	
 				--Echo("setV")
 				for i = 1, #self.children do
 					local c = self.children[i]
 					if c.caption == tab then
 						c.font:SetColor(colors.green_1)
-						c.backgroundColor = colors.grey_035 --{0.35,0.35,0.35,0.5}
-						c.borderColor = colors.grey_05 --{0.5,0.5,0.5,0.5}
+						c.backgroundColor = colors.grey_02 --{0.35,0.35,0.35,0.5}
+						c.borderColor = colors.blue_579_6
+						--c.borderColor = colors.grey_05 --{0.5,0.5,0.5,0.5}
 						--c:Invalidate()
 					else 
 						c.font:SetColor(colors.grey_08)
-						c.backgroundColor = colors.grey_02 --{0.2,0.2,0.2,0.5}
-						c.borderColor = colors.grey_03_04 --{0.3,0.3,0.3,0.4}
+						c.backgroundColor = colors.grey_01 --{0.2,0.2,0.2,0.5}
+						c.borderColor = colors.blue_579_4
+						--c.borderColor = colors.grey_03_04 --{0.3,0.3,0.3,0.4}
 						--c:Invalidate()						
 					end
 				end				
@@ -711,9 +752,11 @@ local function DeclareControls()
 	for i = 1, #tabbar_main.children do
 		local c = tabbar_main.children[i]
 		c.font:SetColor(colors.grey_08)
-		c.borderColor = colors.grey_03_04
-		c.backgroundColor = colors.grey_02
+		c.borderColor = colors.blue_579_4
+		--c.borderColor = colors.grey_03_04
+		c.backgroundColor = colors.grey_01		
 	end
+	
 	scroll_main_templates = ScrollPanel:New {
 		x = 0,
 		y = 40,
@@ -734,13 +777,14 @@ local function DeclareControls()
 		multiSelect = true,
 		maxWidth = 290,
 		minWidth = 290,
+		minHeight = 360,
 		itemPadding = {6,2,6,2},
 		itemMargin = {0,0,0,0},
 		autosize = true,
 		align = 'left',
 		columns = 4,
 		left = 0,
-		centerItems = false,
+		centerItems = false,		
 	}
 	panels.Templates.layout = layout_main_templates
 	scroll_main_emitters = ScrollPanel:New {
@@ -763,11 +807,12 @@ local function DeclareControls()
 		multiSelect = false,
 		maxWidth = 290,
 		minWidth = 290,
+		minHeight = 360,
 		itemPadding = {6,2,6,2},
 		itemMargin = {0,0,0,0},
 		autosize = true,
 		align = 'left',
-		columns = 1,
+		columns = 2,
 		left = 0,
 		centerItems = false,
 	}
@@ -781,7 +826,7 @@ local function DeclareControls()
 		scrollPosX = -16,
 		verticalSmartScroll = true,	
 		scrollbarSize = 6,
-		padding = {5,10,5,10},		
+		padding = {5,10,5,10},
 	}
 	panels.Files = scroll_main_files
 	layout_main_files = DragDropLayoutPanel:New {		
@@ -792,6 +837,7 @@ local function DeclareControls()
 		multiSelect = true,
 		maxWidth = 290,
 		minWidth = 290,
+		minHeight = 360,
 		itemPadding = {6,2,6,2},
 		itemMargin = {0,0,0,0},
 		autosize = true,
@@ -801,8 +847,8 @@ local function DeclareControls()
 		centerItems = false,
 	}
 	panels.Files.layout = layout_main_files
+	tabbar_main:Select("Templates")
 
-	
 			
 	button_emitters = Button:New {
 		x = 10,
@@ -2245,6 +2291,7 @@ local function DeclareFunctionsAfter()
 					--backgroundFlip = {0.6,0.6,0.9,0.5},
 					--borderColor = {0.3,0.3,0.3,0.5},
 					--borderFlip = {0.7,0.7,1,0.5},							
+					padding = {0, 6, 0, 0},
 					OnMouseOver = {
 						function(self)							
 							local ttip = self.text.."\n\n"
@@ -2280,6 +2327,7 @@ local function DeclareFunctionsAfter()
 					textColor = colors.white_09,
 					backgroundColor = colors.grey_02,
 					borderColor = colors.grey_03,
+					padding = {0, 6, 0, 0},
 					tooltip = [[The length of the item in seconds. As this information can't currently be obtained by the Widget, you may want to insert it manually.]],
 					-- this needs a refresh function for playback
 					--AllowSelect = function(self, idx, select) layout_main_templates.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
@@ -2290,8 +2338,8 @@ local function DeclareFunctionsAfter()
 					file = icons.PROPERTIES_ICON,
 					width = 20,
 					height = 20,
-					tooltip = 'Sounditem Properties',
-					color = {0.8,0.7,0.9,0.9}, --
+					tooltip = 'Edit',
+					color = {0.8,0.7,0.9,0.9}, --					
 					OnClick = {
 						function(self,...)
 							local w = window_properties
@@ -2311,10 +2359,10 @@ local function DeclareFunctionsAfter()
 					height = 20,
 					tooltip = 'Play',
 					color = colors.green_06,
-					margin = {-6,0,0,0},
+					margin = {-6,0,0,0},					
 					OnClick = {
 						function()
-							DoPlay(item, options.volume.value, emitters.global) --< this probably shouldnt return anything
+							DoPlay(item, options.volume.value, 'global') --< this probably shouldnt return anything
 						end
 					},
 					--AllowSelect = function(self, idx, select) layout_main_templates.DeselectItem(idx) Echo("control: "..idx) end, -- block selection
@@ -2345,7 +2393,8 @@ local function DeclareFunctionsAfter()
 				fontSize = 10,
 				textColor = e == 'global' and colors.blue_579 or colors.yellow_09,
 				textColorNormal = e == 'global' and colors.blue_579 or colors.yellow_09,
-				textColorSelected = colors.green_1,						
+				textColorSelected = colors.green_1,	
+				padding = {0, 6, 0, 0},				
 				UpdateTooltip = function(self)
 					local em = emitters[e]
 					local ttip = colors.yellow_09:Code().."Emitter: "..e..colors.white_1:Code().."\n("
@@ -2404,6 +2453,32 @@ local function DeclareFunctionsAfter()
 					end,
 				},
 			}
+			set.activeIcon = Image:New{
+				refer = emitters[e],
+				parent = layout_main_emitters,
+				file = icons.MUSIC_ICON,
+				width = 16,
+				height = 16,
+				tooltip = '',
+				color = {0.3,0.5,0.7,0.0},
+				OnClick = {function(self) end,},
+				OnMouseOver = {
+					function(self)
+						if self.refer.isPlaying then
+							local ttip = 'currently playing:\n\n'							
+							for i = 1, #self.refer.sounds do
+								local s = self.refer.sounds[i]
+								if s.isPlaying then 
+									ttip = ttip..s.item.."\n"
+								end
+							end
+							self.tooltip = ttip
+						else
+							self.tooltip = 'not currently playing'
+						end
+					end,
+				},				
+			}
 			set.label:UpdateTooltip()
 		end
 		
@@ -2413,10 +2488,17 @@ local function DeclareFunctionsAfter()
 		end
 		
 		-- emitters tab	
-		for e, _ in pairs(emitters) do
+		for e, params in pairs(emitters) do
 			if not controls.emitterslist[e] and e ~= 'global' then
 				valid = false
 				MakeEmitterListEntry(e)
+			end
+			if params.isPlaying then
+				controls.emitterslist[e].activeIcon.color = {0.5,0.8,0.9,0.9}
+				controls.emitterslist[e].activeIcon:Invalidate()
+			else
+				controls.emitterslist[e].activeIcon.color = {0.3,0.5,0.7,0.0}
+				controls.emitterslist[e].activeIcon:Invalidate()
 			end
 		end
 		for k, set in pairs(controls.emitterslist) do
@@ -2535,6 +2617,19 @@ function SetupGUI()
 	
 	tabbar_settings:Select('Player')
 	---window_chili:Show()
+	
+	local mwWindow = Window:New{
+		parent = screen0,
+		x = 500, y = 300,
+		width = 200,
+		height = 100,		
+	}
+	mwLabel = Label:New {
+		parent = mwWindow,
+		caption = '',
+		fontsize = 12,
+	}
+	mwWindow:Show()
 end
 
 
@@ -2565,9 +2660,13 @@ function UpdateGUI()
 	--label_hover:SetCaption(hoveredControl and hoveredControl.classname or 'none'); label_hover:Invalidate()
 	--label_active:SetCaption(activeControl and activeControl.classname or 'none'); label_active:Invalidate()
 	--window_chili:Invalidate()	
-
-	
+	local c, d = widget.GetMouseScreenCoords() or 1,1
+	local mww = MouseOver(c,d)
+	mwLabel:SetCaption(mww and (mww.name or 'something') or 'none')
+	mwLabel:Invalidate()
 end
+
+
 
 
 function MouseOver(mx, my)
@@ -2576,7 +2675,7 @@ function MouseOver(mx, my)
 	--	if c.visible and c.IsMouseOver and c:IsMouseOver(mx, my) then return c end
 	--end
 	for _, c in pairs(containers) do		
-		if c.layout then				
+		if c.layout then -- should check scroll panels instead layout panels extent far beyond the bounds				
 			if c.layout.IsMouseOver and c.layout:IsMouseOver(mx, my) then return c.layout end
 		end		
 		if c.IsMouseOver and c:IsMouseOver(mx, my) then return c end		
