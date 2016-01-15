@@ -179,6 +179,14 @@ local hoveredEmitter
 local hoveredControl -- might want to include windows here so its all in one place? need to do the hittest tho, then
 local dragDropDeamon
 
+local drag = {
+	items = {},
+	data = {},
+	typ = {},			
+	started = false,
+	cb = nil,
+}
+
 local callbacks = {}
 local function cbTimer(length, func, args)
 	local cb = {length = length, func = func, args = args, start = GetTimer()}
@@ -188,7 +196,7 @@ end
 
 
 local tooltipTimer = settings.interface[3]
-local worldTooltip
+local worldTooltip = ''
 local function updateTooltip()
 	local tooltip_help = colors.green_1:Code().."right-click: inspect\n"
 		..colors.green_1:Code().."left-click + drag: move\n"
@@ -203,8 +211,7 @@ local function updateTooltip()
 		for i = 1, #e.sounds do					
 			worldTooltip = worldTooltip.."\n"..(e.sounds[i].item)
 		end
-		worldTooltip = worldTooltip.."\n \n"..tooltip_help
-		
+		worldTooltip = worldTooltip.."\n \n"..tooltip_help		
 	end
 end
 
@@ -304,7 +311,7 @@ end
 			obj = LayoutPanel.New(self, obj)
 			obj.selectedItems = {}
 			return obj
-		end,
+		end,		
 		MouseUp = function(self, x, y, button, mods)
 			Echo("layout caught release")
 			Echo(x)
@@ -475,41 +482,30 @@ end
 		end,
 	}
 	
-	--[[
-	function Control:HitTest(x,y)
-  if (not self.disableChildrenHitTest) then
-    if self:InClientArea(x,y) then
-      local cax,cay = self:LocalToClient(x,y)
-      local children = self.children
-      for i=1,#children do
-        local c = children[i]
-        if (c) then
-          local cx,cy = c:ParentToLocal(cax,cay)
-          if InLocalRect(cx,cy,c.width,c.height) then
-            local obj = c:HitTest(cx,cy)
-            if (obj) then
-              return obj
-            end
-          end
-        end
-      end
-      --//an option that allow you to mouse click on empty panel
-      if self.hitTestAllowEmpty then 
-      	return self 
-      end
-    end
-  end
-
-  if (self.NCHitTest) then
-    local nchit = self:NCHitTest(x,y)
-    if (nchit) then
-      return nchit
-    end
-  end
-
-  return false
-end
-	--]]
+--[[
+		HitTest = function(self, x, y)
+			Echo(self.name.." - "..self.parent.name)
+			local p = self.parent
+			if self.hidden or not self.parent then return false end			
+			Echo("is visible")
+			--local ca = self.parent:clientArea
+			local sx, sy = self:LocalToScreen(x, y)
+			local px, py = p:LocalToScreen(p.x, p.y)			
+						
+			--local cx, cy = self.parent:ClientToParent(px, py)
+			
+			if p.visible then
+				Echo("self: "..sx..", "..sy.."parent: "..px..", "..py)
+				Echo(p.width)
+				Echo(p.height)
+				--return (sx > px) and (sx < px + p.width) and (sy > py) and (sy < py + p.height) and self
+				if (sx > px) and (sx < px + p.width) and (sy > py) and (sy < py + p.height) then
+					Echo("is hit")	
+					return self
+				end
+			end
+			return false
+		end,--]]
 	
 	
 	------------------------------------------- Edit Box with optional Input Filter ----------------------------------
@@ -586,7 +582,7 @@ end
 				end
 				
 			end
-			self._interactedTime = widget.GetTimer()
+			self._interactedTime = GetTimer()
 			--inherited.KeyPress(self, key, mods, isRepeat, label, unicode, ...)
 			self:UpdateLayout()
 			self:Invalidate()
@@ -614,7 +610,7 @@ end
 			--	return false
 			end
 
-			self._interactedTime = widget.GetTimer()
+			self._interactedTime = GetTimer()
 			--self.inherited.TextInput(utf8char, ...)
 			self:UpdateLayout()
 			self:Invalidate()
@@ -696,6 +692,10 @@ end
 	MouseOverWindow = Chili.Window:Inherit{
 		classname = 'mouseoverwindow',		
 		hitTestAllowEmpty = true,
+		--HitTest = function(self, x, y)
+		--	return false
+			--return self.visible and C_Control:HitTest(x, y)
+		--end,
 		IsMouseOver	= function(self, mx, my) 						
 			local x, y = self.x, self.y -- for some odd reason LocalToScreen() breaks window coordinates			
 			return self.visible and (mx > x and mx < x + self.width) and (my > y and my < y + self.height) 
@@ -1186,8 +1186,7 @@ local function DeclareControls()
 
 			
 	button_emitters = Button:New {
-		name = 'spawnbutton',
-		allowDragItems = 'spawn',
+		name = 'spawnbutton',		
 		x = 10,
 		y = -52,
 		parent = window_main,		
@@ -1197,7 +1196,18 @@ local function DeclareControls()
 		clientHeight = 30,
 		caption = '',
 		OnClick = {function(self) 
-			dragDropDeamon:StartDragItems(self)
+			if drag.started and button == 3 then
+				drag.started = false
+				--drag.cb = nil
+				drag.items = {}
+				drag.data = {}
+				drag.typ = {}
+			else
+				drag.started = true
+				drag.typ.spawn = true
+				drag.data.hoff = 0
+			end
+			--dragDropDeamon:StartDragItems(self)
 		end,
 		},
 	}
@@ -2766,7 +2776,7 @@ local function DeclareFunctionsAfter()
 				},
 				OnClick = {
 					function(self, _, _, btn)
-						local mx, mz_inv = widget.GetMouseScreenCoords()
+						--local mx, mz_inv = widget.GetMouseScreenCoords()
 						if btn == 3 then
 							local window = EmitterInspectionWindow.instances[self.refer]
 							if window.visible then
@@ -2925,152 +2935,74 @@ local function GetDeamon()
 		width = 30,
 		height = 30,		
 		--color = colors.none,
-		drag = {
-			items = {},
-			data = {},
-			typ = {},			
-			started = false,
-			cb = nil,
-		},
 		files = {
 			[1] = icons.SAVE_ICON,
 			[2] = icons.MUSIC_ICON,
 		},
 		color = {1, 1, 1, 1},
 		HitTest = function(self, ...)
-			return false
+			return drag.started and self
 		end,
 		MouseUp = function(self, x,  y, button, mods)
-			Echo("release")
-			local drag = self.drag
 			local target
 			if drag.started then
 				if hoveredControl and hoveredControl.allowDropItems and drag.typ[hoveredControl.allowDropItems] then					
 					target = hoveredControl
-					target:ReceiveDragItems(drag)					
+					target:ReceiveDragItems(drag)
 				elseif drag.typ.sounds and hoveredEmitter then
 					target = EmitterInspectionWindow.instances[hoveredEmitter].layout
-					target:ReceiveDragItems(drag)					
-				elseif drag.typ.spawn and button ~= 3 then -- 1&2 will pop, 3 drops
-					local p = mcoords or select(2,TraceRay(mx,mz,true))
-					if not p then return end
-					SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + (drag.data.hoff or 0))
-				elseif drag.typ.emitter then
-					controls.emitterslist[drag.data.source].label:UpdateTooltip()
+					target:ReceiveDragItems(drag)
 				end
 			else
 				drag.cb.cancel = true
-				Echo(drag.data.source.name)
+				Echo(drag.cb.args[2].name)
 				local sx, sy = self:LocalToScreen(x, y)
-				local tx, ty = drag.data.source:ScreenToLocal(sx, sy)
-				return drag.data.source:MouseUp(tx, ty, button, mods)
-			end
+				local tx, ty = drag.cb.args[2]:ScreenToLocal(sx, sy)				
+				--return drag.data.source:MouseUp(tx, ty, button, mods)
+				return drag.cb.args[2]:MouseUp(tx, ty, button, mods)
+			end	
 			drag.items = {}
 			drag.data = {}
 			drag.typ = {}
 			drag.started = false			
 			self:SetImage(false)
-			return target or false -- this should set focus if theres a target that can have focus
+			return --target or false -- this should set focus if theres a target that can have focus
 		end,
-		MouseDown = function(self, x,  y, button, mods, source)			
-			--if x then Echo(x) end
-			--if y then Echo(y) end
-			--if mods then Echo(mods) end
-			--if button then Echo(button) end
+		MouseDown = function(self, x,  y, button, mods, source)
+			if drag.started then
+				Echo("second down")
+				return (drag.typ.spawn or drag.typ.emitter) and false or self
+			end
 			if button ~= 1 then return source end
-			self.drag.cb = cbTimer(settings.interface[2] * 1000, self.StartDragItems, {self, source})
-			self.drag.data.source = source
+			-- we need to check here if the source is a child rather than the panel. if so, we just pass the event back.
+			-- the panel only sends this reference if the child listens to mouse button events
+			-- right now, these cant be dragged
+			if not source.allowDragItems then -- simple. could also use this tag to allow drag for clickable children, but then we need to claim input first and send the release to the source later
+				return source:MouseDown(x,  y, button, mods, source)
+			end
+			drag.cb = cbTimer(settings.interface[2] * 1000, self.StartDragItems, {self, source})
 			Echo("grabbing input")
 			return self
 		end,
 		MouseMove = function(self, x, y, dx, dy, button)
-			Echo("move")
-			local drag = self.drag
+			Echo("move")			
 			if drag.started then				
-				local sx, sy = self:LocalToScreen(x, y)
-				--Echo("screen: "..sx..", "..sy.."  local: "..x..", "..y.."  moved: "..dx..", "..dy.. " self: "..self.x..", "..self.y)				
-				self:SetPos(sx, sy)
-				--Echo(x..", "..y.." : "..dx..", "..dy)
-				
-				--Echo("self: "..self.x..", "..self.y)
-				--self:SetPos(self:LocalToScreen(x,y)) -- 
-				--local cx, cy = self:LocalToScreen(self.x, self.y)	
-				--self:SetPos(cx + dx, cy + dy)
-				--Echo(self.x.." - "..self.y)
-				if drag.typ.emitter then
-					Echo("dragging")
-					if mcoords then					
-						Echo("coords")
-						drag.items[1].pos.x = mcoords[1]
-						drag.items[1].pos.z = mcoords[3]
-						drag.items[1].pos.y = mcoords[2] + drag.data.hoff
-						updateTooltip()
-						return true						
-					end					
-				end
+				local sx, sy = self:LocalToScreen(x, y)				
+				self:SetPos(sx, sy)			
 			end			
 		end,
 		MouseWheel = function(self, up, value)
-			Echo("mw")
-			local drag = self.drag
-			if drag.typ.spawn and modkeys.shift then
-				drag.data.hoff = drag.data.hoff + value * (modkeys.alt and 1 or(modkeys.ctrl and 100 or 10))
-				drag.data.hoff = drag.data.hoff < 0 and 0 or drag.data.hoff
-				return true
-			end
-			return drag.started and self or false
-		end,
-		KeyPress = function(self, key, ...)
-			if key == KEYSYMS.RETURN or key == KEYSYMS.ESCAPE then
-				local drag = self.drag
-				if key == KEYSYMS.RETURN then
-					local p = mcoords or select(2,TraceRay(mx,mz,true))
-					if not p then return false end
-					SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + drag.data.hoff)
-				end
-				--drag.timer = settings.interface[2]
-				drag.items = {}
-				drag.data = {}
-				drag.typ = {}
-				drag.started = false			
-				self:SetImage(false)				
-				Echo(key == KEYSYMS.RETURN and "drag ended" or "drag dropped")
-				return true			
-			end
-			return false
+			-- i could probably route these to the hovered control and still keep the input by just returning self after
+			return self
 		end,
 		StartDragItems = function(self, source)
-			Echo("cb")
-			Echo(self.name)
-			local drag = self.drag			
+			Echo("cb")					
 			drag.started = true			
-			local e = emitters[source]
-			--Echo(source)
-			if e then -- this must be the name
-				Echo(source)
-				drag.typ.emitter = true
-				drag.items[1] = e
-				drag.data.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)
-				--drag.data.refer = source..''
-			else					
-				drag.typ[source.allowDragItems] = true
-				drag.items[1] = source
-				Echo("drag type: "..source.allowDragItems.." source: "..source.name)
-				if drag.typ['spawn'] then
-					Echo("spawn")
-					drag.data.hoff = 0
-				else
-					if drag.typ['files'] then
-						Echo("drags files")
-						self:SetImage(1)
-					elseif drag.typ['sounds'] then
-						Echo("drags sounds")
-						self:SetImage(2)
-					end
-				end
-				self:SetPos(mx, mz_inv)
-				-- we only need type here because items are added when drag is done
-			end
+			drag.typ[source.allowDragItems] = true
+			--drag.data.source = source
+			drag.items[1] = source
+			self:SetImage(drag.typ['files'] and 1 or 2)
+			self:SetPos(mx, mz_inv)			
 		end,
 	}
 end
@@ -3088,6 +3020,8 @@ local function Distance(sx, sz, tx, tz)
 end
 
 
+
+
 function SetupGUI()		
 	Chili = widget.WG.Chili
 	if (not Chili) then		
@@ -3095,8 +3029,9 @@ function SetupGUI()
 		return false
 	end
 	
-	screen0 = Chili.Screen0
 	
+	screen0 = Chili.Screen0
+
 	C_Control = Chili.Control
 	Image = Chili.Image
 	Button = Chili.Button
@@ -3170,7 +3105,7 @@ function UpdateGUI(dt)
 	mz_inv = math.abs(screen0.height - mz)
 	_, mcoords = TraceRay(mx, mz, true)
 	modkeys.alt ,modkeys.ctrl, modkeys.space, modkeys.shift = GetModKeys()
-	hoveredControl = screen0:HitTest(mx, mz) -- this does not care for windows atm
+	hoveredControl = screen0:HitTest(mx, mz_inv) -- this does not care for windows atm
 		
 	if #callbacks > 0 then
 		local timer = GetTimer()
@@ -3184,7 +3119,7 @@ function UpdateGUI(dt)
 		end
 	end
 	
-	if settings.display[1] and not hoveredControl then
+	if settings.display[1] and (not hoveredControl or hoveredControl.name == 'dragdropdeamon') then
 		local dist = 100000000
 		local nearest
 		for e, params in pairs(emitters) do
@@ -3228,20 +3163,20 @@ function UpdateGUI(dt)
 	end
 
 	local mww = hoveredControl
-	mwLabel:SetCaption(mww and (mww.name or 'something') or 'none')
+	mwLabel:SetCaption("hv local: "..(mww and (mww.name or 'something') or 'none'))
 	mwLabel:Invalidate()
 	local hv = Chili.UnlinkSafe(Chili.Screen0.hoveredControl) 
-	hvLabel:SetCaption(hv and (hv.name or 'something') or 'none')
+	hvLabel:SetCaption("hv screen: "..(hv and (hv.name or 'something') or 'none'))
 	hvLabel:Invalidate()
 end
 
 
 function DrawWorld()	
 	draw.DrawEmitters(hoveredEmitter, containers.emitterslist.highlightEmitter)	
-	if dragDropDeamon.drag.typ.spawn then
+	if drag.typ.spawn then
 		local p = mcoords or select(2,TraceRay(mx,mz,true))
 		if not p then return end
-		p[2] = p[2] + (dragDropDeamon.drag.data.hoff or 0)
+		p[2] = p[2] + (drag.data.hoff or 0)
 		DrawCursorToWorld(p[1], p[3], p[2], settings.display[2], settings.display[2], settings.display[2])
 	end
 end
@@ -3253,7 +3188,7 @@ end
 -----------------------------------------------------------------------------------------------------------------------
 
 function IsAbove(x, y)	
-	if hoveredEmitter and not hoveredControl then return true end		
+	return hoveredEmitter and not hoveredControl	
 end
 
 
@@ -3269,21 +3204,36 @@ end
 
 function KeyPress(...)
 	if not Chili then return false end
+	if drag.started then	
+		local key = select(1, ...)		
+		if drag.typ.spawn and (key == KEYSYMS.RETURN or key == KEYSYMS.ESCAPE) then			
+			if key == KEYSYMS.RETURN then				
+				local p = mcoords or select(2,TraceRay(mx,mz,true))
+				if not p then return false end
+				SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + drag.data.hoff)
+			end			
+			drag.items = {}
+			drag.data = {}
+			drag.typ = {}
+			drag.started = false							
+			Echo(key == KEYSYMS.RETURN and "drag ended" or "drag dropped")							
+		end
+		return true -- im just gonna keep all the inputs for safety
+	end	
 	local focusedControl = Chili.UnlinkSafe(Chili.Screen0.focusedControl)       
 	if focusedControl and focusedControl.classname == 'FilterEditBox' then		
 		focusedControl:KeyPress(...)
 		return true
-    end
-	if dragDropDeamon.drag.typ.spawn then
-		local key = select(1, ...)
-		return dragDropDeamon:KeyPress(key)
-	end	
+    end	
 end
 
 
 function TextInput(...)
 	if not Chili then return false end
 	local focusedControl = Chili.UnlinkSafe(Chili.Screen0.focusedControl)
+	if drag.started then
+		return true -- im just gonna keep all the inputs for safety
+	end
 	if focusedControl and focusedControl.classname == 'FilterEditBox' then
 		return (not not focusedControl:TextInput(...))
     end	
@@ -3291,69 +3241,86 @@ end
 
 
 function MousePress(x, y, button, mods)
-	if dragDropDeamon.drag.typ.spawn then
-		Echo("routing to deamon")
-		--dragDropDeamon:MousePress(x, y, button)
-		return dragDropDeamon -- we dont really need to know anything about the input, deamon just claims it
+	if drag.started then
+		return drag.typ.spawn and button ~= 2 or false
 	elseif hoveredEmitter then
-		if button == 3 then
-			return true		
-		else -- start drag
-			return dragDropDeamon:MouseDown(x, y, button, mods, hoveredEmitter)
+		if button ~= 3 then			
+			local e = emitters[hoveredEmitter]
+			drag.started = true
+			drag.typ.emitter = true			
+			drag.items[1] = e
+			drag.items[2] = hoveredEmitter -- we need the name, too
+			drag.data.hoff = e.pos.y - GetGroundHeight(e.pos.x, e.pos.z)
 		end
-	end	
+		return true
+	end
 	return false
 end
 
 
+-- events related to other types of drags should never arrive here				
 function MouseRelease(x, y, button)
-	--Echo("mouse release")
-	if dragDropDeamon.drag.typ.spawn or dragDropDeamon.drag.typ.emitter then
-		return dragDropDeamon:MouseUp(x, y, button)
-	end
-	if button == 3 then	-- we implicitly cancel spawn placement here. we should reset the button tho, maybe?
-		if hoveredEmitter and not dragDropDeamon.drag.typ.spawn then
-			if EmitterInspectionWindow.instances[hoveredEmitter].visible then
-				--Echo("was visible")
-				EmitterInspectionWindow.instances[hoveredEmitter]:Hide()				
-				EmitterInspectionWindow.instances[hoveredEmitter]:Invalidate()				
-				EmitterInspectionWindow.instances[hoveredEmitter].layout.visible = false -- silly but layout panels never hide
-			else
-				--Echo("was hidden")
-				EmitterInspectionWindow.instances[hoveredEmitter]:Refresh()
-				EmitterInspectionWindow.instances[hoveredEmitter]:Show()
-				EmitterInspectionWindow.instances[hoveredEmitter].layout.visible = true
-				local xp = mx > (screen0.width / 2) and (mx - EmitterInspectionWindow.instances[hoveredEmitter].width) or mx
-				local yp = mz_inv > (screen0.height / 2) and (mz_inv - EmitterInspectionWindow.instances[hoveredEmitter].height) or mz_inv
-				EmitterInspectionWindow.instances[hoveredEmitter]:SetPos(xp, yp)
-				return
+	if button == 3 then	
+		if hoveredEmitter and not drag.started then
+			local w = EmitterInspectionWindow.instances[hoveredEmitter]
+			if w.visible then				
+				w:Hide(); w:Invalidate(); w.layout.visible = false -- silly but layout panels never hide
+			else				
+				w:Refresh(); w:Show(); w.layout.visible = true
+				local xp = mx > (screen0.width / 2) and (mx - w.width) or mx
+				local yp = mz_inv > (screen0.height / 2) and (mz_inv - w.height) or mz_inv
+				w:SetPos(xp, yp)
 			end	
+			return
+		--elseif drag.typ.spawn then drop -- this is implicit
 		end
-	end		
-
-	--if button == 4 or button == 5 then return false end
-	
+	elseif drag.typ.spawn then
+		local p = mcoords or select(2,TraceRay(mx,mz,true))
+		if not p then return end
+		SpawnDialog(p[1], p[3], GetGroundHeight(p[1],p[3]) + drag.data.hoff)			
+	elseif drag.typ.emitter then
+		controls.emitterslist[drag.items[2]].label:UpdateTooltip()
+	end	
+	-- this 
+	drag.started = false
+	drag.items = {}
+	drag.data = {}
+	drag.typ = {}	
+	--drag.cb = false	--idk
 end
 
 
-function MouseWheel(up, value)
-	if dragDropDeamon.drag.started then
-		return dragDropDeamon:MouseWheel(up, value)
-	elseif hoveredEmitter and modkeys.shift then		
-		local e = emitters[hoveredEmitter]
-		local gh = GetGroundHeight(e.pos.x, e.pos.z)
-		local h = e.pos.y + value * (modkeys.alt and 1 or(modkeys.ctrl and 100 or 10))
-		e.pos.y = h < gh and gh or h 
-		updateTooltip()
-		controls.emitterslist[hoveredEmitter].label:UpdateTooltip()
+function MouseWheel(up, value)	
+	if modkeys.shift then
+		if drag.typ.spawn then
+			drag.data.hoff = drag.data.hoff + value * (modkeys.alt and 1 or(modkeys.ctrl and 100 or 10))
+			drag.data.hoff = drag.data.hoff < 0 and 0 or drag.data.hoff			
+		elseif hoveredEmitter then			
+			local e = emitters[hoveredEmitter]
+			local diff = value * (modkeys.alt and 1 or(modkeys.ctrl and 100 or 10))
+			local gh = GetGroundHeight(e.pos.x, e.pos.z)			
+			e.pos.y = (e.pos.y + diff) > gh and (e.pos.y + diff)  or 0					
+			if drag.typ.emitter then
+				drag.data.hoff = (drag.data.hoff + diff) > 0 and (drag.data.hoff + diff) or 0				
+			end			
+			updateTooltip()
+			controls.emitterslist[hoveredEmitter].label:UpdateTooltip()
+		end
 		return true
 	end
 end
 
+	
 function MouseMove(...)
-	if dragDropDeamon.drag.typ.spawn or dragDropDeamon.drag.typ.emitter then
-		Echo("sent to deamon")
-		return dragDropDeamon:MouseMove(...)
+	if drag.typ.emitter then
+		if mcoords then
+			drag.items[1].pos.x = mcoords[1]
+			drag.items[1].pos.z = mcoords[3]
+			drag.items[1].pos.y = mcoords[2] + drag.data.hoff
+			updateTooltip()
+			controls.emitterslist[drag.items[2]].label:UpdateTooltip()
+			return true
+		end
 	end
 end
 

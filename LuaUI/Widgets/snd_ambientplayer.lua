@@ -487,41 +487,19 @@ local function MouseOnGUI()
 	return IsMouseMinimap(mx or 0, mz or 0) or MouseOver(mx, mz_inv)--screen0.hoveredControl --or screen0.focusedControl
 end
 
-
-
-
-
-local function updateTooltip()
-	local tooltip_help = gui.colors.green_1:Code().."right-click: inspect\n"
-		..gui.colors.green_1:Code().."left-click + drag: move\n"
-			..gui.colors.green_1:Code().."shift + wheel (+ctrl/alt): adjust height"
-	if hoveredEmitter then
-		local e = emitters[hoveredEmitter]
-		worldTooltip = gui.colors.yellow_09:Code().."Emitter: "..hoveredEmitter..gui.colors.white_1:Code().."\n("..
-			"X: "..string.format("%.0f", e.pos.x)..", "..
-				"Z: "..string.format("%.0f", e.pos.z)..", "..
-					"Y: "..string.format("%.0f", e.pos.y)..")\n "
-
-		for i = 1, #e.sounds do
-			worldTooltip = worldTooltip.."\n"..(e.sounds[i].item)
-		end
-		worldTooltip = worldTooltip.."\n \n"..tooltip_help
-		--worldTooltip:format("%.2f")
-	end
-end
-
-
-function widget:GetTooltip(x, y)
-	gui.GetTooltip(x, y)
-end
-
-
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
 -- GUI
 -------------------------------------------------------------------------------------------------------------------------
 -- $\luaui\modules\snd_ambientplayer_gui.lua
 
+function widget:IsAbove(...)
+	return gui and (not Spring.IsGUIHidden()) and gui.IsAbove(...)
+end
+
+function widget:GetTooltip(...)
+	return gui and (not Spring.IsGUIHidden()) and gui.GetTooltip(...)
+end
 
 function widget:KeyPress(...)
 	return gui and (not Spring.IsGUIHidden()) and gui.KeyPress(...)
@@ -529,10 +507,6 @@ end
 
 function widget:TextInput(...)
 	return gui and (not Spring.IsGUIHidden()) and gui.TextInput(...)
-end
-
-function widget:IsAbove(...)
-	return gui and (not Spring.IsGUIHidden()) and gui.IsAbove(...)
 end
 
 function widget:MousePress(...)
