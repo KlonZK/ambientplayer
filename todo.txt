@@ -14,11 +14,13 @@ continue gui and io implementation:
 - also consider/test if installing the editor into spring/luaui would be possible
 - consider more chili subclasses for shared functions (mouseover for layout, ..) x
 - rework instanced windows, this is coming up. concept so far is to subclass a InstancedWindow class, 
-- each subclass holds its own prototype, while the super class controls the instancing x
+  each subclass holds its own prototype, while the super class controls the instancing x
 
 player implementation:
 - consider player module
 - alternativly, make player widget
+- alternativly, make the core module the player and just dont load the gui/draw module if in player mode
+  this probably does not require a lot of work as most things have been moved out of the core anyway
 
 emitter script implementation:
 - use loadstring for basic scripts

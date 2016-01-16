@@ -240,28 +240,28 @@ local function DeclareClasses()
 			(rect1[2] + rect1[4] >= rect2[2])
 	end
 	
-local function _DrawTextureAspect(x,y,w,h ,tw,th, flipy)
-	local twa = w/tw
-	local tha = h/th
+	local function _DrawTextureAspect(x,y,w,h ,tw,th, flipy)
+		local twa = w/tw
+		local tha = h/th
 
-	local aspect = 1
-	if (twa < tha) then
-		aspect = twa
-		y = y + h*0.5 - th*aspect*0.5
-		h = th*aspect
-	else
-		aspect = tha
-		x = x + w*0.5 - tw*aspect*0.5
-		w = tw*aspect
+		local aspect = 1
+		if (twa < tha) then
+			aspect = twa
+			y = y + h*0.5 - th*aspect*0.5
+			h = th*aspect
+		else
+			aspect = tha
+			x = x + w*0.5 - tw*aspect*0.5
+			w = tw*aspect
+		end
+
+		local right  = math.ceil(x+w)
+		local bottom = math.ceil(y+h)
+		x = math.ceil(x)
+		y = math.ceil(y)
+
+		gl.TexRect(x,y,right,bottom,false,flipy)
 	end
-
-	local right  = math.ceil(x+w)
-	local bottom = math.ceil(y+h)
-	x = math.ceil(x)
-	y = math.ceil(y)
-
-	gl.TexRect(x,y,right,bottom,false,flipy)
-end
 	
 	------------------------------------------- swap image array ----------------------------------------------------- 
 		
@@ -287,7 +287,7 @@ end
 		SetImage = function(self, img)
 			if img and type(img) == 'number' then
 				self.currentFile = self.files[img]
-				Echo("set image to"..img)
+				--Echo("set image to"..img)
 			else
 				self.currentFile = false
 			end			
@@ -481,33 +481,7 @@ end
 			self:Invalidate()
 		end,
 	}
-	
---[[
-		HitTest = function(self, x, y)
-			Echo(self.name.." - "..self.parent.name)
-			local p = self.parent
-			if self.hidden or not self.parent then return false end			
-			Echo("is visible")
-			--local ca = self.parent:clientArea
-			local sx, sy = self:LocalToScreen(x, y)
-			local px, py = p:LocalToScreen(p.x, p.y)			
-						
-			--local cx, cy = self.parent:ClientToParent(px, py)
-			
-			if p.visible then
-				Echo("self: "..sx..", "..sy.."parent: "..px..", "..py)
-				Echo(p.width)
-				Echo(p.height)
-				--return (sx > px) and (sx < px + p.width) and (sy > py) and (sy < py + p.height) and self
-				if (sx > px) and (sx < px + p.width) and (sy > py) and (sy < py + p.height) then
-					Echo("is hit")	
-					return self
-				end
-			end
-			return false
-		end,--]]
-	
-	
+
 	------------------------------------------- Edit Box with optional Input Filter ----------------------------------
 	-- also knows a few tricks:
 	-- calls self:OnTab(), self:Discard(), self:Confirm() on tab, escape, enter 
@@ -766,6 +740,7 @@ end
 				OnClick = {
 					function(self)
 						self.parent:Hide()
+						self.parent.layout:DeselectAll()
 						self.parent.layout.visible = false
 					end,
 				},	
@@ -792,6 +767,7 @@ end
 					function(self)
 						for _, window in pairs(EmitterInspectionWindow.instances) do 
 							window:Hide()
+							window.layout:DeselectAll()
 							window.layout.visible = false
 						end
 					end,
@@ -842,14 +818,15 @@ end
 				-- allowDropItems = 'sounds', --impl needs cutting the real names from the strings and check template tags
 					-- this can be done before or after
 				allowDropItems = 'sounds',
+				allowDragItems = 'sounds',
 				clientWidth = 300,
 				clientHeight = 250,
 				--maxWidth = 300,
 				minWidth = 292,
 				minHeight = 160,
 				orientation = 'vertical',				
-				selectable = false,		
-				multiSelect = false,
+				selectable = true,		
+				multiSelect = true,
 				itemPadding = {6,2,6,2},
 				itemMargin = {0,0,0,0},
 				autosize = true,
@@ -890,19 +867,37 @@ end
 						if not list[iname] then
 							list[iname] = {}
 							local _, endprefix = string.find(iname, "[%$].*[%$%s]")
-							local txt = colors.yellow_09:Code()..string.sub(iname, 0, endprefix)
+							local txt_normal = colors.yellow_09:Code()..string.sub(iname, 0, endprefix)
 								..colors.white_1:Code()..string.sub(iname, endprefix + 1)
+							local txt_selected = colors.yellow_09:Code()..string.sub(iname, 0, endprefix)
+								..colors.green_1:Code()..string.sub(iname, endprefix + 1)	
 							list[iname].label = MouseOverTextBox:New{
 								refer = iname,
 								width = obj.width - 140,
 								parent = self,
 								align = 'left',
-								text = txt,
+								text = txt_normal,
 								fontsize = 10,
 								textColor = colors.white_09,
+								--textColorNormal = colors.white_09,
+								--textColorSelected = colors.green_1,								
 								backgroundColor = colors.grey_02,
 								borderColor = colors.grey_03,
 								padding = {0, 6, 0, 0},
+								selectable = true,					
+								OnSelect = function(self, idx, select) 						
+									--self.backgroundColor, self.backgroundFlip = self.backgroundFlip, self.backgroundColor
+									--self.borderColor, self.borderFlip = self.borderFlip, self.borderColor
+									if select then 
+										--self.font:SetColor(self.textColorSelected)							
+										self:SetText(txt_selected)
+									else 
+										--self.font:SetColor(self.textColorNormal) 
+										self:SetText(txt_normal)
+									end
+									self:UpdateLayout()									
+									self:Invalidate()
+								end,								
 								OnMouseOver = {
 									function(self) 													
 										local _, endprefix = string.find(iname, "[%$].*[%$%s]")
@@ -1116,10 +1111,6 @@ local function DeclareControls()
 		columns = 4,
 		left = 0,
 		centerItems = false,
-		OnDblClickItem = {function(self, state, index) 
-				Echo(state)
-			end,
-		},
 	}
 	panels.Templates.layout = layout_main_templates
 	scroll_main_emitters = ScrollPanel:New {
@@ -1343,15 +1334,51 @@ local function DeclareControls()
 			},
 		}
 	}	
-	button_show = Button:New {
-		x = -50,
-		y = 130,
+	button_show = Button:New {	
 		parent = screen0,
+		dockable = true,
+		parentWidgetName = widget:GetInfo().name,		
 		tooltip = 'Open APE Main Window',
+		x = -50,
+		y = 100,		
 		clientWidth = 30,
 		clientHeight = 30,
 		caption = '',
+		cb = nil,
+		MouseDown = function(self, x, y, button, mods)			
+			self.cb = cbTimer(settings.interface[2] * 1000, self.DragCallin, {self})
+			self.state.pressed = true
+			C_Control.MouseDown(self, x, y, button, mods)
+			self:Invalidate()
+			return self
+			--return Button.MouseDown(self, x, y, button, mods)
+		end,
+		MouseUp = function(self, x, y, button, mods)
+			if self.state.pressed then
+				if self.cb then
+					self.cb.cancel = true				
+				end
+				self.cb = nil
+				self.state.pressed = false
+				if self.dragging then					
+					self.dragging = false
+					return false
+				end				
+				C_Control.MouseUp(self, x, y, button, mods)
+				self:Invalidate()
+				return self
+			end			
+			--return Button.MouseUp(self, x, y, button, mods)
+		end,
+		DragCallin = function(self)			
+			self:SetPos(mx - self.width / 2, mz_inv - self.height / 2)
+			self.dragging = true
+		end,
 		OnClick = {function(self) 
+				if self.dragging then					
+					self.dragging = false
+					return false
+				end	
 				self:Hide()
 				window_main:Show()
 				window_main:Invalidate()
@@ -1361,14 +1388,13 @@ local function DeclareControls()
 	button_show_anim = gl_AnimatedImage:New {
 		parent = button_show,
 		width = "100%",
-		height = "100%",
+		height = "100%",		
 		DrawControl = function(self, ...)	
 			if self.parent.state.hovered or self.state.hovered then
 				DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5, true)
 			else
 				DrawIcons(self.x + self.width / 2, self.y + self.height / 2, self.width /2.5, self.height/2.5, self.width/2.5)
-			end
-			
+			end			
 		end,
 	}	
 	button_minimize = Button:New {
@@ -2650,7 +2676,7 @@ local function DeclareFunctionsAfter()
 							end							
 							self.tooltip = ttip..tooltip_help_templates
 						end,
-					},					
+					},				
 					OnSelect = function(self, idx, select) 						
 						--self.backgroundColor, self.backgroundFlip = self.backgroundFlip, self.backgroundColor
 						--self.borderColor, self.borderFlip = self.borderFlip, self.borderColor
@@ -2947,11 +2973,9 @@ local function GetDeamon()
 			local target
 			if drag.started then
 				if hoveredControl and hoveredControl.allowDropItems and drag.typ[hoveredControl.allowDropItems] then					
-					target = hoveredControl
-					target:ReceiveDragItems(drag)
+					target = hoveredControl					
 				elseif drag.typ.sounds and hoveredEmitter then
-					target = EmitterInspectionWindow.instances[hoveredEmitter].layout
-					target:ReceiveDragItems(drag)
+					target = EmitterInspectionWindow.instances[hoveredEmitter].layout					
 				end
 			else
 				drag.cb.cancel = true
@@ -2960,7 +2984,10 @@ local function GetDeamon()
 				local tx, ty = drag.cb.args[2]:ScreenToLocal(sx, sy)				
 				--return drag.data.source:MouseUp(tx, ty, button, mods)
 				return drag.cb.args[2]:MouseUp(tx, ty, button, mods)
-			end	
+			end
+			if target and target ~= drag.items[1] then
+				target:ReceiveDragItems(drag)
+			end
 			drag.items = {}
 			drag.data = {}
 			drag.typ = {}

@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.642'
+local versionNum = '0.71'
 
 function widget:GetInfo()
   return {
@@ -82,7 +82,7 @@ end
 
 local config = {}
 config.path_sound = 'Sounds/Ambient/'
-config.path_read = 'Sounds/Ambient/'
+-- config.path_read = 'Sounds/Ambient/'
 config.path_map = nil
 -- config.mapX
 -- config.mapZ
@@ -317,18 +317,6 @@ options.autoreload = {
 }
 
 
---[[
-settings.interface.dragtime = {
-	name = "Seconds until drag starts",
-	type = 'number',
-	value = 0.5,
-	min = 0.1,
-	max = 2,
-	step = 1,
-	path = "Ambient Sound Editor",
-}--]]
-
-
 settings.display = {true, 5, 1, 1, 1, 0.25, 0.55, 2.5}
 settings.interface = {150, 0.15, 0.3}
 
@@ -392,15 +380,15 @@ function AddItemToEmitter(e, iname) -- <string, string> !!!
 	if sounditems.templates[iname] then
 		item = sounditems.templates[iname]
 		name = "$"..e.."$ "..iname
-		template = iname
-	end
-	if sounditems.instances[iname] then -- this needs testing
+		template = iname	
+	elseif sounditems.instances[iname] then -- this needs testing
 		assert(not item, "identical item names in templates/instance tables")
 		item = sounditems.instances[iname]
-		local _, endprefix = string.find(iname, "[%$].*[%$%s]")
-		Echo(endprefix)
+		local _, endprefix = string.find(iname, "[%$].*[%$%s]")		
 		name = "$"..e.."$ "..iname:sub(endprefix + 1) -- remove old emitter tag
 		template = item.template
+	else
+		return false
 	end
 
 	while (sounditems.instances[name]) do name = name.."_" end -- add any number of _ at the end for duplicates
@@ -417,9 +405,6 @@ function AddItemToEmitter(e, iname) -- <string, string> !!!
 	es[#es].startTimer = newItem.delay
 	es[#es].endTimer = 0
 	es[#es].isPlaying = false
-
-	-- newItem.maxdist = newItem.maxdist < 100000 and newItem.maxdist or 100000 -- this is bad, should not have to set it here
-	-- newItem.emitter = e -- needed?
 
 	needReload = true
 	controls.emitterslist[e].label:UpdateTooltip()
