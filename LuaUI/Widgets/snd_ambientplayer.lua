@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.71'
+local versionNum = '0.72'
 
 function widget:GetInfo()
   return {
@@ -47,7 +47,9 @@ local PATH_CONFIG = 'Configs/'
 local PATH_WIDGET = 'Widgets/'
 local PATH_UTIL = 'Utilities/'
 local PATH_MODULE = 'Modules/'
+local PATH_SOUND = 'Sounds/Ambient/'
 
+local FILE_PLAYER = 'snd_ambientplayer.lua'
 local FILE_MODULE_IO = 'snd_ambientplayer_io.lua'
 local FILE_MODULE_GUI = 'snd_ambientplayer_gui.lua'
 local FILE_MODULE_DRAW = 'snd_ambientplayer_draw.lua'
@@ -74,6 +76,9 @@ local spEcho = Spring.Echo
 -- should start dumping if it gets too long
 -- also might want to do boolean->string here as it gets too annoying
 function Echo(s, keepline)
+	if type(s) == 'boolean' then
+		s = s and 'true' or 'false'
+	end
 	spEcho('<ape>: '..s)
 	_log = _log..(keepline and '' or '\n')..s
 	if controls and controls.log then controls.log:SetText(_log) end
@@ -194,7 +199,7 @@ options = {}
 -- MODULES
 -------------------------------------------------------------------------------------------------------------------------
 
-settings = {paths = {}, browser = {}, display = {}, interface = {}}
+settings = {paths = {}, browser = {}, display = {}, interface = {}, maps = {}}
 
 local common = {pairs = pairs, ipairs = ipairs, type = type, string = string, tostring = tostring, tonumber = tonumber,
 	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, rawget = rawget, assert = assert,
@@ -205,11 +210,12 @@ local common = {pairs = pairs, ipairs = ipairs, type = type, string = string, to
 -- SetupGUI() builds controls so we can't import keys yet
 Echo ("Loading modules...")
 
-local i_o = {PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME,
-				TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME, LOG_FILENAME = LOG_FILENAME,
-					MAPCONFIG_FILENAME = MAPCONFIG_FILENAME, EMITTERS_FILENAME = EMITTERS_FILENAME,
-						SOUNDS_ITEMS_DEF_FILENAME = SOUNDS_ITEMS_DEF_FILENAME,
-							SOUNDS_INSTANCES_DEF_FILENAME = SOUNDS_INSTANCES_DEF_FILENAME}
+local i_o = {PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, PATH_SOUND = PATH_SOUND, PATH_WIDGET = PATH_WIDGET,
+				PATH_MODULE = PATH_MODULE, PATH_UTIL = PATH_UTIL, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME,
+					TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME, LOG_FILENAME = LOG_FILENAME,
+						MAPCONFIG_FILENAME = MAPCONFIG_FILENAME, EMITTERS_FILENAME = EMITTERS_FILENAME,
+							SOUNDS_ITEMS_DEF_FILENAME = SOUNDS_ITEMS_DEF_FILENAME,
+								SOUNDS_INSTANCES_DEF_FILENAME = SOUNDS_INSTANCES_DEF_FILENAME}
 for k, v in pairs(common) do i_o[k] = v end
 
 do
@@ -345,15 +351,11 @@ local function DoPlay(trk, vol, ename)
 		Echo("item "..tostring(trk).." not found!")
 		return false
 	else
-		--local tr = item
-		-- if (tracklist.tracks[tr].generated) then	tr = tracklist.tracks[tr].file	end	 -- is this used?
 		if (PlaySound(trk, vol, e.pos.x, e.pos.y, e.pos.z)) then
 			if (options.verbose.value) then
 				Echo("playing "..trk.." at volume: "..string.format("%.2f", vol))
 				if (e.pos.x) then Echo("at Position: "..e.pos.x..", "..e.pos.y..", "..e.pos.z) end -- should format this looks bad with decimals
 			end
-			--Echo(type(e.sounds))
-			--Echo (e.sounds[item].endTimer)
 			if e.sounds[trk] then
 				e.sounds[trk].endTimer = item.length_real
 				e.sounds[trk].isPlaying = true
@@ -361,8 +363,6 @@ local function DoPlay(trk, vol, ename)
 					EmitterInspectionWindow.instances[ename].layout.list[trk].activeIcon:Refresh()
 				end	
 			end
-			--Echo("length: "..sounditems.instances[item].length)
-
 			return true
 		end
 		Echo("playback of "..tr.." failed, not an audio file?")
@@ -439,38 +439,16 @@ local function RemoveItemFromList(item)
 end
 
 
-function SpawnEmitter(name, x, z, y)-- yoffset)
-	--local p
-	--if not MouseOnGUI() then _, p = Spring.TraceScreenRay(mx,mz,true)
-	--else return end
-	if (emitters[name]) then Echo("an emitter with that name already exists") return false end
-
-	--yoffset = yoffset or 0
-	--p[2] = p[2] + yoffset
-	name = name or math.floor(x)..", "..math.floor(z)..", "..math.floor(y)
-
-	-- __newindex should build our tables
-	emitters[name] = {}
-	--emitters[name].gl = {delta = math.random(60), u = math.random(60), v = math.random(60)}
-	emitters[name].pos = {x = math.floor(x), y = math.floor(y), z = math.floor(z)}
-
-	--emitters[name].light = MapLight(eLightTable)
+function SpawnEmitter(name, x, z, y)
+	if (emitters[name]) then 
+		Echo("an emitter with that name already exists") 
+		return false 
+	end
+	name = name or math.floor(x)..", "..math.floor(z)..", "..math.floor(y)	
+	emitters[name] = {}	-- sound and gl subtables are being generated here by __newindex
+	emitters[name].pos = {x = math.floor(x), y = math.floor(y), z = math.floor(z)}	
 end
 
-
-
--------------------------------------------------------------------------------------------------------------------------
--------------------------------------------------------------------------------------------------------------------------
--- INPUT LISTENERS AND AUXILIARY
--------------------------------------------------------------------------------------------------------------------------
-
-
-
--- fuck you you-know-who
-local function MouseOnGUI()
-	--local mz_inv = math.abs(screen0.height - mz)
-	return IsMouseMinimap(mx or 0, mz or 0) or MouseOver(mx, mz_inv)--screen0.hoveredControl --or screen0.focusedControl
-end
 
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
@@ -636,6 +614,7 @@ function widget:Initialize()
 	gui.SetupGUI()
 	Echo("done", true)
 
+	-
 	for k, v in pairs(gui) do
 		--widget[k] = widget[k] or v
 		if not widget[k] then
@@ -657,6 +636,16 @@ function widget:Initialize()
 			Echo("added key '"..k.."' to globals")
 		end
 	end
+	
+	local mapname = Game.mapName
+	if settings.maps[mapname] then
+		config.path_map = settings.maps[mapname]
+	else
+		Echo("No working directory has been set up for this map.")
+	end
+	
+	
+	
 
 	-- put this stuff into io
 
@@ -742,8 +731,15 @@ function widget:Initialize()
 		Echo("searching spring folder...")
 		if VFS.FileExists('infolog.txt', VFSMODE) then
 			config.path_spring = i_o.GetSpringDir()
-		end
+		end		
 	end
+	if config.path_spring then
+		Echo(gui.colors.green_1:Code().."Your Spring directory is: "..config.path_spring)
+	else
+		Echo(gui.colors.orange_06:Code().."Could not find Spring directoy.")
+	end
+	Echo(gui.colors.green_1:Code().."APE requires write access to the directory Spring is installed on your machine.")
+	Echo('For this, Spring needs to be run with the --write-dir "yourfolder" command line argument.'..gui.colors.yellow_09:Code())
 
 
 	--logfile = io.open(config.path_map..PATH_LUA..PATH_CONFIG..LOG_FILENAME, 'w')
@@ -757,16 +753,30 @@ function widget:Initialize()
 	inited=true --?
 	Echo("Updating GUI...")
 	UpdateGUI()
-	Echo("Init done!")
-
-
+	Echo("Init done!")	
+	
+	config.path_map = "maps/newmap2.sdd"
+	if #VFS.DirList(config.path_map, VFSMODE) == 0 and #VFS.SubDirs(config.path_map) == 0 then -- and if in editor mode
+		Echo(gui.colors.orange_06:Code().."*A working directoy for this map could not be found.*"..gui.colors.green_1:Code())
+		Echo("APE saves all data for a particular map in the uncompressed folder maps/<mapname>.sdd,")
+		Echo("if such a folder exists. otherwise, you can set the folder manually or APE can create")
+		Echo('one for you, if you would like. You will find either option the editor\' settings menu.'..gui.colors.yellow_09:Code())		
+		Spring.CreateDir(config.path_map)
+		--Spring.CreateDir(config.path_map.."/sounds")
+		Spring.CreateDir(config.path_map.."/sounds/ambient")
+		Spring.CreateDir(config.path_map.."/luaui")
+		Spring.CreateDir(config.path_map.."/luaui/widgets")
+		Spring.CreateDir(config.path_map.."/luaui/modules")
+		Spring.CreateDir(config.path_map.."/configs")
+	elseif not VFS.FileExists(config.path_map..PATH_LUA..PATH_CONFIG..MAPCONFIG_FILENAME) then
+		Echo("map config not found")
+		-- first run		
+	end	
 end
 
 
 function widget:GameStart()
-	gameStarted = true
-	-- if at this point a directory for the map doesnt exist, i could make one
-	Echo ("The map directory is assumed to be "..config.path_map.."\nif that is not correct, please type /ap.def map maps/<your map folder>/")
+	gameStarted = true	
 end
 
 function widget:Shutdown()
@@ -780,501 +790,15 @@ end
 -------------------------------------------------------------------------------------------------------------------------
 -- CONSOLE
 -------------------------------------------------------------------------------------------------------------------------
-
-local words = {
-		["utl"] = 	{
-						get = function () return PATH_UTIL end,
-						set = function (s) PATH_UTIL = s return true end,
-					},
-		["wdg"] = 	{
-						get = function () return PATH_WIDGET end,
-						set = function (s) PATH_WIDGET = s return true end,
-					},
-		["cfg"] =	{
-						get = function () return PATH_CONFIG end,
-						set = function (s) PATH_CONFIG = s return true end,
-					},
-		["snd"] =	{
-						get = function () return config.path_sound end,
-						set = function (s) config.path_sound = s return true end,
-					},
-		["ui"] =	{
-						get = function () return PATH_LUA end,
-						set = function (s) PATH_LUA = s return true end,
-					},
-		["map"] =	{
-						get = function () return config.path_map end,
-						set = function (s) config.path_map = s return true end,
-					},
-		["rd"] =	{
-						get = function () return config.path_read end,
-						set = function (s) config.path_read = s return true end,
-					},
-		}
-
-
-words.get = function(wrd)
-	local word = wrd:sub(2) -- cut off the $
-	if (word == "") then return wrd end
-	if (words[word]) then
-		if (words[word].get) then return words[word].get()
-		else return words[word]
-		end
-	else
-		return wrd
-	end
-end
-
-
-words.set = function(word, s)
-	if (word == "") then return false end
-	if (words[word]) then
-		if (words[word].set) then return words[word].set(s)
-		else words[word]=s return true
-		end
-	else
-		words[word] = s
-		return true
-	end
-end
-
-
-local function ParseInput(s)
-	local i = 1
-	local args = {}
-
-	s = string.gsub (s, "(%$%w+)", words.get) -- words encapsulated in other words will not get resolved
-
-	repeat
-		local sq, eq = string.find (s, "[%{].-[%}]")  --supercede other brackets & quotes
-		if not  (sq or eq) then
-		sq, eq = string.find (s, "[%(%[].-[%)%]]")	--supercedes quote block
-		end
-		if not (sq or eq) then
-			sq, eq = string.find (s, "[\"\'].-[\"\']")	-- is a block :)
-		end
-		if (sq or eq) then --<< never happens
-			if (sq and eq) then
-				--while (s:sub(sq,sq) == " ") do sq = sq + 1 end
-				local ss = s:sub(1, sq - 1)	-- get all arguments before the block
-				for a in string.gmatch(ss, "%s+(%S+)") do
-					args[i] = a
-					i = i + 1
-				end
-				args[i] = s:sub(sq + 1 , eq -1) -- get the argument in the block
-				i = i + 1
-				s = s:sub(eq + 1)
-				--sq = string.find (s, "[\'\"%(%[]")
-			else
-				Echo("illegal argument(s) - lone bracket")
-				return {}
-			end
-		else break end
-	until (false)
-
-	for a in string.gmatch(s, "%s+(%S+)") do
-		Echo(a)
-		args[i] = a
-		i = i +1
-	end
-	return args
-end
-
-
-local function Invoke(args)
-
-	-- needs adaption to emitters etc
-	if (args[1] == "set") then
-
-		if (args[2]) then
-		-- disallow editing non-existant items, to avoid creating bogus items
-
-			if not (SOUNDITEM_TEMPLATE[args[2]]) then
-				Echo("unrecognized property")
-				return false
-			else
-
-				if (args[3]) then
-
-					if not (tracklist.tracks[args[3]]) then
-						Echo("cannot find target!")
-						return false
-					end
-
-					if (args[4]) then
-
-						--local tipe = type(tracks[args[3]][args[2]])
-						local tipe = type(SOUNDITEM_TEMPLATE[args[2]]) --read from the template instead
-						--Echo("parameter of type: "..tipe)
-						if (tipe == "string") then
-							tracklist.tracks[args[3]][args[2]]=tostring(args[4])
-
-						elseif (tipe == "boolean") then
-							if (args[4] == "true") then
-								tracklist.tracks[args[3]][args[2]]=true
-							elseif (args[4] == "false") then
-								tracklist.tracks[args[3]][args[2]]=false
-							else
-								Echo("only true/false allowed for this value")
-								return false
-							end
-
-						elseif (tipe == "number") then
-							local number = tonumber(args[4])
-							if (number) then
-								tracklist.tracks[args[3]][args[2]]=number
-							else
-								Echo("not a number")
-								return false
-							end
-						end
-						Echo("param: "..args[2].." target: "..args[3].." set to: "..tostring(tracklist.tracks[args[3]][args[2]]))
-						return true
-
-					else
-						Echo("no value specified")
-						Echo("param: "..args[2].." target: "..args[3].." is: "..tostring(tracklist.tracks[args[3]][args[2]]))
-						return false
-					end
-
-				else
-					Echo("no target specified")
-					return false
-				end
-
-			end
-
-		else
-			Echo("no arguments specified")
-			return false
-		end
-		return false
-	end
-
-	-- play a sounditem, by name
-	if (args[1] == "play") then
-		if (args[2]) then
-			local vol
-			if (args[3]) then vol = tonumber(args[3])	end
-				vol=vol or options.volume.value
-				local p = {x,y,z}
-				if (tracklist.tracks[args[2]]) then
-					if (tracklist.tracks[args[2]].emitter) then
-						p = emitters[tracklist.tracks[args[2]].emitter].pos
-					end
-				end
-				return DoPlay(args[2], vol, p.x, p.y, p.z)
-		else
-			Echo("specify a track")
-			return false
-		end
-	end
-
-	-- load a single sound file from the read folder and generate a table entry for it
-	-- if no name for the entry was specified, it will use that files name after a '$'
-	-- file can then by accessed by that name, and that name only
-	-- arguments:
-	-- file/*: mandatory
-	-- name to use in the playlist: optional, defaults to filename
-	if (args[1] == "load") then
-		if (args[2]) then
-			if (args[2] == "*") then
-				local files = VFS.DirList(config.path_read)
-				local f
-				local l = config.path_read:len()
-				for file, text in pairs(files) do
-					f = text:sub(l+1)
-					LoadFromFile(config.path_read, f, nil, args[3])
-				end
-				return
-			end
-			if (args[3]) then return LoadFromFile(config.path_read, args[2], args[3])
-			end
-		else
-			Echo("specify a file in "..config.path_read)
-			return false
-		end
-	end
-
-	-- echo whole playlist or display single item properities
-	if (args[1] == "list") then
-		i = 2
-		while (args[i]) do
-			local n = tonumber(args[i]) or args[i] --Echo(type(n))
-			if (tracklist.tracks[n]) then
-				Echo("---"..args[i].."---")
-				for param, value in pairs(tracklist.tracks[n]) do
-					Echo(tostring(param).." : "..tostring(value))
-				end
-			elseif (emitters[n]) then
-				if not (args[i] == index) then
-					--local n = tonumber(args[i]) or args[i] Echo(type(n))
-					local e = emitters[n]
-					Echo(tostring(e)..": "..(e.pos.x or "none")..", "..(e.pos.y or "none")..", "..(e.pos.z or "none"))
-					for track, param in pairs(e.playlist) do
-						Echo("- "..track.." length: "..tracklist.tracks[track].length_real)
-					end
-				else
-					Echo("Index: ".. emitters.index)
-				end
-			else
-				Echo("no such item or emitter: "..args[i])
-			end
-			i = i + 1
-		end	if (i>2) then return true end
-
-		Echo("-----sounditems-----")
-		for track, params in pairs (tracklist.tracks) do
-			if not (params.emitter)	then Echo(track.." - "..(params.length_real).."s") end
-		end
-		Echo("-----emitters-----")
-		for e, tab in pairs (emitters) do
-			if not (e == "index") then
-				Echo(tostring(e)..": "..(tab.pos.x or "none")..", "..(tab.pos.y or "none")..", "..(tab.pos.z or "none"))
-				for track, param in pairs(tab.playlist) do
-						Echo("- "..track.." length: "..tracklist.tracks[track].length_real)
-				end
-			end
-		end
-		return true
-	end
-
-	if (args[1] == "dir") then
-		if not (args[2]) then
-			Echo("you must specify a path")
-			return false
-		end
-
-		local pattern = "."
-		if (args[3]) then
-				pattern = string.gsub (args[3], "[%.%*]", {["."] = "%.", ["*"] = ".+" })
-				--if (pattern == "%." or pattern == ".+%.") then pattern = "[^%.]" end
-		end
-
-		local path=args[2]
-		if not (path:sub(-1) == ('/' or '\\')) then	path=path..'/'	end
-
-		local files = VFS.DirList(path)
-		local subdirs = VFS.SubDirs(path)
-
-		Echo ("----- "..path.." -----")
-		for dir, text in pairs(subdirs) do
-			Echo("*dir*")
-			if (pattern == "%." or pattern == ".+%.") then
-				if (string.match(text, "[%.]")) then Echo(dir.." - "..text) end
-			else
-				if (string.match(text, pattern)) then Echo(dir.." - "..text) end
-			end
-		end
-		for file, text in pairs(files) do
-			Echo("*file*")
-			if (pattern == "%." or pattern == ".+%.") then
-				if not (string.match(text, "[%.]")) then Echo(file.." - "..text) end
-			else
-				if (string.match(text, pattern)) then Echo(file.." - "..text) end
-			end
-		end
-		return true
-	end
-
-
-	if (args[1] == "save") then
-		if (args[2]) then --type
-			if (string.match (args[2], "^[e]")) then
-				Save(3)
-			elseif (string.match (args[2], "^[o]")) then
-				Save(1)
-			elseif (string.match (args[2], "^[p]")) then
-				Save(2)
-			else
-				Echo("type must be: e..., p..., o...")
-				Echo("(emitters, playlist, options)")
-				return false
-			end
-			return true
-		else
-			Echo("saving all to write dir...")
-			Save(0)
-		end
-		return false
-	end
-
-	--defunct
-	if (args[1] == "map") then
-		if (args[2]) then
-			if VFS.MapArchive(args[2]) then
-				Echo("success")
-				return true
-			end
-		end
-		Echo("failure")
-		return false
-	end
-
-	if (args[1] == "env") then
-
-
-		if (args[2]) then
-			Echo("\n-------"..args[2].."--------")
-			--local file = io.open("G.txt", "w")
-			---[[
-			local G = getfenv()
-			local i = 0
-			if not (G[args[2]]) then return end
-			for k, v in pairs(G[args[2]]) do
-				--file:write("key: "..k.." str:"..tostring(k).." val"..tostring(v).."\n")
-				--if not (type(k) == 'table') then
-				Echo (tostring(k))
-				--end
-				i=i +1
-				if (i==10000) then break end
-			end
-			--]]
-			--Echo(words.get("$read"))
-			--file:close()
-		else
-			for k, v in pairs(getfenv()) do
-			Spring.Echo(tostring(k))
-		end
-		end
-	end
-
-	if (args[1] == "do") then
-		if (args[2]) then
-			loadstring(args[2])()
-		end
-		return
-	end
-
-	if (args[1] == "def") then
-		if (args[2]) then
-			if (args[3]) then
-				return words.set(args[2], args[3])
-			end
-		else
-			Echo ("----- ".."defines".." -----")
-			for k,v in pairs(words) do
-				if (type(v) == 'table') then
-					Echo('$'..k.." -> "..v.get())
-				elseif (type(v) ~= 'function') then
-					Echo('$'..k.." -> "..v)
-				end
-
-			end
-		end
-		return
-	end
-
-	if (args[1] == 'spawn') then
-		SpawnEmitter(args[2], tonumber(args[3]))
-		return
-	end
-
-	if (args[1] == 'add') then
-		if (args[2]) then
-		local n = tonumber(args[2]) or args[2] --Echo(type(n))
-			if (emitters[n]) then
-				local i = 3
-				if (args[3] == '*') then
-					for track,params in pairs(tracklist.tracks) do
-						--AddItemToEmitter(args[2], track) --this sucks, use generated tag to avoid duplicates?
-						args[i] = track
-						i = i +1
-					end
-					i = 3
-				end
-
-				while (args[i]) do
-					if (tracklist.tracks[args[i]]) then
-						if not (emitters[n].playlist[args[i]]) then
-							AddItemToEmitter(n, args[i])
-						else
-							Echo ("track "..args[i].." already present in "..args[2])
-						end
-					else
-						Echo ("no such track: "..args[i])
-					end
-				i = i + 1
-				end
-			else
-				Echo ("no such emitter")
-			end
-		end
-		return
-	end
-
-	if (args[1] == "reload") then
-		ReloadSoundDefs()
-		return
-	end
-	Echo("not a valid command")
-
-end
-
+-- defunct
 
 function widget:TextCommand(command)
-	if (command:sub(1,3)== "ap.") then
-		local args = ParseInput(" "..command:sub(4))
-		if (args) then
-			for k, v in pairs(args) do
-				Echo(k.."> "..v)
+	if console then	
+		if (command:sub(1,3)== "ap.") then
+			local args = console.ParseInput(" "..command:sub(4))
+			if (args) then
+				console.Invoke(args)
 			end
-		Invoke(args)
-		end
+		end	
 	end
 end
-
-
-
---function widget:Shutdown()
---	if (config.autosave) then Save() end
---end
-
-
-
-
-
---[[
-	-- if the player will announce titles when playing
-	if (args[1] == "verbose") then
-		config.verbose = not (config.verbose)
-		if (config.verbose) then
-			Echo("verbose on")
-		else
-			Echo("verbose off")
-		end
-		return true
-	end
-
-	-- general volume control
-	if (args[1] == "vol") then
-		local number = tonumber(args[2])
-		if (number) then
-			if (number < 0) then config.ambientVolume = 0
-			elseif (number > 2) then config.ambientVolume = 2
-			else config.ambientVolume=number
-			end
-			Echo("set ambient volume "..string.format("%.2f",config.ambientVolume))
-			return true
-		end
-		Echo("not a number")
-		return false
-	end
-
-	-- pause playlist
-	if (args[1] == "hold") then
-		options.autoplay = not (options.autoplay)
-		if (options.autoplay) then
-			Echo("play")
-		else
-			Echo("hold")
-		end
-		return true
-	end
-
-	if (args[1] == "show") then
-		config.showEmitters = not config.showEmitters
-		return
-	end
-
---]]

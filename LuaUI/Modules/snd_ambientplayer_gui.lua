@@ -60,26 +60,28 @@ local ImageArray
 
 local icons = {}
 
+local PATH_ICONS = "Images/AmbientSoundEditor/"
+
 -- these dont really have to be locals? as images are just loaded once
-icons.SETTINGS_ICON = PATH_LUA..'Images/Epicmenu/settings.png'
-icons.HELP_ICON = PATH_LUA..'Images/Epicmenu/questionmark.png'
-icons.CONSOLE_ICON = PATH_LUA..'Images/speechbubble_icon.png'
-icons.PLAYSOUND_ICON = PATH_LUA..'Images/Epicmenu/vol.png'
-icons.PROPERTIES_ICON = PATH_LUA..'Images/properties_button.png'
+icons.SETTINGS_ICON = PATH_LUA..PATH_ICONS..'settings.png'
+icons.HELP_ICON = PATH_LUA..PATH_ICONS..'questionmark.png'
+icons.CONSOLE_ICON = PATH_LUA..PATH_ICONS..'speechbubble_icon.png'
+icons.PLAYSOUND_ICON = PATH_LUA..PATH_ICONS..'vol.png'
+icons.PROPERTIES_ICON = PATH_LUA..PATH_ICONS..'properties_button.png'
 --icons.PLAYER_CONTROLS_ICON = PATH_LUA..'Images/Commands/Bold/'..'drop_beacon.png'
-icons.CLOSE_ICON = PATH_LUA..'Images/close.png'
-icons.CLOSEALL_ICON = PATH_LUA..'Images/closeall.png'
-icons.CONFIRM_ICON = PATH_LUA..'Images/arrow_green.png'
-icons.UNDO_ICON = PATH_LUA..'Images/undo.png'
-icons.COGWHEEL_ICON = PATH_LUA..'Images/cogwheel.png'
-icons.SAVE_ICON = PATH_LUA..'Images/disc_save_2.png'
-icons.LOAD_ICON = PATH_LUA..'Images/disc_load_2.png'
-icons.MUSIC_ICON = PATH_LUA..'Images/music.png'
-icons.SPRING_ICON = PATH_LUA..'Images/spring_logo.png'
-icons.FILE_ICON = PATH_LUA..'Images/file.png'
-icons.FOLDER_ICON = PATH_LUA..'Images/folder.png'
-icons.NEWFOLDER_ICON = PATH_LUA..'Images/folder_add.png'
-icons.MUSICFOLDER_ICON = PATH_LUA..'Images/folder_music.png'
+icons.CLOSE_ICON = PATH_LUA..PATH_ICONS..'close.png'
+icons.CLOSEALL_ICON = PATH_LUA..PATH_ICONS..'closeall.png'
+icons.CONFIRM_ICON = PATH_LUA..PATH_ICONS..'arrow_green.png'
+icons.UNDO_ICON = PATH_LUA..PATH_ICONS..'undo.png'
+icons.COGWHEEL_ICON = PATH_LUA..PATH_ICONS..'cogwheel.png'
+icons.SAVE_ICON = PATH_LUA..PATH_ICONS..'disc_save_2.png'
+icons.LOAD_ICON = PATH_LUA..PATH_ICONS..'disc_load_2.png'
+icons.MUSIC_ICON = PATH_LUA..PATH_ICONS..'music.png'
+icons.SPRING_ICON = PATH_LUA..PATH_ICONS..'spring_logo.png'
+icons.FILE_ICON = PATH_LUA..PATH_ICONS..'file.png'
+icons.FOLDER_ICON = PATH_LUA..PATH_ICONS..'folder.png'
+icons.NEWFOLDER_ICON = PATH_LUA..PATH_ICONS..'folder_add.png'
+icons.MUSICFOLDER_ICON = PATH_LUA..PATH_ICONS..'folder_music.png'
 
 local colors = {
 	Code = function(c, r, g, b)
@@ -481,7 +483,8 @@ local function DeclareClasses()
 			self:Invalidate()
 		end,
 	}
-
+	
+	
 	------------------------------------------- Edit Box with optional Input Filter ----------------------------------
 	-- also knows a few tricks:
 	-- calls self:OnTab(), self:Discard(), self:Confirm() on tab, escape, enter 
@@ -600,6 +603,7 @@ local function DeclareClasses()
 			return self
 		end,
 	}
+	
 	
 	
 	------------------------------------------- Text Box with Button Functionality ---------------------------------
@@ -1000,7 +1004,9 @@ local function DeclareClasses()
 			obj:Hide()
 			return obj
 		end,
-	}		
+	}
+	
+	
 end
 
 	
@@ -2379,11 +2385,11 @@ defaults to 0]],
 		clientHeight = 20,		
 		--textColor = {0.7,0.7,0.7,1},
 		tabs = {
-			[1] = 'Player',
-			[2] = 'Files',
-			[3] = 'Display',
-			[4] = 'Interface',
-			[5] = 'Misc',
+			[1] = 'Player',			
+			[2] = 'Display',
+			[3] = 'Interface',
+			[4] = 'Setup',
+			--[5] = 'Misc',
 		},
 		panels = {},
 		OnChange = { -- this gets called once on setup, automatically, same for all controls down the line
@@ -2393,7 +2399,8 @@ defaults to 0]],
 					local hidden = params.hidden -- fuck you, chili
 					if not hidden then self.panels[k]:SetVisibility(false) end
 				end
-				self.panels[tab]:SetVisibility(true)				
+				self.panels[tab]:SetVisibility(true)
+				self.panels[tab].layout:Refresh()
 				for i = 1, #self.children do
 					local c = self.children[i]
 					if c.caption == tab then
@@ -2447,7 +2454,14 @@ defaults to 0]],
 			orientation = 'vertical',
 			centerItems = false,
 			columns = 1,	
-			align = 'left',			
+			align = 'left',
+			Refresh = function(self)
+				for _, c in ipairs(self.children) do
+					if c.Refresh then 
+						c:Refresh()
+					end
+				end
+			end,
 		}
 		--Echo (panels[c].name)
 	end						
@@ -2543,6 +2557,61 @@ defaults to 0]],
 			},
 		}
 	end
+	
+	MouseOverTextBox:New {
+		parent = panels['Setup'].layout,
+		text = 'Working Directory:',
+		fontsize = 11,
+		textColor = colors.yellow_09,
+		width = 100,
+		tooltip	= 'the working directory for this particular map. by default, APE sets this to maps/<mapname>.sdd, but you can chose any name you want.\n\nnote that this folder must be inside your springs write-directory and should be specified as a relative path.',
+	}
+	local box_workingDir = FilterEditBox:New {
+		parent = panels['Setup'].layout,
+		text = '',
+		fontsize = 11,
+		width = 400,
+		textColor = colors.green_1,
+		--backgroundColor = colors.grey_02,
+		borderColor = colors.grey_05,
+		borderColor2 = colors.grey_035,
+		legit = true,
+		Refresh = function(self)
+			self.legit = i_o.TestWorkingDir(self.text) or i_o.TestWorkingDir(self.text..'/')
+			self.font:SetColor(self.legit and colors.green_1 or colors.red_1)			
+		end,
+		Confirm = function(self)			
+			if string.sub(self.text, -1) ~= '\\' and string.sub(self.text, -1) ~= '\/' then
+				self.text = self.text..'/'
+			end
+			self:Refresh()
+			if not self.legit then
+				ConfirmDialog("setup working directory in this folder:\n"..self.text,
+					function(path) config.path_map = path; i_o.SetupWorkingDir(); self:Refresh() end, {self.text}, 
+						self.Discard, {self})
+			end
+		end,
+		Discard = function(self)
+			self.text = config.path_map
+			self:Refresh()
+		end,
+		KeyPress = function(self, ...)
+			FilterEditBox.KeyPress(self, ...)
+			self:Refresh()
+		end,
+		TextInput = function(self, ...)
+			FilterEditBox.TextInput(self, ...)
+			self:Refresh()
+		end,
+		OnFocusUpdate = {function(self)			
+			if self.state.focused then
+				self:Refresh()
+			else
+				self:Confirm()
+			end			
+		end,},
+		
+	}
 	
 	-- autogenerate map folder / map subfolders?
 	-- autolocalize files that are witihin the vfs?
@@ -3046,7 +3115,13 @@ local function Distance(sx, sz, tx, tz)
 	return math.sqrt(dx*dx + dz*dz)
 end
 
-
+local function unpk(args, i)		
+	if args and args[i] then
+		return args[i], unpk(args, i + 1)
+	else
+		return nil
+	end		
+end
 
 
 function SetupGUI()		
@@ -3086,7 +3161,7 @@ function SetupGUI()
 	dragDropDeamon = GetDeamon()
 	dragDropDeamon:Show()
 	--Echo(dragDropDeamon.name)
-	tabbar_settings:Select('Player')
+	tabbar_settings:Select('Setup')
 	---window_chili:Show()
 	
 	local mwWindow = Window:New{
@@ -3118,15 +3193,6 @@ end
 
 
 function UpdateGUI(dt)
-	
-	local function unpk(args, i)		
-		if args[i] then
-			return args[i], unpk(args, i + 1)
-		else
-			return nil
-		end
-		--return args[i] and (args[i], unpk(args, i + 1)) or nil
-	end
 	
 	mx, mz = GetMouse()
 	mz_inv = math.abs(screen0.height - mz)
@@ -3376,8 +3442,82 @@ local function MouseOnGUI()
 end--]]
 
 
-
-
+function ConfirmDialog(querystring, callback_confirm, args_confirm, callback_discard, args_discard)
+	local window_query = Window:New {
+		parent = screen0,
+		x = "50%",
+		y = "40%",
+		--clientWidth = 160,
+		clientHeight = 60,
+		caption = "Are you sure?",
+		resizable = false,
+		autosize = true,
+		KeyPress = function(self, key, ...)
+			if key == KEYSYMS.RETURN then
+				self:Confirm()
+			elseif key == KEYSYMS.ESCAPE then
+				self:Discard()
+			end
+			return true
+		end,
+		Confirm = function(self)
+			if callback_confirm then					
+				callback_confirm(unpk(args_confirm, 1))
+			end	
+			self:Dispose()		
+		end,
+		Discard = function(self)
+			if callback_discard then
+				callback_discard(unpk(args_discard, 1))
+			end	
+			self:Dispose()
+		end,
+	}--window_query.width = window_query.font:GetTextWidth(querystring) + 20
+	local label = Label:New {
+		parent = window_query,
+		y = 8,
+		caption = querystring,
+		align = 'center',
+		fontsize = 11,
+		textColor = colors.yellow_09,
+	}label.width = label.font:GetTextWidth(querystring)	
+	Image:New {
+		parent = window_query,
+		file = icons.CLOSE_ICON,
+		x = (window_query.width / 2) - 30,
+		y = 40,
+		width = 20,
+		height = 20,
+		tooltip = 'cancel',
+		color = {0.8,0.3,0.1,0.7},
+		OnClick = {			
+			function(self)
+				window_query:Discard()
+			end,	
+		},
+	}
+	Image:New {
+		parent = window_query,
+		file = icons.CONFIRM_ICON,
+		x = window_query.width / 2 + 10,
+		y = 40,
+		width = 20,
+		height = 20,
+		tooltip = 'accept',				
+		OnClick = {
+			function(self)
+				window_query:Confirm()
+			end,	
+		},					
+	}
+	cbTimer(1, function() -- we need to cheat chili a bit and delay the focus change by 1 millisecond
+		window_query:Invalidate()
+		window_query:Show()
+		window_query.state.focused = true
+		screen0.focusedControl = window_query	
+		end, {}
+	)
+end
 
 
 
@@ -3445,7 +3585,7 @@ function SpawnDialog(px, pz, py)
 			end
 		},					
 	}
-	window_name:Show()
+	window_name:Show()	
 	box.state.focused = true
 	screen0.focusedControl = box
 end
