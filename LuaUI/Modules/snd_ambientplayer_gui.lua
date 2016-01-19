@@ -58,10 +58,8 @@ local ImageArray
 --local color2incolor
 --local incolor2color
 
-local icons = {}
-
 local PATH_ICONS = "Images/AmbientSoundEditor/"
-
+local icons = {}
 -- these dont really have to be locals? as images are just loaded once
 icons.SETTINGS_ICON = PATH_LUA..PATH_ICONS..'settings.png'
 icons.HELP_ICON = PATH_LUA..PATH_ICONS..'questionmark.png'
@@ -481,6 +479,184 @@ local function DeclareClasses()
 			end				
 			
 			self:Invalidate()
+		end,
+	}
+	
+	
+	----------------------------------------a stereotypical file browser ---------------------------------------------
+	-- supports custom path links and file filtering
+	-- kind-of relies on a editbox to insert pathes outside the current root dir 
+	-- (otherwise is restricted to the vfs or any custom link that was added beforehand)
+	
+	--[[
+	{
+		path = <string>,
+		name =  <string>, -- defaults to path
+		tooltip = <string>, -- custom for hardlinks, "right-click to remove" for others
+		icon = <icon>, -- defaults to folder icon
+		isHard = <boolean>, -- wether or not this can be removed by right click on the icon
+		OnClick = <{function,...}> -- defaults to default_folder
+		OnSelect = <function> -- defaults to nil
+		
+	}
+	--]]
+	local default_folder = function(self, ...)
+		local btn = select(3,...)
+		if btn == 1 then
+			local box = self.parent.editbox
+			self.parent.path = self.refer
+			self.parent:Refresh()
+			if box then -- at this point this control doesnt exist anymore
+				box:SetText(self.refer)
+			end			
+		end	
+	end	
+	local default_folder_remove = function(self, ...)
+		local btn = select(3,...)
+		if btn == 1 then
+			local box = self.parent.editbox
+			self.parent.path = self.refer
+			self.parent:Refresh()
+			if box then -- at this point this control doesnt exist anymore
+				box:SetText(self.refer)
+			end			
+		elseif btn == 3 then
+			settings.paths[self.refer] = nil			
+			self.parent:Refresh()
+		end
+	end
+	
+	FileBrowserPanel = DragDropLayoutPanel:Inherit{
+		fileFilter = {}, -- {<string> = <image file> or false}
+		AddFolder = function(self, data, idx)
+			table.insert(self.list, idx or (#self.list + 1), 
+				Image:New{
+					parent = self,
+					file = data.icon or icons.NEWFOLDER_ICON,
+					width = 12, height = 12,
+					tooltip = data.tooltip,
+					refer = data.path,					
+					OnClick = data.OnClick,
+				}
+			)
+			table.insert(self.list, idx and (idx + 1) or (#self.list + 1), 
+				ClickyTextBox:New{
+					parent = self,
+					--autosize = true,
+					clientWidth = self.clientWidth,
+					fontsize = 10,
+					textColor = colors.grey_08,
+					refer = data.path,
+					text = data.name,
+					selectable = data.OnSelect and true,
+					OnSelect = data.OnSelect, -- highlighting of elements should be class feature
+					OnClick = data.OnClick,
+				}
+			)
+		end,
+		AddFile = function(self, data, idx)
+			table.insert(self.list, idx or (#self.list + 1), 
+				Image:New{
+					parent = self,
+					file = data.icon or icons.FILE_ICON,
+					width = 12, height = 12,
+					tooltip = data.tooltip,
+					refer = data.path,
+					OnClick = data.OnClick,
+				}
+			)
+			table.insert(self.list, idx and (idx + 1) or (#self.list + 1), 
+				MouseOverTextBox:New{
+					parent = self,
+					--autosize = true,
+					clientWidth = self.clientWidth,
+					fontsize = 10,
+					textColor = colors.grey_08,
+					refer = data.path,
+					text = data.name,
+					selectable = data.OnSelect and true,
+					OnSelect = data.OnSelect, -- highlighting of elements should be class feature
+					OnClick = data.OnClick,
+				}
+			)
+			
+		end,		
+		AddUserPaths = function(self)
+			for i, v in pairs(settings.paths) do
+				if type(v) == 'string' then
+					self:AddFolder({path = v, name = v, icon = icons.NEWFOLDER_ICON, tooltip = 'right click to remove', 
+						OnClick = {default_folder_remove}})					
+				end
+			end			
+		end,
+		AddHardLinks = function(self)			
+			self:AddFolder({name = 'SPRING', path = settings.general.spring_dir, icon = icons.SPRING_ICON,
+				tooltip = 'the spring home directory.\n\nthis path is the real location of your spring engine and is not to be confused with the vfs root directory.\n\n'
+					..'\255\255\255\0'..(config.path_spring or '')..'\255\255\255\255',	OnClick = {default_folder},
+			})			
+			self:AddFolder({name = '$VFS_ROOT', path = '', icon = icons.SPRING_ICON,
+				tooltip = 'root of the virtual file system. equals ".", "./", "/" and the empty string. \n\nwidgets can only write into the virtual file system, ie. subfolders of the spring directory.\n\nall write paths must be specified relative to the vfs root, not as absolute paths, eg. \n\n \255\255\255\0\'/sounds/ambient/\'\n\n\255\255\255\255instead of\n\n\255\255\255\0\'C:/someplace/.../sounds/ambient/\'\255\255\255\255\n\nnormally, the widget handles this process.\n\n\255\255\150\0if you find that you are unable to save into your working directory with this widget, try running spring with the --write-dir command line parameter pointing to the spring directory\255\255\255\255',
+					OnClick = {default_folder},
+			})
+			self:AddFolder({name = '..', icon = icons.UNDO_ICON, 
+				OnClick = {function(self, ...)
+					local btn = select(3,...)
+					if btn == 1 then
+						local path = self.parent.path
+						if #path > 0 then
+							local lastchar = string.sub(path, -1)
+							if not (lastchar == '\/' or lastchar == '\\') then
+								path = path..'\/'
+							end					
+							local a,b,remain = string.find(path, '[^\/\\]+[\/\\]$') -- "([^\/\\]+)$"							
+							remain = string.sub(path, 1, a - 1)
+							if remain then
+								local box = self.parent.editbox
+								self.parent.path = remain
+								self.parent:Refresh()					
+								if box then
+									box:SetText(remain)
+								end	
+							end	
+						end	
+					end					
+				end,
+				}	
+			})
+		end,
+		AddCurrentDir = function(self)
+			--local filter = '*.wav
+			local dirs, files = VFS.SubDirs(self.path), VFS.DirList(self.path)				
+				
+			for i = 1, #dirs do
+				local _,_,dirname = string.find(dirs[i], "([^\/\\]+)[\/\\]$")
+				self:AddFolder({path = dirs[i], name = dirname, icon = icons.FOLDER_ICON, OnClick = {default_folder}})			
+			end					
+			for i = 1, #files do				
+				local matchesFilter -- this is suboptimal
+				for f, icon in pairs(self.fileFilter) do
+					matchesFilter = matchesFilter or string.find(files[i], f) and icon
+				end				
+				--local ending = string.find(files[i], "ogg$") or string.find(files[i], "wav$")
+				if matchesFilter or not settings.browser.showSoundsOnly then
+					local _,_,filename = string.find(files[i], "([^\/\\]+)$")
+					self:AddFile({path = files[i], name = filename, icon = matchesFilter, --OnClick = {},
+						OnSelect = function(self, idx, select)							
+							if select then 
+								self.legit = matchesFilter
+								self.font:SetColor(matchesFilter and colors.green_1 or colors.red_1)
+							else 
+								self.legit = nil
+								self.font:SetColor(colors.grey_08) 
+							end
+							self:Invalidate()
+						end,
+					})					
+				end			
+			end
+			return #dirs > 0 or #files > 0
+		end,
+		Refresh = function(self)
 		end,
 	}
 	
@@ -1309,7 +1485,7 @@ local function DeclareControls()
 		OnClick = {function() --< it is kinda hidden away here but should do.
 			window_browser:ToggleVisibility()
 			if window_browser.visible then 
-				controls.browser.label_path.text = (config.path_map or '')..config.path_sound
+				controls.browser.layout_files.editbox.text = (config.path_map or '')..config.path_sound
 				controls.browser.layout_files:Refresh() 
 				--controls.browser.layout_files.list.home_img.tooltip = 
 				--	'spring home directory:\n\n\255\255\255\0'..(config.path_spring or '')..'\255\255\255\255'
@@ -1878,15 +2054,16 @@ defaults to 0]],
 			function(self, ...)
 				local btn = select(3,...)
 				if btn == 1 then
-					local legit = #VFS.SubDirs(controls.browser.label_path.text) > 0 
-						or #VFS.DirList(controls.browser.label_path.text) > 0		
-					controls.browser.label_path.legit = legit
-					controls.browser.label_path.font:SetColor(legit and colors.green_1 or colors.red_1)	
-					if legit and not settings.paths[controls.browser.label_path.text] then
+					local pathbox = controls.browser.layout_files.editbox
+					local legit = #VFS.SubDirs(pathbox.text) > 0 
+						or #VFS.DirList(pathbox.text) > 0		
+					pathbox.legit = legit
+					pathbox.font:SetColor(legit and colors.green_1 or colors.red_1)	
+					if legit and not settings.paths[pathbox.text] then
 						-- we storing a double reference for this, so we can both use indizes and lookup by name
 						-- we cant just use pairs later because an options table contains all kinds of crap
-						settings.paths[controls.browser.label_path.text] = true
-						settings.paths[#settings.paths + 1] = controls.browser.label_path.text
+						settings.paths[pathbox.text] = true
+						--settings.paths[#settings.paths + 1] = pathbox.text
 						controls.browser.layout_files:Refresh()
 					end
 				end
@@ -1894,7 +2071,7 @@ defaults to 0]],
 		},		
 	}
 	
-	controls.browser.label_path = FilterEditBox:New {
+	local label_path = FilterEditBox:New {
 		parent = window_browser,
 		x = 47,
 		y = 16,
@@ -1932,9 +2109,10 @@ defaults to 0]],
 		verticalSmartScroll = true,	
 		scrollbarSize = 6,		
 	}	
-	controls.browser.layout_files = DragDropLayoutPanel:New {
+	controls.browser.layout_files = FileBrowserPanel:New {
 		name = 'browser_layout_files',
 		parent = controls.browser.scroll_files,
+		editbox = label_path,
 		allowDragItems = 'files',
 		minWidth = 230,
 		--maxWidth = 230,
@@ -1951,6 +2129,10 @@ defaults to 0]],
 		itemPadding = {3,2,3,2},
 		itemMargin = {0,0,0,0},
 		list = {},		
+		fileFilter = {
+			["wav$"] = icons.MUSIC_ICON,
+			["ogg$"] = icons.MUSIC_ICON,
+		},
 		Refresh = function(self)
 			self.path = self.path or config.path_map..config.path_sound			
 			--Echo("path is: "..self.path)
@@ -1962,259 +2144,12 @@ defaults to 0]],
 				list[i]:Invalidate()
 				list[i] = nil
 			end	
+			self:AddUserPaths()
+			self:AddHardLinks()
+			local legit = self:AddCurrentDir()
 			
-			for i, v in ipairs(settings.paths) do
-				if type(v) == 'string' then
-					Echo("adding link: "..i.." : "..v)
-					local label
-					list[#list + 1] = Image:New {
-						parent = controls.browser.layout_files,
-						file = icons.NEWFOLDER_ICON,
-						width = 12,
-						height = 12,					
-						tooltip = 'right click to remove',
-						refer = v,
-						OnClick = {
-							function(self, ...)
-								local btn = select(3,...)
-								if btn == 1 then
-									self.parent.path = self.refer
-									self.parent:Refresh()					
-									controls.browser.label_path:SetText(self.refer)
-								elseif btn == 3 then													
-									settings.paths[v] = nil
-									table.remove(settings.paths, i)
-									self.parent:Refresh()
-								end
-							end,
-						},
-					}		 
-					list[#list + 1] = ClickyTextBox:New {
-						parent = controls.browser.layout_files,
-						clientWidth = 500, --226,	
-						fontsize = 10,					
-						textColor = {.8,.8,.8,.9},
-						refer = v,
-						text = v, --string.upper(k),
-						OnClick = {function(self,...)
-							local btn = select(3,...)
-							if btn == 1 then
-								self.parent.path = self.refer
-								self.parent:Refresh()					
-								controls.browser.label_path:SetText(self.refer)
-							end
-						end,
-						},			
-					}
-				end
-			end	
-			
-			--controls.browser.layout_files.list.home_img = Image:New {
-			list[#list + 1] = Image:New { 
-				parent = controls.browser.layout_files,
-				file = icons.SPRING_ICON,
-				width = 12,
-				height = 12,
-				tooltip = 'the spring home directory.\n\nthis path is the real location of your spring engine and is not to be confused with the vfs root directory.\n\n'
-				..'\255\255\255\0'..(config.path_spring or '')..'\255\255\255\255',
-				OnClick = {
-					function(self, ...)
-						local btn = select(3,...)
-						if btn == 1 then
-							self.parent.path = config.path_spring or ''
-							self.parent:Refresh()					
-							controls.browser.label_path:SetText(config.path_spring or '')
-						end
-					end,
-				},
-			}
-			--controls.browser.layout_files.list.home = ClickyTextBox:New {
-			list[#list + 1] = ClickyTextBox:New {	
-				parent = controls.browser.layout_files,
-				clientWidth = 500, --226,	
-				fontsize = 10,					
-				textColor = {.8,.8,.8,.9},
-				text = '$SPRING',
-				OnClick = {function(self,...)
-					local btn = select(3,...)
-					if btn == 1 then
-					self.parent.path = config.path_spring or ''
-					self.parent:Refresh()					
-					controls.browser.label_path:SetText(config.path_spring or '')
-					end
-				end,
-				},			
-			}		
-			--controls.browser.layout_files.list.vfs_img = Image:New {
-			list[#list + 1] = Image:New {			
-				parent = controls.browser.layout_files,
-				file = icons.SPRING_ICON,
-				width = 12,
-				height = 12,
-				tooltip = 'root of the virtual file system. equals ".", "./", "/" and the empty string. \n\nwidgets can only write into the virtual file system, ie. subfolders of the spring directory.\n\nall write paths must be specified relative to the vfs root, not as absolute paths, eg. \n\n \255\255\255\0\'/sounds/ambient/\'\n\n\255\255\255\255instead of\n\n\255\255\255\0\'C:/someplace/.../sounds/ambient/\'\255\255\255\255\n\nnormally, the widget handles this process.\n\n\255\255\150\0if you find that you are unable to save into your working directory with this widget, try running spring with the --write-dir command line parameter pointing to the spring directory\255\255\255\255',
-				OnClick = {
-					function(self, ...)
-						local btn = select(3,...)
-						if btn == 1 then
-							self.parent.path = ''
-							self.parent:Refresh()					
-							controls.browser.label_path:SetText('')					
-						end
-					end,
-				},
-			}
-			--controls.browser.layout_files.list.vfs = ClickyTextBox:New {
-			list[#list + 1] = ClickyTextBox:New {	
-				parent = controls.browser.layout_files,
-				clientWidth = 500, --226,	
-				fontsize = 10,					
-				textColor = {.8,.8,.8,.9},
-				text = '$VFS_ROOT',			
-				OnClick = {function(self,...)
-					local btn = select(3,...)
-					if btn == 1 then
-						self.parent.path = ''
-						self.parent:Refresh()					
-						controls.browser.label_path:SetText('')					
-					end
-				end,
-				},			
-			}
-			--controls.browser.layout_files.list.sound_img = ClickyTextBox:New {
-			list[#list + 1] = Image:New {
-				parent = controls.browser.layout_files,
-				file = icons.MUSICFOLDER_ICON,
-				width = 12,
-				height = 12,
-				tooltip = 'the ambient sound folder inside the map directory, inside the vfs.\n\nall sounds the player will be using in the finished map will be stored here.\n\n'..
-					'\255\255\255\0$VFS_ROOT/'..config.path_map..config.path_sound..'\255\255\255\255',
-				OnClick = {function(self,...)
-					self.parent.path = config.path_map..config.path_sound
-					self.parent:Refresh()					
-					controls.browser.label_path:SetText(config.path_map..config.path_sound)
-				end,
-				},				
-			}
-			--controls.browser.layout_files.list.sound = ClickyTextBox:New {
-			list[#list + 1] = ClickyTextBox:New {
-				parent = controls.browser.layout_files,
-				clientWidth = 500, --226,	
-				fontsize = 10,					
-				textColor = {.8,.8,.8,.9},
-				text = '$MAP/sounds/ambient',				
-				OnClick = {function(self,...)
-					self.parent.path = config.path_map..config.path_sound
-					self.parent:Refresh()					
-					controls.browser.label_path:SetText(config.path_map..config.path_sound)
-				end,
-				},
-			}			
-			--controls.browser.layout_files.list.back_img = Image:New {
-			list[#list + 1] = Image:New {
-				parent = controls.browser.layout_files,
-				file = icons.UNDO_ICON,
-				width = 12,
-				height = 12,					
-			}
-			--controls.browser.layout_files.list.back = ClickyTextBox:New {
-			list[#list + 1] = ClickyTextBox:New {
-				parent = controls.browser.layout_files,
-				clientWidth = 500, --226,	
-				fontsize = 10,					
-				textColor = {.8,.8,.8,.9},
-				text = '..',
-				OnClick = {function(self,...)
-					local btn = select(3,...)
-					if btn == 1 then
-						local path = self.parent.path
-						if #path > 0 then
-							local lastchar = string.sub(path, -1)
-							if not (lastchar == '\/' or lastchar == '\\') then
-								path = path..'\/'
-							end					
-							local a,b,remain = string.find(path, '[^\/\\]+[\/\\]$') -- "([^\/\\]+)$"
-							--Echo(path)
-							remain = string.sub(path, 1, a - 1)
-							if remain then
-								self.parent.path = remain
-								self.parent:Refresh()					
-								controls.browser.label_path:SetText(remain)
-							end	
-						end	
-					end
-				end,
-				},
-			}			
-			--local filter = '*.wav
-			local dirs, files = VFS.SubDirs(self.path), VFS.DirList(self.path)				
-				
-			for i = 1, #dirs do
-				--Echo(dirs[i])
-				local _,_,dirname = string.find(dirs[i], "([^\/\\]+)[\/\\]$")
-				list[#list + 1] = Image:New {
-					parent = self,
-					file = icons.FOLDER_ICON,
-					width = 12,
-					height = 12,					
-				} 
-				list[#list + 1] = ClickyTextBox:New {
-					parent = self,
-					clientWidth = 500, --226,	
-					fontsize = 10,					
-					textColor = {.8,.8,.8,.9},
-					fulltext = dirs[i],
-					text = dirname,
-					OnClick = {function(self,...)
-						local btn = select(3,...)
-						if btn == 1 then
-							self.parent.path = self.fulltext
-							if not self.parent:Refresh() then
-								Echo("empty or corrupt path "..self.fulltext)								
-							else								
-								controls.browser.label_path:SetText(self.fulltext)
-							end
-						end
-					end,					
-					},
-				}
-			end					
-			for i = 1, #files do
-				--Echo(files[i])
-				local ending = string.find(files[i], "ogg$") or string.find(files[i], "wav$")
-				if ending or not settings.browser.showSoundsOnly then -- this could be an option				 
-					local _,_,filename = string.find(files[i], "([^\/\\]+)$")
-					list[#list + 1] = Image:New {
-						parent = self,
-						file = ending and icons.MUSIC_ICON or icons.FILE_ICON,
-						width = 12,
-						height = 12,					
-					} 
-					list[#list + 1] = MouseOverTextBox:New {
-						parent = self,
-						clientWidth = 500, --226,	
-						fontsize = 10,						
-						textColor = {.8,.8,.8,.9},
-						textColorSelected = colors.green_1,
-						textColorForbidden = colors.red_1,
-						textColorNormal = {.8,.8,.8,.9},
-						fulltext = files[i],
-						text = filename,
-						selectable = true,
-						OnSelect = function(self, idx, select)							
-							if select then 
-								self.legit = ending
-								self.font:SetColor(ending and self.textColorSelected or self.textColorForbidden)
-							else 
-								self.legit = nil
-								self.font:SetColor(self.textColorNormal) 
-							end
-							self:Invalidate()
-						end,						
-					}
-				end			
-			end				
 			self:Invalidate()
-			return #dirs > 0 or #files > 0 -- will this be false for empty folders?
+			return legit -- this is false for empty folders, sadly. not sure what to do about it
 		end,
 	}
 	--controls.browser.layout_files.list = {}	
@@ -2256,18 +2191,18 @@ defaults to 0]],
 			local items = drag.items[1].children
 			local list = self.list
 			for i, selected in pairs(sel) do
-				if selected and items[i].legit and not list[items[i].fulltext] then
+				if selected and items[i].legit and not list[items[i].refer] then
 					local ending = string.find(items[i].text, "%.ogg$") or string.find(items[i].text, "%.wav$")					
 					local name = string.sub(items[i].text, 1, ending - 1)
 					
-					list[items[i].fulltext] = {
+					list[items[i].refer] = {
 						button = Image:New {
 							parent = controls.browser.layout_templates,
 							file = icons.CLOSE_ICON,
 							width = 12,
 							height = 12,							
 							tooltip = 'remove from selection',
-							refer = items[i].fulltext,
+							refer = items[i].refer,
 							color = colors.red_1,
 						},					
 						box = FilterEditBox:New {
@@ -2281,9 +2216,9 @@ defaults to 0]],
 							padding = {2,0,2,0},
 							textColor = {.8,.8,.8,.9},
 							text = name,
-							refer = items[i].fulltext,							
+							refer = items[i].refer,							
 							refer2 = items[i].text,
-							tooltip = items[i].fulltext,
+							tooltip = items[i].refer,
 							InputFilter = function(unicode)
 								return string.find(unicode, "[%w_-]")								
 							end,
@@ -2558,21 +2493,29 @@ defaults to 0]],
 		}
 	end
 	
+	panels['Setup'].layout.columns = 2
+	-- working dir field
 	MouseOverTextBox:New {
 		parent = panels['Setup'].layout,
-		text = 'Working Directory:',
+		text = ' Working Directory:',
 		fontsize = 11,
 		textColor = colors.yellow_09,
-		width = 100,
+		width = 110,
 		tooltip	= 'the working directory for this particular map. by default, APE sets this to maps/<mapname>.sdd, but you can chose any name you want.\n\nnote that this folder must be inside your springs write-directory and should be specified as a relative path.',
-	}
+	}	
+	Image:New {
+		parent = panels['Setup'].layout,
+		file = false,
+		width = 12,
+		height = 12,		
+	}	
 	local box_workingDir = FilterEditBox:New {
 		parent = panels['Setup'].layout,
 		text = '',
 		fontsize = 11,
-		width = 400,
+		width = 380,
 		textColor = colors.green_1,
-		--backgroundColor = colors.grey_02,
+		backgroundColor = colors.grey_01,
 		borderColor = colors.grey_05,
 		borderColor2 = colors.grey_035,
 		legit = true,
@@ -2609,9 +2552,136 @@ defaults to 0]],
 			else
 				self:Confirm()
 			end			
-		end,},
-		
+		end,},		
 	}
+	Image:New {
+		parent = panels['Setup'].layout,
+		file = icons.LOAD_ICON,
+		width = 20,
+		height = 20,
+		margin = {6,-2,0,0},
+		tooltip = 'extract map archive',
+		OnClick = {function(self)end,},
+	}
+	-- write dir field
+	MouseOverTextBox:New {
+		parent = panels['Setup'].layout,
+		text = ' Read-Write Directory:',
+		fontsize = 11,
+		textColor = colors.yellow_09,
+		width = 160,
+		margin = {0, 20, 0, 0},
+		tooltip	= 'The directory widgets are allowed to write into.\n\nThis should be the same as your spring folder in order for APE to access all necessary files and folders and save its data in the right places.\n\nAPE can restart the game with the the write-dir set to this location for you. you can also run spring with the --write-dir "yourpath" command line argument. "yourpath" must be a location inside your spring folder or the spring folder itself.',
+	}
+	Image:New {
+		parent = panels['Setup'].layout,
+		file = false,
+		width = 12,
+		height = 12,		
+	}	
+	local box_writeDir = FilterEditBox:New {
+		parent = panels['Setup'].layout,
+		text = settings.general.write_dir,
+		fontsize = 11,
+		width = 380,
+		textColor = colors.green_1,
+		backgroundColor = colors.grey_01,
+		borderColor = colors.grey_05,
+		borderColor2 = colors.grey_035,
+		legit = true,
+		Refresh = function(self)
+			self.legit = i_o.TestDirIsNotEmpty(self.text)
+			self.font:SetColor(self.legit and colors.green_1 or colors.red_1)			
+		end,
+		Confirm = function(self)			
+			if string.sub(self.text, -1) ~= '\\' and string.sub(self.text, -1) ~= '\/' then
+				self.text = self.text..'/'
+			end
+			self:Refresh()
+			if not self.legit then
+				ConfirmDialog("write-dir (requires restart):\n"..self.text,
+					function(path) settings.general.write_dir = path; self:Refresh() end, {self.text}, 
+						self.Discard, {self})
+			end
+		end,
+		Discard = function(self)
+			self.text = settings.general.write_dir
+			self:Refresh()
+		end,
+		KeyPress = function(self, ...)
+			FilterEditBox.KeyPress(self, ...)
+			self:Refresh()
+		end,
+		TextInput = function(self, ...)
+			FilterEditBox.TextInput(self, ...)
+			self:Refresh()
+		end,
+		OnFocusUpdate = {function(self)			
+			if self.state.focused then
+				self:Refresh()
+			else
+				self:Confirm()
+			end			
+		end,},		
+	}	
+	Image:New {
+		parent = panels['Setup'].layout,
+		file = icons.SPRING_ICON,
+		width = 17,
+		height = 17,
+		margin = {7,2,0,0},
+		tooltip = 'restart spring now',
+		OnClick = {function(self)
+				if box_writeDir.legit then
+					--[[
+					local script = i_o.GetStartScript()
+					Echo(script)
+					ConfirmDialog("restart spring with --write-dir:\n"..box_writeDir.text,
+						function(path) 
+							Spring.Restart('--write-dir '..'"'..path.."--config "..settings.general.spring_dir, script) 
+						end,
+						{box_writeDir.text})
+					--]]	
+				end
+			end,
+		},
+	}
+	
+	-- spring dir field
+	MouseOverTextBox:New {
+		parent = panels['Setup'].layout,
+		text = ' Spring Home Directory:',
+		fontsize = 11,
+		textColor = colors.yellow_09,
+		width = 160,
+		margin = {0, 20, 0, 0},
+		tooltip	= 'Springs home directory on your machine. It is not strictly necessary for this to be known to the widget.',
+	}
+	Image:New {
+		parent = panels['Setup'].layout,
+		file = false,
+		width = 12,
+		height = 12,		
+	}	
+	local box_springDir = MouseOverTextBox:New {
+		parent = panels['Setup'].layout,
+		text = settings.general.spring_dir,
+		fontsize = 11,
+		width = 360,
+		textColor = colors.green_1,
+		backgroundColor = colors.grey_01,
+		borderColor = colors.grey_05,
+		borderColor2 = colors.grey_035,
+		margin = {0, 6, 0, 0},
+		OnClick = {},
+	}
+	Image:New {
+		parent = panels['Setup'].layout,
+		file = false,
+		width = 12,
+		height = 12,		
+	}
+
 	
 	-- autogenerate map folder / map subfolders?
 	-- autolocalize files that are witihin the vfs?
@@ -2838,18 +2908,20 @@ local function DeclareFunctionsAfter()
 				padding = {0, 6, 0, 0},				
 				UpdateTooltip = function(self)
 					local em = emitters[e]
-					local ttip = colors.yellow_09:Code().."Emitter: "..e..colors.white_1:Code().."\n("
-					if e == 'global' then
-						ttip = ttip..'no position)\n'
-					else
-						ttip = ttip.."X: "..string.format("%.0f", em.pos.x)..", "..
-							"Z: "..string.format("%.0f", em.pos.z)..", "..
-								"Y: "..string.format("%.0f", em.pos.y)..")\n"
+					if em then
+						local ttip = colors.yellow_09:Code().."Emitter: "..e..colors.white_1:Code().."\n("
+						if e == 'global' then
+							ttip = ttip..'no position)\n'
+						else
+							ttip = ttip.."X: "..string.format("%.0f", em.pos.x)..", "..
+								"Z: "..string.format("%.0f", em.pos.z)..", "..
+									"Y: "..string.format("%.0f", em.pos.y)..")\n"
+						end
+						for i = 1, #em.sounds do					
+							ttip = ttip.."\n"..(em.sounds[i].item)
+						end
+						self.tooltip = ttip.."\n \n"..colors.green_1:Code().."right-click: inspect"
 					end
-					for i = 1, #em.sounds do					
-						ttip = ttip.."\n"..(em.sounds[i].item)
-					end
-					self.tooltip = ttip.."\n \n"..colors.green_1:Code().."right-click: inspect"
 				end,				
 				OnMouseOver = {
 					function(self)							

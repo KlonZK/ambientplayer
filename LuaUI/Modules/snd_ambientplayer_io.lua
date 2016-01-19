@@ -11,6 +11,8 @@
 
 local VFSMODE = widget.VFSMODE
 
+local VFS = widget.VFS
+
 local vfsInclude = widget.VFS.Include
 local vfsExist = widget.VFS.FileExists
 local spLoadSoundDefs = widget.Spring.LoadSoundDef
@@ -226,14 +228,91 @@ end
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+
+function LoadMapConfig(cpath)
+	Echo ("Loading local config...")
+	if vfsExist(cpath..MAPCONFIG_FILENAME, VFSMODE) then
+		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
+		if opt then
+			for k, v in pairs(opt) do config[k] = v or config[k] end
+			Echo("done", true)
+		else
+			Echo("local config was empty, using defaults", true)
+		end
+	else Echo("could not open config file, using defaults", true)
+	end
+
+	Echo ("Loading templates...")
+	if vfsExist(cpath..SOUNDS_ITEMS_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_ITEMS_DEF_FILENAME) then
+			Echo("failed to load templates, check format\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")
+		end
+		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)
+		if not list.Sounditems then
+			Echo("templates file was empty", true)
+		else
+			local i = 0
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
+			Echo ("found "..i.." sounditems", true)
+		end
+	else
+		Echo("file not found\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")
+	end
+
+	Echo ("Loading sounds...")
+	if vfsExist(cpath..SOUNDS_INSTANCES_DEF_FILENAME, VFSMODE) then
+		if not spLoadSoundDefs(cpath..SOUNDS_INSTANCES_DEF_FILENAME) then
+			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INSTANCES_DEF_FILENAME.."'")
+		end
+		local list = vfsInclude(cpath..SOUNDS_INSTANCES_DEF_FILENAME, nil, VFSMODE)
+		if (list.Sounditems == nil) then
+			Echo("sounds file was empty", true)
+		else
+			local i = 0
+			for s, params in pairs(list.Sounditems) do
+				i = i + 1
+				sounditems.instances[s] = params
+				--sounditems.instances[s].endTimer = 0
+			end
+			Echo ("found "..i.." sounds", true)
+		end
+	else
+		Echo("file not found\n '"..cpath..SOUNDS_INSTANCES_DEF_FILENAME.."'")
+	end
+
+	Echo ("Loading emitters...")
+	if vfsExist(cpath..EMITTERS_FILENAME, VFSMODE) then
+		local tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
+		if tmp then
+			local i = 0
+			for e, params in pairs(tmp) do
+				i = i + 1
+				emitters[e] = params
+				params.isPlaying = nil
+				for _, v in ipairs(params.sounds) do
+					v.endTimer = 0
+					v.isPlaying = false
+				end
+			end
+			Echo ("found "..i.." emitters", true)
+		else Echo ("emitters file was empty", true)
+		end
+	end
+	if not emitters.global then emitters.global = {pos = {}} end
+end
+
 function TestWorkingDir(dir)
 	--Echo(dir..PATH_LUA..PATH_CONFIG..MAPCONFIG_FILENAME)
 	return vfsExist(dir..PATH_LUA..PATH_CONFIG..MAPCONFIG_FILENAME, VFSMODE)
 end
 
+function TestDirIsNotEmpty(dir)
+	return #VFS.DirList(dir) > 0 or #VFS.SubDirs(dir) > 0
+end
 
 function SetupWorkingDir()
-	Spring.CreateDir(config.path_map)		
+	settings.maps[widget.Game.mapName] = config.path_map
+	Spring.CreateDir(config.path_map)
 	Spring.CreateDir(config.path_map..PATH_SOUND)
 	Spring.CreateDir(config.path_map..PATH_LUA)
 	Spring.CreateDir(config.path_map..PATH_LUA..PATH_WIDGET)
@@ -245,7 +324,7 @@ function SetupWorkingDir()
 	local wpath = config.path_map..PATH_LUA..PATH_CONFIG
 	if not (WriteSoundDefs(wpath, TMP_ITEMS_FILENAME, TMP_INSTANCES_FILENAME, true)) then 
 		Echo("failed to write temp files at: "..wpath) 		
-	end		
+	end			
 end
 
 function BinaryCopy(source, target)
@@ -278,28 +357,40 @@ function BinaryCopy(source, target)
 end
 
 -- serach string for --write-dir:  "write data directory:"
-function GetSpringDir()
+function GetSpringDirs()
 	local file = io.open('infolog.txt', 'r')	
+	local spath, wpath
 	repeat	
 		local str = file:read('*line')
-		if str and string.find(str, "Using configuration source:") then
-			--Echo(str)
-			local _,_,path = string.find(str, '\"(.+)\"')
-			if path then 
-				--Echo("config file is: "..path) 
-				_,_, path = string.find(path, "(.+[\/\\])[^\/\\]+$")
-				Echo("spring home directory is: "..path) 
-				file:close()
-				return path
-			else 
-				file:close()
-				Echo("could not find spring folder")
-				return nil
-			end
-			
+		if str then
+			if string.find(str, "Using configuration source:") then
+				local _,_,path = string.find(str, '\"(.+)\"')
+				if path then
+					_,_, path = string.find(path, "(.+[\/\\])[^\/\\]+$")					
+					spath = path								
+				end
+			else
+				local _,path = string.find(str, "write data directory: ")
+				if path then
+					path = string.sub(str, path + 1)					
+					wpath = path				
+				end
+			end			
 		end
-	until(not str)
+	until(not str or (spath and wpath))
 	file:close()
+	if spath then
+		Echo("spring home directory is: "..spath) 
+	else
+		Echo("could not find spring home directory") 
+	end
+	if wpath then
+		Echo("spring write-dir is: "..wpath)
+	else
+		Echo("could not find write-dir")
+	end
+	
+	return spath, wpath
 end
 
 function SaveAll()
@@ -320,16 +411,16 @@ end
 -- these dont write tags from meta index. problem?
 function ReloadSoundDefs()
 	-- not sure they have to be different?
-	local rpath = PATH_LUA..PATH_CONFIG
-	local wpath = config.path_map..PATH_LUA..PATH_CONFIG
+	local path = config.path_map..PATH_LUA..PATH_CONFIG
+	local rpath = config.path_map..PATH_LUA..PATH_CONFIG
 	
 	Echo("caching...")
-	if not (WriteSoundDefs(wpath, TMP_ITEMS_FILENAME, TMP_INSTANCES_FILENAME, true)) then 
-		Echo("failed to write temp files at: "..wpath) return false end
+	if not (WriteSoundDefs(path, TMP_ITEMS_FILENAME, TMP_INSTANCES_FILENAME, true)) then 
+		Echo("failed to write temp files at: "..path) return false end
 	if not (spLoadSoundDefs(rpath..TMP_ITEMS_FILENAME)) then
-		Echo("failed to load temp file: "..rpath..TMP_ITEMS_FILENAME) return false end
+		Echo("failed to load temp file: "..path..TMP_ITEMS_FILENAME) return false end
 	if not (spLoadSoundDefs(rpath..TMP_INSTANCES_FILENAME)) then
-		Echo("failed to load temp file: "..rpath..TMP_INSTANCES_FILENAME) return false end
+		Echo("failed to load temp file: "..path..TMP_INSTANCES_FILENAME) return false end
 	
 	return true
 	-- update should get called on frame/draw update. also not accessible from here

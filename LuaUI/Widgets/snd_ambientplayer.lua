@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.72'
+local versionNum = '0.712'
 
 function widget:GetInfo()
   return {
@@ -22,17 +22,6 @@ end
 
 local PlaySound = Spring.PlaySoundFile
 local PlayStream = Spring.PlaySoundStream
---local GetMouse = Spring.GetMouseState
---local TraceRay = Spring.TraceScreenRay
---local IsMouseMinimap = Spring.IsAboveMiniMap
---local GetGroundHeight = Spring.GetGroundHeight
---local GetModKeys = Spring.GetModKeyState
-
--- widget cant light
---local MapLight = Spring.AddMapLight
---local ModelLight = Spring.AddModelLight
---local UpdateMapLight = Spring.UpdateMapLight
---local UpdateModelLight = Spring.UpdateModelLight
 
 local random=math.random
 
@@ -159,13 +148,12 @@ local emitters = {
 setmetatable(emitters, {
 	__newindex = function(t, k, v)
 		rawset (t, k, v)
-		if not t[k].sounds then t[k].sounds = {} end
-		if not t[k].gl then
-			t[k].gl = {}
-			t[k].gl.delta = math.random(60)
-			t[k].gl.u = math.random(60)
-			t[k].gl.v = math.random(60)
-		end
+		t[k].sounds = {}		
+		t[k].gl = {
+			delta = math.random(60),
+			u = math.random(60),
+			v = math.random(60),
+		}
 		--if not t[k].script then t[k]['script'] = 'function run() end'
 		setmetatable(t[k].sounds, {
 			__index = function(st, trk)
@@ -199,7 +187,7 @@ options = {}
 -- MODULES
 -------------------------------------------------------------------------------------------------------------------------
 
-settings = {paths = {}, browser = {}, display = {}, interface = {}, maps = {}}
+settings = {paths = {}, browser = {}, display = {}, interface = {}, maps = {}, general = {}}
 
 local common = {pairs = pairs, ipairs = ipairs, type = type, string = string, tostring = tostring, tonumber = tonumber,
 	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, rawget = rawget, assert = assert,
@@ -605,8 +593,7 @@ function widget:Initialize()
 
 	gui.DoPlay = DoPlay
 	gui.drag = drag
-
-	local cpath = PATH_LUA..PATH_CONFIG
+	
 	local upath = PATH_LUA..PATH_UTIL
 
 	--setfenv(SetupGUI, gui)
@@ -614,7 +601,7 @@ function widget:Initialize()
 	gui.SetupGUI()
 	Echo("done", true)
 
-	-
+	
 	for k, v in pairs(gui) do
 		--widget[k] = widget[k] or v
 		if not widget[k] then
@@ -637,112 +624,34 @@ function widget:Initialize()
 		end
 	end
 	
-	local mapname = Game.mapName
+	if VFS.FileExists('infolog.txt', VFSMODE) then
+		settings.general.spring_dir,  settings.general.write_dir = i_o.GetSpringDirs()		
+	else
+		Echo("could not find spring home directory")
+	end
+		
+	local mapname = Game.mapName	
 	if settings.maps[mapname] then
+		config.mapname = mapname
 		config.path_map = settings.maps[mapname]
-	else
-		Echo("No working directory has been set up for this map.")
-	end
-	
-	
-	
-
-	-- put this stuff into io
-
-	Echo ("Loading local config...")
-	if vfsExist(cpath..MAPCONFIG_FILENAME, VFSMODE) then
-		local opt = vfsInclude(cpath..MAPCONFIG_FILENAME, nil, VFSMODE)
-		if opt then
-			for k, v in pairs(opt) do config[k] = v or config[k] end
-			Echo("done", true)
+		if VFS.LoadFile(config.path_map) then
+			Echo("using work-dir: "..config.path_map)
 		else
-			Echo("local config was empty, using defaults", true)
-		end
---		if (opt.words) then
---			for k, t in pairs(opt.words) do	words[k] = t or words[k] end
---		end
-	else Echo("could not open config file, using defaults", true)
-	end
-
-	Echo ("Loading templates...")
-	if vfsExist(cpath..SOUNDS_ITEMS_DEF_FILENAME, VFSMODE) then
-		if not spLoadSoundDefs(cpath..SOUNDS_ITEMS_DEF_FILENAME) then
-			Echo("failed to load templates, check format\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")
-		end
-		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)
-		if not list.Sounditems then
-			Echo("templates file was empty", true)
-		else
-			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
-			Echo ("found "..i.." sounditems", true)
-		end
-	else
-		Echo("file not found\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")
-	end
-
-	Echo ("Loading sounds...")
-	if vfsExist(cpath..SOUNDS_INSTANCES_DEF_FILENAME, VFSMODE) then
-		if not spLoadSoundDefs(cpath..SOUNDS_INSTANCES_DEF_FILENAME) then
-			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INSTANCES_DEF_FILENAME.."'")
-		end
-		local list = vfsInclude(cpath..SOUNDS_INSTANCES_DEF_FILENAME, nil, VFSMODE)
-		if (list.Sounditems == nil) then
-			Echo("sounds file was empty", true)
-		else
-			local i = 0
-			for s, params in pairs(list.Sounditems) do
-				i = i + 1
-				sounditems.instances[s] = params
-				--sounditems.instances[s].endTimer = 0
-			end
-			Echo ("found "..i.." sounds", true)
-		end
-	else
-		Echo("file not found\n '"..cpath..SOUNDS_INSTANCES_DEF_FILENAME.."'")
-	end
-
-	Echo ("Loading emitters...")
-	if vfsExist(cpath..EMITTERS_FILENAME, VFSMODE) then
-		local tmp = vfsInclude(cpath..EMITTERS_FILENAME, nil, VFSMODE) -- or emitters ?
-		if tmp then
-			local i = 0
-			for e, params in pairs(tmp) do
-				i = i + 1
-				emitters[e] = params
-				params.isPlaying = nil
-				for _, v in ipairs(params.sounds) do
-					v.endTimer = 0
-					-- ...
-				end
-			end
-			Echo ("found "..i.." emitters", true)
-		else Echo ("emitters file was empty", true)
-		end
-	end
-	if not emitters.global then emitters.global = {pos = {}} end
-
-	Echo("updating map config...")
-	if not (config.path_map) then config.path_map = 'maps/'..Game.mapName..'.sdd/' end
-	config.mapX = Game.mapSizeX
-	config.mapZ = Game.mapSizeZ
-
-	if not (config.path_spring) or #VFS.DirList(config.path_spring) == 0 then
-		Echo("searching spring folder...")
-		if VFS.FileExists('infolog.txt', VFSMODE) then
-			config.path_spring = i_o.GetSpringDir()
+			Echo("failed to map archive: "..config.path_map)
 		end		
-	end
-	if config.path_spring then
-		Echo(gui.colors.green_1:Code().."Your Spring directory is: "..config.path_spring)
+		i_o.LoadMapConfig(config.path_map..PATH_LUA..PATH_CONFIG)
 	else
-		Echo(gui.colors.orange_06:Code().."Could not find Spring directoy.")
+		config.mapname = mapname
+		config.path_map = 'maps/'..Game.mapName..'.sdd/'	
+		Echo(gui.colors.orange_06:Code().."No working directory has been set up for this map."..gui.colors.yellow_09:Code())		
+		
+		--Echo("By default, APE saves all data for a particular map in the uncompressed folder maps/<mapname>.sdd,")
+		--Echo("if such a folder exists. otherwise, you can set the folder manually or APE can create")
+		--Echo('one for you, if you would like. You will find either option the editor\' settings menu.'..gui.colors.yellow_09:Code())				
 	end
-	Echo(gui.colors.green_1:Code().."APE requires write access to the directory Spring is installed on your machine.")
-	Echo('For this, Spring needs to be run with the --write-dir "yourfolder" command line argument.'..gui.colors.yellow_09:Code())
+	config.mapX = Game.mapSizeX
+	config.mapZ = Game.mapSizeZ	
 
-
-	--logfile = io.open(config.path_map..PATH_LUA..PATH_CONFIG..LOG_FILENAME, 'w')
 	logfile = io.open(LOG_FILENAME, 'w')
 	if not logfile then
 		Echo("could not open logfile")
@@ -755,23 +664,10 @@ function widget:Initialize()
 	UpdateGUI()
 	Echo("Init done!")	
 	
-	config.path_map = "maps/newmap2.sdd"
-	if #VFS.DirList(config.path_map, VFSMODE) == 0 and #VFS.SubDirs(config.path_map) == 0 then -- and if in editor mode
-		Echo(gui.colors.orange_06:Code().."*A working directoy for this map could not be found.*"..gui.colors.green_1:Code())
-		Echo("APE saves all data for a particular map in the uncompressed folder maps/<mapname>.sdd,")
-		Echo("if such a folder exists. otherwise, you can set the folder manually or APE can create")
-		Echo('one for you, if you would like. You will find either option the editor\' settings menu.'..gui.colors.yellow_09:Code())		
-		Spring.CreateDir(config.path_map)
-		--Spring.CreateDir(config.path_map.."/sounds")
-		Spring.CreateDir(config.path_map.."/sounds/ambient")
-		Spring.CreateDir(config.path_map.."/luaui")
-		Spring.CreateDir(config.path_map.."/luaui/widgets")
-		Spring.CreateDir(config.path_map.."/luaui/modules")
-		Spring.CreateDir(config.path_map.."/configs")
-	elseif not VFS.FileExists(config.path_map..PATH_LUA..PATH_CONFIG..MAPCONFIG_FILENAME) then
-		Echo("map config not found")
-		-- first run		
-	end	
+	--for k, v in pairs(VFS.GetAllArchives()) do
+	--	Echo(v)
+	--end
+
 end
 
 
