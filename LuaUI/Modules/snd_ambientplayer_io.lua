@@ -228,6 +228,64 @@ end
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
+function ExtractToFolder(file, folder)
+	if folder and file and vfsExist(file, VFSMODE) then	
+		
+		
+		
+		--Spring.ExtractModArchiveFile(file)		
+		--[[
+		VFS.UseArchive(file,
+		function()
+			Echo("archive name: "..file)			
+			for k, v in pairs(VFS.DirList('', VFS.RAW)) do
+				Echo(v)
+			end
+			for k, v in pairs(VFS.SubDirs('', VFS.RAW)) do
+				Echo(v)
+			end
+		end
+		)--]]		
+	end
+	return false
+end
+
+--[[
+function ImportPlaylist()
+	local path
+	local file = "ambientplaylist.lua"
+	if vfsExist(config.path_map..PATH_LUA..PATH_CONFIG..'ambientplaylist.lua', VFSMODE) then
+		path = cpath
+	elseif vfsExist('ambientplaylist.lua', VFSMODE) then
+		path = ''
+	elseif vfsExist(PATH_LUA..PATH_CONFIG..'ambientplaylist.lua', VFSMODE) then
+		path = PATH_LUA..PATH_CONFIG
+	elseif vfsExist(PATH_LUA..PATH_SOUND..'ambientplaylist.lua', VFSMODE) then
+		path = PATH_LUA..PATH_SOUND
+	else	
+		Echo("import file no found")
+		return false
+	end
+	
+	Echo ("Importing templates...")
+	if vfsExist(path..file, VFSMODE) then
+		if not spLoadSoundDefs(path..file) then
+		--if not spLoadSoundDefs(PATH_LUA..PATH_CONFIG..SOUNDS_ITEMS_DEF_FILENAME) then
+			Echo("failed to import templates: "..path..file.."'\n")
+		end
+		local list = vfsInclude(path..file, nil, VFSMODE)
+		if not list.Sounditems then
+			Echo("playlist file was empty", true)
+		else
+			local i = 0
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
+			Echo ("found "..i.." sounditems", true)
+		end
+	else
+		Echo("file not found\n '"..path..file.."'")
+	end
+end--]]
+
 
 function LoadMapConfig(cpath)
 	Echo ("Loading local config...")
@@ -245,7 +303,8 @@ function LoadMapConfig(cpath)
 	Echo ("Loading templates...")
 	if vfsExist(cpath..SOUNDS_ITEMS_DEF_FILENAME, VFSMODE) then
 		if not spLoadSoundDefs(cpath..SOUNDS_ITEMS_DEF_FILENAME) then
-			Echo("failed to load templates, check format\n '"..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'")
+		--if not spLoadSoundDefs(PATH_LUA..PATH_CONFIG..SOUNDS_ITEMS_DEF_FILENAME) then
+			Echo("failed to load templates: "..cpath..SOUNDS_ITEMS_DEF_FILENAME.."'\n")
 		end
 		local list = vfsInclude(cpath..SOUNDS_ITEMS_DEF_FILENAME, nil, VFSMODE)
 		if not list.Sounditems then
@@ -262,7 +321,8 @@ function LoadMapConfig(cpath)
 	Echo ("Loading sounds...")
 	if vfsExist(cpath..SOUNDS_INSTANCES_DEF_FILENAME, VFSMODE) then
 		if not spLoadSoundDefs(cpath..SOUNDS_INSTANCES_DEF_FILENAME) then
-			Echo("failed to load sounds in use, check format\n '"..cpath..SOUNDS_INSTANCES_DEF_FILENAME.."'")
+		--if not spLoadSoundDefs(PATH_LUA..PATH_CONFIG..SOUNDS_INSTANCES_DEF_FILENAME) then
+			Echo("failed to load sounds: "..cpath..SOUNDS_INSTANCES_DEF_FILENAME.."'\n")
 		end
 		local list = vfsInclude(cpath..SOUNDS_INSTANCES_DEF_FILENAME, nil, VFSMODE)
 		if (list.Sounditems == nil) then
@@ -289,9 +349,14 @@ function LoadMapConfig(cpath)
 				i = i + 1
 				emitters[e] = params
 				params.isPlaying = nil
-				for _, v in ipairs(params.sounds) do
+				for _, v in ipairs(params.sounds) do					
 					v.endTimer = 0
 					v.isPlaying = false
+				end
+				if params.script then
+					if vfsExist(params.script) then
+						widget.AddScript(e, VFS.Include(params.script, scripts._new(params), VFSMODE))
+					end
 				end
 			end
 			Echo ("found "..i.." emitters", true)
@@ -327,30 +392,40 @@ function SetupWorkingDir()
 	end			
 end
 
+
 function BinaryCopy(source, target)
 	local timer = Spring.GetTimer()
 	
 	local sfile, tfile
-	local bufsize = 8192
+	local bufsize = 8192	
+	
+	-- we cant reliably check wether the source and the target are the same file
+	-- so instead we make sure we can copy the file onto itself without breaking it
+	local blocks = {}
 	
 	sfile = io.open(source, 'rb')
 	if not sfile then
 		Echo("copy: failed to open source file: "..source)
 		return false
-	end
+	end		
+	repeat
+		local block = sfile:read(bufsize)
+		if block then
+			blocks[#blocks + 1] = block	
+		end		
+	until (not block)
+	sfile:close()
+	
 	tfile = io.open(target, 'wb')
 	if not tfile then
 		Echo("copy: failed to open target file: "..target)
 		return false
+	end
+	for i = 1, #blocks do
+		tfile:write(blocks[i])
 	end	
-	
-	repeat
-		--local block, rest = sfile:read(bufsize, '*line')
-		local block = sfile:read(bufsize)
-		if block then tfile:write(block) end
-	until(not block)
-	sfile:close()
 	tfile:close()
+	
 	local duration = string.format("%.4f",Spring.DiffTimers(Spring.GetTimer(), timer))
 	Echo("done copying "..source..", spent "..duration.." seconds") --string.format("%.0f", e.pos.x)
 	return true
@@ -411,15 +486,16 @@ end
 -- these dont write tags from meta index. problem?
 function ReloadSoundDefs()
 	-- not sure they have to be different?
+	local wpath = config.path_map..PATH_LUA..PATH_CONFIG
 	local path = config.path_map..PATH_LUA..PATH_CONFIG
-	local rpath = config.path_map..PATH_LUA..PATH_CONFIG
+	
 	
 	Echo("caching...")
 	if not (WriteSoundDefs(path, TMP_ITEMS_FILENAME, TMP_INSTANCES_FILENAME, true)) then 
 		Echo("failed to write temp files at: "..path) return false end
-	if not (spLoadSoundDefs(rpath..TMP_ITEMS_FILENAME)) then
+	if not (spLoadSoundDefs(path..TMP_ITEMS_FILENAME)) then
 		Echo("failed to load temp file: "..path..TMP_ITEMS_FILENAME) return false end
-	if not (spLoadSoundDefs(rpath..TMP_INSTANCES_FILENAME)) then
+	if not (spLoadSoundDefs(path..TMP_INSTANCES_FILENAME)) then
 		Echo("failed to load temp file: "..path..TMP_INSTANCES_FILENAME) return false end
 	
 	return true

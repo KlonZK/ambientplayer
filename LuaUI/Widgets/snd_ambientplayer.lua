@@ -148,12 +148,13 @@ local emitters = {
 setmetatable(emitters, {
 	__newindex = function(t, k, v)
 		rawset (t, k, v)
-		t[k].sounds = {}		
-		t[k].gl = {
+		t[k].name = k
+		if not t[k].sounds then t[k].sounds = {} end -- emitters loaded from files bring their own table		
+		if not t[k].gl then t[k].gl = {
 			delta = math.random(60),
 			u = math.random(60),
 			v = math.random(60),
-		}
+		} end
 		--if not t[k].script then t[k]['script'] = 'function run() end'
 		setmetatable(t[k].sounds, {
 			__index = function(st, trk)
@@ -176,9 +177,19 @@ setmetatable(emitters, {
 	end
 })
 
+scripts = {}
+callins = {}
+for k, _ in pairs(Script.GetCallInList()) do
+	callins[k] = true
+end
+options = {}
+settings = {paths = {}, browser = {}, display = {}, interface = {}, maps = {}, general = {}}
+
+
+
 --emitters.global = {pos = {}} --sounds = {}, gl = {delta = math.random(60), u = math.random(60), v = math.random(60)}}
 
-options = {}
+
 
 
 
@@ -187,13 +198,12 @@ options = {}
 -- MODULES
 -------------------------------------------------------------------------------------------------------------------------
 
-settings = {paths = {}, browser = {}, display = {}, interface = {}, maps = {}, general = {}}
-
 local common = {pairs = pairs, ipairs = ipairs, type = type, string = string, tostring = tostring, tonumber = tonumber,
 	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, rawget = rawget, assert = assert,
 		os = os, math = math, io = io, table = table, next = next, error = error, select = select,
 			widget = widget, Echo = Echo, options = options, config = config, settings = settings,
-				sounditems = sounditems, emitters = emitters, Spring = Spring}
+				sounditems = sounditems, emitters = emitters, Spring = Spring, scripts = scripts}
+
 
 -- SetupGUI() builds controls so we can't import keys yet
 Echo ("Loading modules...")
@@ -257,6 +267,16 @@ do
 	-- load console here if wanted or if chili fails
 end
 
+
+scripts._new = function(e)
+		local env = {e = e, cb = gui.cbTimer, play = DoPlay, _G = widget._G, WG = widget.WG, gui = gui} -- ...
+		for k, v in pairs(common) do
+			env[k] = v
+		end		
+		env.self = env
+		env.this = env
+		return env
+	end
 
 
 
@@ -333,7 +353,11 @@ local needReload = false
 -------------------------------------------------------------------------------------------------------------------------
 
 local function DoPlay(trk, vol, ename)
-	local e = emitters[ename]
+	local e = type(ename) == 'string' and emitters[ename] or ename
+	if not type(e) == 'table' then
+		Echo("emitter argument passed to play was not a name or emitter table")
+		return false
+	end
 	local item = sounditems.templates[trk] or sounditems.instances[trk]
 	if not item then
 		Echo("item "..tostring(trk).." not found!")
@@ -347,13 +371,14 @@ local function DoPlay(trk, vol, ename)
 			if e.sounds[trk] then
 				e.sounds[trk].endTimer = item.length_real
 				e.sounds[trk].isPlaying = true
+				e.isPlaying = true
 				if gui then
 					EmitterInspectionWindow.instances[ename].layout.list[trk].activeIcon:Refresh()
 				end	
 			end
 			return true
 		end
-		Echo("playback of "..tr.." failed, not an audio file?")
+		Echo("playback of "..trk.." failed, not an audio file?")
 		return false
 	end
 end
@@ -437,6 +462,45 @@ function SpawnEmitter(name, x, z, y)
 	emitters[name].pos = {x = math.floor(x), y = math.floor(y), z = math.floor(z)}	
 end
 
+-- emitters need a "name" self reference, this will be a problem here
+function AddScript(e, scrp)	
+	--scripts[e] = scrp
+	for funcname, func in pairs(scrp) do
+		if type(func) == 'function' then
+			-- if it is a callin, dont add it to the script environment
+			if callins[funcname] then
+				local list = {}
+				if widget[funcname] then					
+					table.insert(list, widget[funcname])
+				end
+				if type(callins[funcname]) == 'table' then
+					for k, v in pairs(callins[funcname]) do
+						table.insert(list, v)
+					end					
+				else
+					callins[funcname] = {}
+				end
+				local f
+				if #list > 0 then
+					table.insert(list, func)
+					f = function(...)
+						for i = 1, #list do							
+							list[i](...)
+						end
+					end					
+				else 
+					f = func
+				end
+				widget[funcname] = f
+				widgetHandler:UpdateCallIn(funcname)
+				table.insert(callins[funcname], func)
+			end		
+		end		
+		-- register callin, append existing code from widget and scripts
+		-- set environment to run in
+	end
+	
+end
 
 -------------------------------------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------------------------------------
@@ -495,6 +559,7 @@ end
 
 function widget:Update(dt)
 	if not (gameStarted) then return end
+	--Echo(dt)
 	if gui then
 		UpdateGUI(dt)
 	end
@@ -504,22 +569,25 @@ function widget:Update(dt)
 	else secondsToUpdate = options.checkrate.value
 	end
 
-	if not (options.autoplay.value) then return end
+	--if not (options.autoplay.value) then return end
 	for e, params in pairs (emitters) do
 		local hasRunningTracks = false
 		for i = 1, #params.sounds do
 		local trk = params.sounds[i]
-		local item = trk.item
-			if item then -- remove extra nil check eventually
-				trk.endTimer = trk.endTimer - options.checkrate.value
-				if trk.rnd and trk.rnd > 0 then
+		local iname, item = trk.item, sounditems.instances[trk.item]
+			if item then -- remove extra nil check eventually				
+				trk.endTimer = trk.endTimer - options.checkrate.value				
+				if item.rnd > 0 then					
 					trk.startTimer = trk.startTimer - options.checkrate.value -- this seems inaccurate
-					if (trk.startTimer < 0) then
+					--Echo(trk.startTimer)
+					if (trk.startTimer <= 0) then
+						--Echo("timer")
 						trk.startTimer = 0
-						if (random(trk.rnd) == 1) then
-							DoPlay(item, options.volume.value, e) --< this should pass nils if pos.* doesnt exist
+						--Echo("random")
+						if (random(item.rnd) == 1) then							
+							DoPlay(iname, options.volume.value, e) --< this should pass nils if pos.* doesnt exist
 							trk.startTimer  = item.length_loop
-							--trk.endTimer = item.length
+							--trk.endTimer = item.length_real
 							--Echo("length: "..item.length)
 						end
 					end
@@ -528,11 +596,12 @@ function widget:Update(dt)
 					hasRunningTracks = true
 					--trk.isPlaying = true
 				else
+				--if trk.endTimer <= 0 then
 					hasRunningTracks = hasRunningTracks
 					trk.isPlaying = false
 					--if EmitterInspectionWindow.instances[e] then
 						if gui then 
-							EmitterInspectionWindow.instances[e].layout.list[item].activeIcon:Refresh()
+							EmitterInspectionWindow.instances[e].layout.list[iname].activeIcon:Refresh()
 						end
 					--end
 				end
@@ -634,10 +703,10 @@ function widget:Initialize()
 	if settings.maps[mapname] then
 		config.mapname = mapname
 		config.path_map = settings.maps[mapname]
-		if VFS.LoadFile(config.path_map) then
+		if VFS.FileExists(config.path_map) then
 			Echo("using work-dir: "..config.path_map)
 		else
-			Echo("failed to map archive: "..config.path_map)
+			Echo("the work dir set for this map: "..config.path_map.." does not exist.")
 		end		
 		i_o.LoadMapConfig(config.path_map..PATH_LUA..PATH_CONFIG)
 	else
@@ -661,6 +730,7 @@ function widget:Initialize()
 
 	inited=true --?
 	Echo("Updating GUI...")
+	controls.settings.box_workingDir.text = config.path_map or '<no working dir>' -- this sucks, maybe make a post-init gui func to do such thigns?
 	UpdateGUI()
 	Echo("Init done!")	
 	

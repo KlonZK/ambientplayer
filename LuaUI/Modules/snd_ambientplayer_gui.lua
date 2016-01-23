@@ -80,6 +80,7 @@ icons.FILE_ICON = PATH_LUA..PATH_ICONS..'file.png'
 icons.FOLDER_ICON = PATH_LUA..PATH_ICONS..'folder.png'
 icons.NEWFOLDER_ICON = PATH_LUA..PATH_ICONS..'folder_add.png'
 icons.MUSICFOLDER_ICON = PATH_LUA..PATH_ICONS..'folder_music.png'
+icons.ZIP_ICON = PATH_LUA..PATH_ICONS..'present.png'
 
 local colors = {
 	Code = function(c, r, g, b)
@@ -328,11 +329,12 @@ local function DeclareClasses()
 				self:DeselectAll()
 				return self
 			end
-
+			if not self.children or #self.children < 1 then return end -- wonder why it never crashed before?
 			local cx,cy = self:LocalToClient(x,y)
 			local itemIdx = self:GetItemIndexAt(cx,cy)
-
-			if (itemIdx>0) and self.children[itemIdx].selectable then
+			
+			-- we need to check here if the child exists, some operations may steal it from under our nose
+			if (itemIdx>0) and self.children[itemIdx] and self.children[itemIdx].selectable then
 				if (self.multiSelect) then
 					if (mods.shift and mods.ctrl) then
 						self:MultiRectSelect(itemIdx,self._lastSelected or 1, true)
@@ -655,8 +657,6 @@ local function DeclareClasses()
 				end			
 			end
 			return #dirs > 0 or #files > 0
-		end,
-		Refresh = function(self)
 		end,
 	}
 	
@@ -1185,12 +1185,17 @@ local function DeclareClasses()
 	
 end
 
-	
 
+
+----------------------------------------------------------------------------------------------------------------------
+	
+----------------------------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------
 --------------------------------------------------- GUI CONTROLS -----------------------------------------------------
 ----------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------------------------
 
+----------------------------------------------------------------------------------------------------------------------
 
 local function DeclareControls()
 	---------------------------------------------------- main frame ------------------------------------------------
@@ -1599,7 +1604,24 @@ local function DeclareControls()
 				file = icons.CLOSE_ICON,
 			},
 		}
-	}		
+	}
+	button_import = Button:New {
+		x = -242,
+		y = -32,
+		parent = window_main,		
+		tooltip = 'Import Playlist from older Version',
+		clientWidth = 12,
+		clientHeight = 12,
+		caption = '',
+		OnClick = {function() i_o.ImportPlaylist() end},
+		children = {
+			Image:New {
+				width = "100%",
+				height = "100%",				
+				file = icons.LOAD_ICON,
+			},
+		}
+	}	
 	
 	window_main:Hide()
 	containers.main = window_main
@@ -2011,7 +2033,12 @@ defaults to 0]],
 				n = n + 1
 				local success
 				if settings.browser.autoLocalize then
-					success = i_o.BinaryCopy(k, config.path_map..config.path_sound..v.box.refer2)					
+					-- we still need to check here if the file already exists in the local folder
+					-- and if so, we dont need to use file_local / _external
+					local target_fullpath = config.path_map..config.path_sound..v.box.refer2
+					--if k ~= fullpath then
+					success = i_o.BinaryCopy(k, target_fullpath)
+					--end	
 				end
 				if success then
 					templates[v.box.text] = {
@@ -2115,9 +2142,6 @@ defaults to 0]],
 		editbox = label_path,
 		allowDragItems = 'files',
 		minWidth = 230,
-		--maxWidth = 230,
-		--clientWidth = 250,
-		--clientHeight = 300,
 		autosize = true,
 		resizable = false,
 		draggable = false,
@@ -2135,11 +2159,8 @@ defaults to 0]],
 		},
 		Refresh = function(self)
 			self.path = self.path or config.path_map..config.path_sound			
-			--Echo("path is: "..self.path)
-			--self.list = self.list or {}
 			local list = self.list
 			for i = 1, #list do
-				--Echo("disposing of index "..i)
 				list[i]:Dispose()
 				list[i]:Invalidate()
 				list[i] = nil
@@ -2509,9 +2530,9 @@ defaults to 0]],
 		width = 12,
 		height = 12,		
 	}	
-	local box_workingDir = FilterEditBox:New {
+	controls.settings.box_workingDir = FilterEditBox:New {
 		parent = panels['Setup'].layout,
-		text = '',
+		text = config.path_map or '',
 		fontsize = 11,
 		width = 380,
 		textColor = colors.green_1,
@@ -2521,7 +2542,8 @@ defaults to 0]],
 		legit = true,
 		Refresh = function(self)
 			self.legit = i_o.TestWorkingDir(self.text) or i_o.TestWorkingDir(self.text..'/')
-			self.font:SetColor(self.legit and colors.green_1 or colors.red_1)			
+			self.font:SetColor(self.legit and colors.green_1 or colors.red_1)
+			self:Invalidate()			
 		end,
 		Confirm = function(self)			
 			if string.sub(self.text, -1) ~= '\\' and string.sub(self.text, -1) ~= '\/' then
@@ -2552,7 +2574,8 @@ defaults to 0]],
 			else
 				self:Confirm()
 			end			
-		end,},		
+		end,
+		},	
 	}
 	Image:New {
 		parent = panels['Setup'].layout,
@@ -2561,7 +2584,12 @@ defaults to 0]],
 		height = 20,
 		margin = {6,-2,0,0},
 		tooltip = 'extract map archive',
-		OnClick = {function(self)end,},
+		OnClick = {function(self)
+			window_browser_map:Invalidate()
+			window_browser_map:Show()
+			controls.browser_map.layout:Refresh()			
+			end,
+		},
 	}
 	-- write dir field
 	MouseOverTextBox:New {
@@ -2577,7 +2605,7 @@ defaults to 0]],
 		parent = panels['Setup'].layout,
 		file = false,
 		width = 12,
-		height = 12,		
+		height = 12,
 	}	
 	local box_writeDir = FilterEditBox:New {
 		parent = panels['Setup'].layout,
@@ -2681,14 +2709,140 @@ defaults to 0]],
 		width = 12,
 		height = 12,		
 	}
-
 	
+	
+	------------------------------------------ map browser popup -----------------------------
+	controls.browser_map = {}
+	window_browser_map = Window:New{
+		parent = screen0,
+		x = "30%",
+		y = "30%",
+		width = 300,
+		height = 420,
+		resizable = false,
+		caption = "Extract Map Archive", -- or just set working dir?
+		textColor = colors.grey_08,
+	}
+	local label_map_path
+	controls.browser_map.scroll = ScrollPanel:New {
+		parent = window_browser_map,	
+		y = 20,
+		padding = {5,5,5,5},
+		clientWidth = 250,
+		clientHeight = 290,
+		scrollPosX = -16,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+	}
+	controls.browser_map.layout = FileBrowserPanel:New {
+		name = 'browser_layout_map',
+		parent = controls.browser_map.scroll,
+		--editbox = label_map_path,		
+		minWidth = 230,
+		autosize = true,
+		resizable = false,
+		draggable = false,
+		centerItems = false,
+		selectable = true,
+		multiSelect = false,
+		align = 'left',
+		columns = 2,
+		itemPadding = {3,2,3,2},
+		itemMargin = {0,0,0,0},
+		list = {},		
+		fileFilter = {
+			["7z$"] = icons.ZIP_ICON,
+			["zip$"] = icons.ZIP_ICON,
+			["sd7$"] = icons.ZIP_ICON,
+			["sdz$"] = icons.ZIP_ICON,
+		},
+		Refresh = function(self)
+			Echo("refreshing...")
+			self.path = self.path or 'maps/'	
+			local list = self.list
+			for i = 1, #list do				
+				list[i]:Dispose()
+				list[i]:Invalidate()
+				list[i] = nil
+			end	
+
+			self:AddUserPaths()
+			self:AddHardLinks()
+			local legit = self:AddCurrentDir()			
+			
+			--self.visible = true
+			self:Invalidate()
+			
+			return legit -- this is false for empty folders, sadly. not sure what to do about it
+		end,
+	}
+	controls.browser_map.destination_editbox = FilterEditBox:New{
+		parent = window_browser_map,
+		y = -60,
+		x = 4,
+		width = 250,
+		fontsize = 11,
+		backgroundColor = colors.grey_01,
+		borderColor = colors.grey_035,
+		borderColor2 = colors.grey_02,
+		textColor = colors.orange_06, -- anything to check for here?
+		text = '<destination folder>',
+		
+	}
+	controls.browser_map.editbox_destination = Checkbox:New{
+		parent = window_browser_map,
+		y = -28,
+		x = 6,
+		width = 180,		
+		caption = 'use this folder as working dir',
+		fontsize = 11,
+		textColor = colors.yellow_09,
+	}
+	controls.browser_map.button_confirm = Image:New{
+		parent = window_browser_map,
+		file = icons.CONFIRM_ICON,
+		x = -30,
+		y = -30,
+		width = 20,
+		height = 20,
+		tooltip = 'extract',				
+		OnClick = {
+			function(self,...)
+				-- need to check if folder is legit?				
+				
+				local file = controls.browser_map.layout.children[controls.browser_map.layout._lastSelected].refer
+				local folder = controls.browser_map.editbox_destination
+				local success = i_o.ExtractToFolder(file, folder)
+				--window_browser_map:Hide()
+				--window_name	= nil; box = nil						
+			end
+		},	
+		
+	}
+	controls.browser_map.button_discard = Image:New{
+		parent = window_browser_map,
+		file = icons.CLOSE_ICON,
+		x = -60,
+		y = -30,
+		width = 20,
+		height = 20,
+		tooltip = 'cancel',
+		color = {0.8,0.3,0.1,0.7}, --
+		OnClick = {
+			function(self,...)
+				window_browser_map:Hide()				
+			end
+		},
+
+	}	
+	
+	containers.browser_map = window_browser
+	window_browser_map:Hide()
 	-- autogenerate map folder / map subfolders?
 	-- autolocalize files that are witihin the vfs?
 	-- 
 	
-	
-	
+
 	
 	--Echo(#tabs_settings['Display'].layout.children)
 	
@@ -3254,7 +3408,7 @@ function SetupGUI()
 		fontsize = 12,
 		y = 35,
 	}
-	mwWindow:Show()
+	mwWindow:Show()	
 end
 
 
@@ -3476,7 +3630,7 @@ function MouseWheel(up, value)
 end
 
 	
-function MouseMove(...)
+function MouseMove(...)	
 	if drag.typ.emitter then
 		if mcoords then
 			drag.items[1].pos.x = mcoords[1]
@@ -3489,6 +3643,9 @@ function MouseMove(...)
 	end
 end
 
+function GetMouseWorldPosition()
+	return mcoords[1], mcoords[2], mcoords[3]
+end
 
 --[[
 function MouseOver(mx, my)
