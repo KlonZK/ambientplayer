@@ -1,5 +1,5 @@
 reconsider module environments (add basic lua functions to all environments) x
-remove or fix console
+remove or fix console x
 finish options/settings window and move all the stuff into zk settings x
 (epic menu options maybe for player stuff)
 
@@ -7,11 +7,11 @@ continue gui and io implementation:
 - implement saving via gui X
 - implement adding emitters via gui X
 - implement loading sounds (file browser?) x
-- implement localizing sounds, if possible
+- implement localizing sounds, if possible 
 - implement getting track length from files, if possible
 - improve main window: add tabs for emitters, global, possibly instances x
-- consider creating $map.sdd folder and subfolders
-- also consider/test if installing the editor into spring/luaui would be possible
+- consider creating $map.sdd folder and subfolders x
+- also consider/test if installing the editor into spring/luaui would be possible X
 - consider more chili subclasses for shared functions (mouseover for layout, ..) x
 - rework instanced windows, this is coming up. concept so far is to subclass a InstancedWindow class, 
   each subclass holds its own prototype, while the super class controls the instancing x
@@ -22,8 +22,12 @@ player implementation:
 - alternativly, make the core module the player and just dont load the gui/draw module if in player mode
   this probably does not require a lot of work as most things have been moved out of the core anyway
 
-emitter script implementation:
+emitter script implementation: x
 - use loadstring for basic scripts
 - consider how callins are to be implemented
 - consider external scripts
 - consider how functions are to be written to files(savetable may have problems with this)
+
+-> scripts are external include files and will automatically register any callins used in these
+	scripts always remain external and the emitters table only contains filenames
+	scripts are registered by emitter name in a global "scripts" table and use their table entry as environment to run in

@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.712'
+local versionNum = '0.8'
 
 function widget:GetInfo()
   return {
