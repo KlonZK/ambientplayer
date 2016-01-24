@@ -1,5 +1,4 @@
-# ambientplayer
-APE Ambient Sound Player and Editor
+# APE Ambient Sound Player and Editor
 
 An ingame editor widget to create a sound scenery for your map, including positional audio and plug-in of external lua scripts.
 
