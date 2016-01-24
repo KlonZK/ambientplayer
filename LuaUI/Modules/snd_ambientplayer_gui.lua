@@ -3667,7 +3667,7 @@ function MouseWheel(up, value)
 			local e = emitters[hoveredEmitter]
 			local diff = value * (modkeys.alt and 1 or(modkeys.ctrl and 100 or 10))
 			local gh = GetGroundHeight(e.pos.x, e.pos.z)			
-			e.pos.y = (e.pos.y + diff) > gh and (e.pos.y + diff)  or 0					
+			e.pos.y = (e.pos.y + diff) > gh and (e.pos.y + diff)  or gh					
 			if drag.typ.emitter then
 				drag.data.hoff = (drag.data.hoff + diff) > 0 and (drag.data.hoff + diff) or 0				
 			end			
