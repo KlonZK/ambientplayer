@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.8'
+local versionNum = '0.81'
 
 function widget:GetInfo()
   return {
@@ -140,7 +140,8 @@ local emitters = {
 	--				...
 	--			},
 	-- 		},
-	--		isPlaying = false,
+	--		script = <filename>, -- regular lua include file. 
+	--		isPlaying = false,	
 	--	},
 }
 
@@ -177,7 +178,7 @@ setmetatable(emitters, {
 	end
 })
 
-scripts = {}
+scripts = {} -- this is actually empty right now safe for the constructor
 callins = {}
 for k, _ in pairs(Script.GetCallInList()) do
 	callins[k] = true
@@ -267,16 +268,17 @@ do
 	-- load console here if wanted or if chili fails
 end
 
-
-scripts._new = function(e)
-		local env = {e = e, cb = gui.cbTimer, play = DoPlay, _G = widget._G, WG = widget.WG, gui = gui} -- ...
-		for k, v in pairs(common) do
-			env[k] = v
-		end		
-		env.self = env
-		env.this = env
-		return env
-	end
+-- need to move cb into core so i can make the scripts independet of gui module
+scripts._new = function(self, e)
+	local env = {e = e, cb = gui.cbTimer, play = DoPlay, _G = widget._G, WG = widget.WG} -- ...
+	for k, v in pairs(common) do
+		env[k] = v
+	end		
+	env.self = env
+	env.this = env
+	self[e.name] = env
+	return env
+end
 
 
 
@@ -464,42 +466,66 @@ end
 
 -- emitters need a "name" self reference, this will be a problem here
 function AddScript(e, scrp)	
-	--scripts[e] = scrp
+	--scripts[e] = {}
 	for funcname, func in pairs(scrp) do
-		if type(func) == 'function' then
+		if type(func) == 'function' then			
 			-- if it is a callin, dont add it to the script environment
 			if callins[funcname] then
-				local list = {}
-				if widget[funcname] then					
-					table.insert(list, widget[funcname])
-				end
-				if type(callins[funcname]) == 'table' then
-					for k, v in pairs(callins[funcname]) do
-						table.insert(list, v)
-					end					
-				else
+				if type(callins[funcname]) ~= 'table' then
 					callins[funcname] = {}
-				end
-				local f
-				if #list > 0 then
-					table.insert(list, func)
-					f = function(...)
-						for i = 1, #list do							
-							list[i](...)
+					if widget[funcname] then
+						table.insert(callins[funcname], {owner = widget, func = widget[funcname]})
+					end
+					widget[funcname] = function(...)
+						for i = 1, #callins[funcname] do
+							callins[funcname][i].func(...)
 						end
-					end					
-				else 
-					f = func
+					end
+					widgetHandler:UpdateCallIn(funcname)
 				end
-				widget[funcname] = f
-				widgetHandler:UpdateCallIn(funcname)
-				table.insert(callins[funcname], func)
+				table.insert(callins[funcname], {owner = e, func = func})
+				--scripts[e][funcname] = func
 			end		
 		end		
 		-- register callin, append existing code from widget and scripts
 		-- set environment to run in
+	end	
+end
+
+
+-- bear in mind that the scripts[e] table contains a lot of stuff that isnt in the script file itself
+-- if there are any keys that match a callin name, things will get nasty
+function RemoveScript(e)
+	for funcname, func in pairs(scripts[e]) do
+		local c = callins[funcname]
+		if c then
+			assert(type(c) == 'table', "tried to remove non-registered script callin")
+			if #c > 1 then
+				local find
+				for i, v in pairs(c) do
+					Echo(tostring(v.owner))
+					if v.owner == e then						
+						find = true
+						table.remove(callins[funcname], i)
+					end					
+				end
+				assert(find, "could not find script callin "..funcname.." for "..e)
+			else
+				assert(c[1].owner == e, "tried to remove script callin "..funcname.." but "..e.." wasnt owner")
+				c[1] = nil
+			end
+			if #c == 0 then
+				widget[funcname] = nil
+				widgetHandler:UpdateCallIn(funcname)
+				callins[funcname] = true
+			elseif #c == 1 and c[1].owner == widget then
+				widget[funcname] = c[1].func
+				callins[funcname] = true
+			end
+		end
 	end
-	
+	scripts[e] = nil
+	emitters[e].script = nil
 end
 
 -------------------------------------------------------------------------------------------------------------------------
@@ -668,28 +694,28 @@ function widget:Initialize()
 	--setfenv(SetupGUI, gui)
 	Echo("Building GUI...")
 	gui.SetupGUI()
-	Echo("done", true)
+	Echo("...done building GUI\n")
 
 	
 	for k, v in pairs(gui) do
 		--widget[k] = widget[k] or v
 		if not widget[k] then
 			widget[k] = v
-			Echo("added key '"..k.."' to globals")
+			--Echo("added key '"..k.."' to globals")
 		end
 	end
 	for k, v in pairs(draw) do
 		--widget[k] = widget[k] or v
 		if not widget[k] then
 			widget[k] = v
-			Echo("added key '"..k.."' to globals")
+			--Echo("added key '"..k.."' to globals")
 		end
 	end
 	for k, v in pairs(i_o) do
 		--widget[k] = widget[k] or v
 		if not widget[k] then
 			widget[k] = v
-			Echo("added key '"..k.."' to globals")
+			--Echo("added key '"..k.."' to globals")
 		end
 	end
 	
@@ -698,16 +724,18 @@ function widget:Initialize()
 	else
 		Echo("could not find spring home directory")
 	end
-		
+	
+	-- the path here needs to be luaui/config for the final map
 	local mapname = Game.mapName	
 	if settings.maps[mapname] then
 		config.mapname = mapname
 		config.path_map = settings.maps[mapname]
-		if VFS.FileExists(config.path_map) then
+		if VFS.FileExists(config.path_map..PATH_LUA..PATH_CONFIG..MAPCONFIG_FILENAME) then
 			Echo("using work-dir: "..config.path_map)
 		else
 			Echo("the work dir set for this map: "..config.path_map.." does not exist.")
-		end		
+		end
+		Echo("")
 		i_o.LoadMapConfig(config.path_map..PATH_LUA..PATH_CONFIG)
 	else
 		config.mapname = mapname

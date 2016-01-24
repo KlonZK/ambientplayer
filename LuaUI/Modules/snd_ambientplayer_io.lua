@@ -354,9 +354,7 @@ function LoadMapConfig(cpath)
 					v.isPlaying = false
 				end
 				if params.script then
-					if vfsExist(params.script) then
-						widget.AddScript(e, VFS.Include(params.script, scripts._new(params), VFSMODE))
-					end
+					LoadEmitterScript(params, params.script)
 				end
 			end
 			Echo ("found "..i.." emitters", true)
@@ -364,6 +362,12 @@ function LoadMapConfig(cpath)
 		end
 	end
 	if not emitters.global then emitters.global = {pos = {}} end
+end
+
+function LoadEmitterScript(e, file)
+	if vfsExist(file) then
+		widget.AddScript(e.name, VFS.Include(file, scripts:_new(e), VFSMODE))
+	end	
 end
 
 function TestWorkingDir(dir)
@@ -393,17 +397,23 @@ function SetupWorkingDir()
 end
 
 
-function BinaryCopy(source, target)
+function BinaryCopy(source, target, textmode)
+	if vfsExist(target) then
+		Echo("tried to copy "..source.." but file already exists")
+		return
+	end
+	
 	local timer = Spring.GetTimer()
 	
 	local sfile, tfile
-	local bufsize = 8192	
+	local bufsize = 8192
 	
 	-- we cant reliably check wether the source and the target are the same file
 	-- so instead we make sure we can copy the file onto itself without breaking it
 	local blocks = {}
 	
-	sfile = io.open(source, 'rb')
+
+	sfile = textmode and io.open(source, 'r') or io.open(source, 'rb')	
 	if not sfile then
 		Echo("copy: failed to open source file: "..source)
 		return false
@@ -416,7 +426,7 @@ function BinaryCopy(source, target)
 	until (not block)
 	sfile:close()
 	
-	tfile = io.open(target, 'wb')
+	tfile = textmode and io.open(target, 'w') or io.open(target, 'wb')
 	if not tfile then
 		Echo("copy: failed to open target file: "..target)
 		return false

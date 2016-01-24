@@ -81,6 +81,8 @@ icons.FOLDER_ICON = PATH_LUA..PATH_ICONS..'folder.png'
 icons.NEWFOLDER_ICON = PATH_LUA..PATH_ICONS..'folder_add.png'
 icons.MUSICFOLDER_ICON = PATH_LUA..PATH_ICONS..'folder_music.png'
 icons.ZIP_ICON = PATH_LUA..PATH_ICONS..'present.png'
+icons.LUA_ICON = PATH_LUA..PATH_ICONS..'lua.png'
+icons.MAP_ICON = PATH_LUA..PATH_ICONS..'earth.png'
 
 local colors = {
 	Code = function(c, r, g, b)
@@ -314,10 +316,10 @@ local function DeclareClasses()
 			return obj
 		end,		
 		MouseUp = function(self, x, y, button, mods)
-			Echo("layout caught release")
-			Echo(x)
-			Echo(y)
-			Echo(button)
+			--Echo("layout caught release")
+			--Echo(x)
+			--Echo(y)
+			--Echo(button)
 			--Echo("hit "..screen0:HitTest(x,y).name)
 			local clickedChild = C_Control.MouseDown(self,x,y,button,mods)
 			if (clickedChild) then
@@ -351,15 +353,15 @@ local function DeclareClasses()
 			end
 		end,
 		MouseDown = function(self, x, y, button, mods)
-			Echo("layout caught press")
-			Echo(x)
-			Echo(y)
-			Echo(button)
+			--Echo("layout caught press")
+			--Echo(x)
+			--Echo(y)
+			--Echo(button)
 			local clickedChild = C_Control.MouseDown(self,x, y, button, mods)
-			if clickedChild then Echo("child: "..clickedChild.name) end
+			--if clickedChild then Echo("child: "..clickedChild.name) end
 			if self.allowDragItems then
-				Echo("sent to deamon "..dragDropDeamon.name)
-				if dragDropDeamon.MouseDown then Echo("has func") end
+				--Echo("sent to deamon "..dragDropDeamon.name)
+				--if dragDropDeamon.MouseDown then Echo("has func") end
 				return dragDropDeamon:MouseDown(x, y, button, mods, clickedChild or self)
 			end			
 			if (clickedChild) then
@@ -374,10 +376,10 @@ local function DeclareClasses()
 		
 		end,
 		MouseDblClick = function(self, x, y, button, mods)
-			Echo("catch")
+			--Echo("catch")
 			local clickedChild = C_Control.MouseDown(self,x,y,button,mods)
 			if (clickedChild) then
-				Echo("123")
+				--Echo("123")
 				return clickedChild
 			end
 
@@ -592,14 +594,20 @@ local function DeclareClasses()
 			end			
 		end,
 		AddHardLinks = function(self)			
-			self:AddFolder({name = 'SPRING', path = settings.general.spring_dir, icon = icons.SPRING_ICON,
+			self:AddFolder({name = 'Spring', path = settings.general.spring_dir, icon = icons.SPRING_ICON,
 				tooltip = 'the spring home directory.\n\nthis path is the real location of your spring engine and is not to be confused with the vfs root directory.\n\n'
 					..'\255\255\255\0'..(config.path_spring or '')..'\255\255\255\255',	OnClick = {default_folder},
 			})			
-			self:AddFolder({name = '$VFS_ROOT', path = '', icon = icons.SPRING_ICON,
+			self:AddFolder({name = 'VFS root', path = '', icon = icons.SPRING_ICON,
 				tooltip = 'root of the virtual file system. equals ".", "./", "/" and the empty string. \n\nwidgets can only write into the virtual file system, ie. subfolders of the spring directory.\n\nall write paths must be specified relative to the vfs root, not as absolute paths, eg. \n\n \255\255\255\0\'/sounds/ambient/\'\n\n\255\255\255\255instead of\n\n\255\255\255\0\'C:/someplace/.../sounds/ambient/\'\255\255\255\255\n\nnormally, the widget handles this process.\n\n\255\255\150\0if you find that you are unable to save into your working directory with this widget, try running spring with the --write-dir command line parameter pointing to the spring directory\255\255\255\255',
 					OnClick = {default_folder},
 			})
+			if config.path_map then
+				self:AddFolder({name = config.mapname, path = config.path_map, icon = icons.MAP_ICON,
+					tooltip = 'the working directory for this map.',
+						OnClick = {default_folder},
+				})
+			end			
 			self:AddFolder({name = '..', icon = icons.UNDO_ICON, 
 				OnClick = {function(self, ...)
 					local btn = select(3,...)
@@ -787,7 +795,7 @@ local function DeclareClasses()
 		classname = 'clickytextbox',		
 		MouseDown = function(self,...)
 		  local btn = select(3,...)
-		  Echo(btn)		  
+		  --Echo(btn)		  
 		  if not btn == 3 then return nil end
 		  self.state.pressed = true
 		  self.inherited.MouseDown(self, ...)
@@ -796,7 +804,7 @@ local function DeclareClasses()
 		end,
 		MouseUp = function(self,...)
 		  local btn = select(3,...)
-		  Echo(btn)		  
+		 -- Echo(btn)		  
 		  if not btn == 3 then return nil end
 		  if (self.state.pressed) then
 			self.state.pressed = false
@@ -906,6 +914,43 @@ local function DeclareClasses()
 			}
 			
 			obj = self.inherited.New(self, obj)			
+			
+			local scriptBtn = Button:New{
+				parent = obj,
+				x = 4,
+				y = 4,
+				--x = -28,
+				--y = -28,
+				tooltip = emitters[key].script and (emitters[key].script..colors.green_1:Code().."\n\n(right-cliok to remove)") or 'Add Script File',
+				clientWidth = 18,
+				clientHeight = 18,
+				caption = '',
+				padding = {6,6,6,6},
+				margin = {2,2,2,2},
+				OnClick = {
+					function(self, ...)
+						local btn = select(3,...)
+						if btn == 3 and emitters[key].script then
+							widget.RemoveScript(key)
+							self.tooltip = 'Add Script File'
+						else
+							if not self.hasPopup then
+								self.hasPopup = true
+								ScriptBrowserPopup(emitters[key], self)
+							end
+						end
+						-- self.tooltip = emitters[key].script and emitters[key].script or 'Add Script File'
+					end,
+				},	
+			}
+			Image:New {
+				parent = scriptBtn,
+				width = "100%",
+				height = "100%",
+				file = icons.LUA_ICON,
+				padding = {0,0,0,0},
+				margin = {0,0,0,0}
+			}			
 			
 			local closeBtn = Button:New{
 				parent = obj,
@@ -1373,8 +1418,9 @@ local function DeclareControls()
 		clientWidth = 30,
 		clientHeight = 30,
 		caption = '',
-		OnClick = {function(self) 
-			if drag.started and button == 3 then
+		OnClick = {function(self, ...) 
+			local btn = select(3,...)
+			if drag.started and btn == 3 then
 				drag.started = false
 				--drag.cb = nil
 				drag.items = {}
@@ -1605,6 +1651,7 @@ local function DeclareControls()
 			},
 		}
 	}
+	--[[
 	button_import = Button:New {
 		x = -242,
 		y = -32,
@@ -1621,7 +1668,7 @@ local function DeclareControls()
 				file = icons.LOAD_ICON,
 			},
 		}
-	}	
+	}--]]
 	
 	window_main:Hide()
 	containers.main = window_main
@@ -2065,7 +2112,7 @@ defaults to 0]],
 			if settings.browser.autoLocalize then
 				Echo("copied "..n.." files, "..errors.." errors")			
 			end		
-			Echo("generated "..n.." templates")
+			Echo("generated "..n - errors.." templates") --?
 			i_o:ReloadSoundDefs()	
 		end,
 	}
@@ -2583,8 +2630,9 @@ defaults to 0]],
 		width = 20,
 		height = 20,
 		margin = {6,-2,0,0},
-		tooltip = 'extract map archive',
+		tooltip = 'extract map archive\n\n'..colors.red_1:Code().."(not implemented yet)",
 		OnClick = {function(self)
+			do return end
 			window_browser_map:Invalidate()
 			window_browser_map:Show()
 			controls.browser_map.layout:Refresh()			
@@ -2658,8 +2706,9 @@ defaults to 0]],
 		width = 17,
 		height = 17,
 		margin = {7,2,0,0},
-		tooltip = 'restart spring now',
+		tooltip = 'restart spring now\n\n'..colors.red_1:Code().."(not implemented yet)",
 		OnClick = {function(self)
+				do return end
 				if box_writeDir.legit then
 					--[[
 					local script = i_o.GetStartScript()
@@ -2757,7 +2806,7 @@ defaults to 0]],
 			["sdz$"] = icons.ZIP_ICON,
 		},
 		Refresh = function(self)
-			Echo("refreshing...")
+			--Echo("refreshing...")
 			self.path = self.path or 'maps/'	
 			local list = self.list
 			for i = 1, #list do				
@@ -3101,12 +3150,12 @@ local function DeclareFunctionsAfter()
 						if btn == 3 then
 							local window = EmitterInspectionWindow.instances[self.refer]
 							if window.visible then
-								Echo("was visible")
+								--Echo("was visible")
 								window:Hide()				
 								window:Invalidate()				
 								window.layout.visible = false -- silly but layout panels never hide
 							else
-								Echo("was hidden")
+								--Echo("was hidden")
 								window:Refresh()
 								window:Show()
 								window.layout.visible = true
@@ -3274,7 +3323,7 @@ local function GetDeamon()
 				end
 			else
 				drag.cb.cancel = true
-				Echo(drag.cb.args[2].name)
+				--Echo(drag.cb.args[2].name)
 				local sx, sy = self:LocalToScreen(x, y)
 				local tx, ty = drag.cb.args[2]:ScreenToLocal(sx, sy)				
 				--return drag.data.source:MouseUp(tx, ty, button, mods)
@@ -3292,7 +3341,7 @@ local function GetDeamon()
 		end,
 		MouseDown = function(self, x,  y, button, mods, source)
 			if drag.started then
-				Echo("second down")
+				--Echo("second down")
 				return (drag.typ.spawn or drag.typ.emitter) and false or self
 			end
 			if button ~= 1 then return source end
@@ -3303,11 +3352,11 @@ local function GetDeamon()
 				return source:MouseDown(x,  y, button, mods, source)
 			end
 			drag.cb = cbTimer(settings.interface[2] * 1000, self.StartDragItems, {self, source})
-			Echo("grabbing input")
+			--Echo("grabbing input")
 			return self
 		end,
 		MouseMove = function(self, x, y, dx, dy, button)
-			Echo("move")			
+			--Echo("move")			
 			if drag.started then				
 				local sx, sy = self:LocalToScreen(x, y)				
 				self:SetPos(sx, sy)			
@@ -3318,7 +3367,7 @@ local function GetDeamon()
 			return self
 		end,
 		StartDragItems = function(self, source)
-			Echo("cb")					
+			--Echo("cb")					
 			drag.started = true			
 			drag.typ[source.allowDragItems] = true
 			--drag.data.source = source
@@ -3377,7 +3426,7 @@ function SetupGUI()
 	color2incolor = Chili.color2incolor
 	incolor2color = Chili.incolor2color
 	
-	Echo("setting up chili classes")	
+	Echo("declaring chili classes")	
 	DeclareClasses()
 	Echo("setting up controls")
 	DeclareControls()
@@ -3535,7 +3584,7 @@ function KeyPress(...)
 			drag.data = {}
 			drag.typ = {}
 			drag.started = false							
-			Echo(key == KEYSYMS.RETURN and "drag ended" or "drag dropped")							
+			--Echo(key == KEYSYMS.RETURN and "drag ended" or "drag dropped")							
 		end
 		return true -- im just gonna keep all the inputs for safety
 	end	
@@ -3817,6 +3866,130 @@ function SpawnDialog(px, pz, py)
 	window_name:Show()	
 	box.state.focused = true
 	screen0.focusedControl = box
+end
+
+
+function ScriptBrowserPopup(e, source)	
+	local window_browser_script = Window:New{
+		parent = screen0,
+		x = "30%",
+		y = "30%",
+		width = 290,
+		height = 380,
+		resizable = false,
+		caption = "Load Script File", -- or just set working dir?
+		textColor = colors.grey_08,
+	}
+	local label_script_path
+	local browser_script_scroll = ScrollPanel:New {
+		parent = window_browser_script,	
+		y = 20,
+		padding = {5,5,5,5},
+		clientWidth = 250,
+		clientHeight = 290,
+		scrollPosX = -16,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+	}
+	local browser_script_layout = FileBrowserPanel:New {
+		--name = 'browser_layout_map',
+		parent = browser_script_scroll,
+		--editbox = label_map_path,		
+		minWidth = 230,
+		autosize = true,
+		resizable = false,
+		draggable = false,
+		centerItems = false,
+		selectable = true,
+		multiSelect = false,
+		align = 'left',
+		columns = 2,
+		itemPadding = {3,2,3,2},
+		itemMargin = {0,0,0,0},
+		list = {},		
+		fileFilter = {
+			["lua$"] = icons.LUA_ICON,
+		},
+		Refresh = function(self)
+			--Echo("refreshing...")
+			self.path = self.path or (config.path_map and config.path_map.."luaui/scripts" or "luaui/scripts")	
+			local list = self.list
+			for i = 1, #list do				
+				list[i]:Dispose()
+				list[i]:Invalidate()
+				list[i] = nil
+			end	
+
+			self:AddUserPaths()
+			self:AddHardLinks()
+			local legit = self:AddCurrentDir()			
+			
+			--self.visible = true
+			self:Invalidate()
+			
+			return legit -- this is false for empty folders, sadly. not sure what to do about it
+		end,
+	}
+	local browser_script_checkbox = Checkbox:New{
+		parent = window_browser_script,
+		y = -24,
+		x = 6,
+		width = 60,
+		value = true,		
+		caption = 'localize',
+		tooltip = 'select this option to copy the file into the scripts folder of your working directory',
+		fontsize = 11,
+		textColor = colors.yellow_09,
+	}
+	local browser_script_button_confirm = Image:New{
+		parent = window_browser_script,
+		file = icons.CONFIRM_ICON,
+		x = -30,
+		y = -26,
+		width = 20,
+		height = 20,
+		tooltip = 'accept',				
+		OnClick = {
+			function(self,...)
+				-- need to check if folder is legit?				
+				local fileAndPath = browser_script_layout.children[browser_script_layout._lastSelected].refer
+				local file = browser_script_layout.children[browser_script_layout._lastSelected].text
+				if browser_script_checkbox.value then					
+					
+					local t = config.path_map..'luaui/scripts/'..file
+					i_o.BinaryCopy(fileAndPath, t, true)
+					fileAndPath = t
+				end				
+				if e.script then
+					widget.RemoveScript(e.name)
+				end
+				e.script = fileAndPath
+				i_o.LoadEmitterScript(e, fileAndPath)
+				source.hasPopup = false
+				source.tooltip = (file..colors.green_1:Code().."\n\n(right-cliok to remove)") or 'Add Script File',
+				window_browser_script:Hide()				
+			end
+		},	
+		
+	}
+	local browser_script_button_discard = Image:New{
+		parent = window_browser_script,
+		file = icons.CLOSE_ICON,
+		x = -60,
+		y = -26,
+		width = 20,
+		height = 20,
+		tooltip = 'cancel',
+		color = {0.8,0.3,0.1,0.7}, --
+		OnClick = {
+			function(self,...)
+				source.hasPopup = false
+				window_browser_script:Hide()				
+			end
+		},
+	}
+	browser_script_layout:Refresh()
+	window_browser_script:Show()
 end
 
 
