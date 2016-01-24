@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.811'
+local versionNum = '0.812'
 
 function widget:GetInfo()
   return {
@@ -741,7 +741,8 @@ function widget:Initialize()
 		config.mapname = mapname
 		config.path_map = 'maps/'..Game.mapName..'.sdd/'	
 		Echo(gui.colors.orange_06:Code().."No working directory has been set up for this map."..gui.colors.yellow_09:Code())		
-		
+		emitters.global = {}
+		emitters.global.pos = {false, false, false}
 		--Echo("By default, APE saves all data for a particular map in the uncompressed folder maps/<mapname>.sdd,")
 		--Echo("if such a folder exists. otherwise, you can set the folder manually or APE can create")
 		--Echo('one for you, if you would like. You will find either option the editor\' settings menu.'..gui.colors.yellow_09:Code())				

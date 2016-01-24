@@ -878,7 +878,7 @@ local function DeclareClasses()
 			class = self.inherited:Inherit(class)
 			class.instances = {}
 			setmetatable(class.instances, {
-				__mode = 'v',
+				--__mode = 'v',
 				__index = function(t, k)
 					if not rawget(t, k) then
 						t[k] = class:New(k)
@@ -3196,16 +3196,11 @@ local function DeclareFunctionsAfter()
 				},				
 			}
 			set.label:UpdateTooltip()
-		end
-		
-		if not controls.emitterslist.global then
-			valid = false
-			MakeEmitterListEntry('global')
-		end
+		end	
 		
 		-- emitters tab	
 		for e, params in pairs(emitters) do
-			if not controls.emitterslist[e] and e ~= 'global' then
+			if not controls.emitterslist[e] then 
 				valid = false
 				MakeEmitterListEntry(e)
 			end
@@ -3218,7 +3213,7 @@ local function DeclareFunctionsAfter()
 			end
 		end
 		for k, set in pairs(controls.emitterslist) do
-			if not emitters[set.label.refer] then
+			if not emitters[set.label.refer] then				
 				valid = false
 				set.label:Dispose()
 				-- ...
