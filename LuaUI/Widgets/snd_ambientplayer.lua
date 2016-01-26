@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.812'
+local versionNum = '0.82'
 
 function widget:GetInfo()
   return {
@@ -22,6 +22,8 @@ end
 
 local PlaySound = Spring.PlaySoundFile
 local PlayStream = Spring.PlaySoundStream
+local GetTimer = Spring.GetTimer
+local DiffTimers = Spring.DiffTimers
 
 local random=math.random
 
@@ -35,6 +37,7 @@ local PATH_LUA = LUAUI_DIRNAME
 local PATH_CONFIG = 'Configs/'
 local PATH_WIDGET = 'Widgets/'
 local PATH_UTIL = 'Utilities/'
+local PATH_SCRIPT = 'Scripts/'
 local PATH_MODULE = 'Modules/'
 local PATH_SOUND = 'Sounds/Ambient/'
 
@@ -72,6 +75,13 @@ function Echo(s, keepline)
 	_log = _log..(keepline and '' or '\n')..s
 	if controls and controls.log then controls.log:SetText(_log) end
 	if logfile then logfile:write((keepline and '' or '\n')..s) end
+end
+
+local callbacks = {}
+local function cbTimer(length, func, args)
+	local cb = {length = length, func = func, args = args, start = GetTimer()}
+	callbacks[#callbacks + 1] = cb
+	return cb
 end
 
 local config = {}
@@ -203,7 +213,8 @@ local common = {pairs = pairs, ipairs = ipairs, type = type, string = string, to
 	setmetatable = setmetatable, getfenv = getfenv, setfenv = setfenv, rawset = rawset, rawget = rawget, assert = assert,
 		os = os, math = math, io = io, table = table, next = next, error = error, select = select,
 			widget = widget, Echo = Echo, options = options, config = config, settings = settings,
-				sounditems = sounditems, emitters = emitters, Spring = Spring, scripts = scripts}
+				sounditems = sounditems, emitters = emitters, Spring = Spring, scripts = scripts, callbacks = callbacks,
+					cbTimer = cbTimer}
 
 
 -- SetupGUI() builds controls so we can't import keys yet
@@ -213,7 +224,7 @@ local i_o = {PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, PATH_SOUND = PATH_S
 				PATH_MODULE = PATH_MODULE, PATH_UTIL = PATH_UTIL, TMP_ITEMS_FILENAME = TMP_ITEMS_FILENAME,
 					TMP_INSTANCES_FILENAME = TMP_INSTANCES_FILENAME, LOG_FILENAME = LOG_FILENAME,
 						MAPCONFIG_FILENAME = MAPCONFIG_FILENAME, EMITTERS_FILENAME = EMITTERS_FILENAME,
-							SOUNDS_ITEMS_DEF_FILENAME = SOUNDS_ITEMS_DEF_FILENAME,
+							SOUNDS_ITEMS_DEF_FILENAME = SOUNDS_ITEMS_DEF_FILENAME, PATH_SCRIPT = PATH_SCRIPT,
 								SOUNDS_INSTANCES_DEF_FILENAME = SOUNDS_INSTANCES_DEF_FILENAME}
 for k, v in pairs(common) do i_o[k] = v end
 
@@ -270,7 +281,7 @@ end
 
 -- need to move cb into core so i can make the scripts independet of gui module
 scripts._new = function(self, e)
-	local env = {e = e, cb = gui.cbTimer, play = DoPlay, _G = widget._G, WG = widget.WG} -- ...
+	local env = {e = e, play = DoPlay, _G = widget._G, WG = widget.WG} -- ...
 	for k, v in pairs(common) do
 		env[k] = v
 	end		
@@ -353,6 +364,14 @@ local needReload = false
 -------------------------------------------------------------------------------------------------------------------------
 -- LOCAL FUNCTIONS
 -------------------------------------------------------------------------------------------------------------------------
+
+local function unpk(args, i)		
+	if args and args[i] then
+		return args[i], unpk(args, i + 1)
+	else
+		return nil
+	end		
+end
 
 local function DoPlay(trk, vol, ename)
 	local e = type(ename) == 'string' and emitters[ename] or ename
@@ -465,7 +484,7 @@ function SpawnEmitter(name, x, z, y)
 end
 
 -- emitters need a "name" self reference, this will be a problem here
-function AddScript(e, scrp)	
+function AddScript(e, scrp, params)	
 	--scripts[e] = {}
 	for funcname, func in pairs(scrp) do
 		if type(func) == 'function' then			
@@ -489,13 +508,25 @@ function AddScript(e, scrp)
 		end		
 		-- register callin, append existing code from widget and scripts
 		-- set environment to run in
-	end	
+	end
+	if params and type(params) == 'table' then
+		scrp.params = scrp.params or {}
+		for k, v in params do
+			scrp.params[k] = v
+		end
+	end
+	if emitters[e].scriptParams then -- we only use the table read from the script if it was just added to the emitter
+		scrp.params = emitters[e].scriptParams
+	else
+		emitters[e].scriptParams = scrp.params
+	end
+	
 end
 
 
 -- bear in mind that the scripts[e] table contains a lot of stuff that isnt in the script file itself
 -- if there are any keys that match a callin name, things will get nasty
-function RemoveScript(e)
+function RemoveScript(e)	
 	for funcname, func in pairs(scripts[e]) do
 		local c = callins[funcname]
 		if c then
@@ -526,6 +557,7 @@ function RemoveScript(e)
 	end
 	scripts[e] = nil
 	emitters[e].script = nil
+	emitters[e].scriptParams = nil
 end
 
 -------------------------------------------------------------------------------------------------------------------------
@@ -588,6 +620,18 @@ function widget:Update(dt)
 	--Echo(dt)
 	if gui then
 		UpdateGUI(dt)
+	end
+	
+	if #callbacks > 0 then
+		local timer = GetTimer()
+		for k, cb in pairs(callbacks) do
+			if DiffTimers(timer, cb.start, true) > cb.length then				
+				if not cb.cancel then
+					cb.func(unpk(cb.args, 1))
+				end	
+				table.remove(callbacks, k)
+			end
+		end
 	end
 
 	if (needReload and options.autoreload.value) then ReloadSoundDefs() needReload = false end
@@ -740,12 +784,12 @@ function widget:Initialize()
 	else
 		config.mapname = mapname
 		config.path_map = 'maps/'..Game.mapName..'.sdd/'	
-		Echo(gui.colors.orange_06:Code().."No working directory has been set up for this map."..gui.colors.yellow_09:Code())		
+		Echo(gui.colors.orange_06:Code().."No working directory has been set up for this map.")
+		Echo("APE will store all data for a particular map in a regular map folder structure.")
+		Echo("You can use an existing .sdd folder, or add the working directory to your map archive later.")
+		Echo("To set or change your working directory, go to 'settings' in the APE main window. "..gui.colors.yellow_09:Code())				
 		emitters.global = {}
 		emitters.global.pos = {false, false, false}
-		--Echo("By default, APE saves all data for a particular map in the uncompressed folder maps/<mapname>.sdd,")
-		--Echo("if such a folder exists. otherwise, you can set the folder manually or APE can create")
-		--Echo('one for you, if you would like. You will find either option the editor\' settings menu.'..gui.colors.yellow_09:Code())				
 	end
 	config.mapX = Game.mapSizeX
 	config.mapZ = Game.mapSizeZ	

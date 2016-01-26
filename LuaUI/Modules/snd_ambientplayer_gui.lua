@@ -29,6 +29,9 @@ local GetModKeys = Spring.GetModKeyState
 local GetTimer = Spring.GetTimer
 local DiffTimers = Spring.DiffTimers
 
+local callbacks = callbacks
+local cbTimer = cbTimer
+
 local C_Control
 local Image
 local Button
@@ -189,14 +192,6 @@ local drag = {
 	started = false,
 	cb = nil,
 }
-
-local callbacks = {}
-local function cbTimer(length, func, args)
-	local cb = {length = length, func = func, args = args, start = GetTimer()}
-	callbacks[#callbacks + 1] = cb
-	return cb
-end
-
 
 local tooltipTimer = settings.interface[3]
 local worldTooltip = ''
@@ -552,6 +547,7 @@ local function DeclareClasses()
 					textColor = colors.grey_08,
 					refer = data.path,
 					text = data.name,
+					padding = {0, 2, 0, 0},					
 					selectable = data.OnSelect and true,
 					OnSelect = data.OnSelect, -- highlighting of elements should be class feature
 					OnClick = data.OnClick,
@@ -578,6 +574,7 @@ local function DeclareClasses()
 					textColor = colors.grey_08,
 					refer = data.path,
 					text = data.name,
+					padding = {0, 2, 0, 0},					
 					selectable = data.OnSelect and true,
 					OnSelect = data.OnSelect, -- highlighting of elements should be class feature
 					OnClick = data.OnClick,
@@ -596,7 +593,7 @@ local function DeclareClasses()
 		AddHardLinks = function(self)			
 			self:AddFolder({name = 'Spring', path = settings.general.spring_dir, icon = icons.SPRING_ICON,
 				tooltip = 'the spring home directory.\n\nthis path is the real location of your spring engine and is not to be confused with the vfs root directory.\n\n'
-					..'\255\255\255\0'..(config.path_spring or '')..'\255\255\255\255',	OnClick = {default_folder},
+					..'\255\255\255\0'..(settings.general.spring_dir or '')..'\255\255\255\255',	OnClick = {default_folder},
 			})			
 			self:AddFolder({name = 'VFS root', path = '', icon = icons.SPRING_ICON,
 				tooltip = 'root of the virtual file system. equals ".", "./", "/" and the empty string. \n\nwidgets can only write into the virtual file system, ie. subfolders of the spring directory.\n\nall write paths must be specified relative to the vfs root, not as absolute paths, eg. \n\n \255\255\255\0\'/sounds/ambient/\'\n\n\255\255\255\255instead of\n\n\255\255\255\0\'C:/someplace/.../sounds/ambient/\'\255\255\255\255\n\nnormally, the widget handles this process.\n\n\255\255\150\0if you find that you are unable to save into your working directory with this widget, try running spring with the --write-dir command line parameter pointing to the spring directory\255\255\255\255',
@@ -604,7 +601,7 @@ local function DeclareClasses()
 			})
 			if config.path_map then
 				self:AddFolder({name = config.mapname, path = config.path_map, icon = icons.MAP_ICON,
-					tooltip = 'the working directory for this map.',
+					tooltip = 'the working directory for this map.\n\n'..colors.yellow_09:Code()..config.path_map,
 						OnClick = {default_folder},
 				})
 			end			
@@ -934,9 +931,11 @@ local function DeclareClasses()
 							widget.RemoveScript(key)
 							self.tooltip = 'Add Script File'
 						else
-							if not self.hasPopup then
-								self.hasPopup = true
-								ScriptBrowserPopup(emitters[key], self)
+							if self.hasPopup then
+								self.hasPopup:Discard()
+								self.hasPopup = false
+							else								
+								self.hasPopup = ScriptBrowserPopup(emitters[key], self)
 							end
 						end
 						-- self.tooltip = emitters[key].script and emitters[key].script or 'Add Script File'
@@ -948,6 +947,39 @@ local function DeclareClasses()
 				width = "100%",
 				height = "100%",
 				file = icons.LUA_ICON,
+				padding = {0,0,0,0},
+				margin = {0,0,0,0}
+			}			
+			local varsBtn = Button:New{
+				parent = obj,
+				x = 36,
+				y = 4,
+				--x = -28,
+				--y = -28,
+				tooltip = "Script Parameters",
+				clientWidth = 18,
+				clientHeight = 18,
+				caption = '',
+				padding = {6,6,6,6},
+				margin = {2,2,2,2},
+				OnClick = {
+					function(self, ...)
+						if self.hasPopup then
+							self.hasPopop:Discard()
+							self.hasPopup = false
+						elseif widget.scripts[key] then
+							self.hasPopup = ScriptParamsPopup(emitters[key], self)						
+						else
+							Echo(key.." has no script")
+						end	
+					end,					
+				},	
+			}
+			Image:New {
+				parent = varsBtn,
+				width = "100%",
+				height = "100%",
+				file = icons.PROPERTIES_ICON,
 				padding = {0,0,0,0},
 				margin = {0,0,0,0}
 			}			
@@ -2079,7 +2111,7 @@ defaults to 0]],
 			for k, v in pairs(controls.browser.layout_templates.list) do
 				n = n + 1
 				local success
-				if settings.browser.autoLocalize then
+				if settings.browser.autoLocalize and config.path_map then
 					-- we still need to check here if the file already exists in the local folder
 					-- and if so, we dont need to use file_local / _external
 					local target_fullpath = config.path_map..config.path_sound..v.box.refer2
@@ -2354,7 +2386,7 @@ defaults to 0]],
 		textColor = colors.grey_08,
 		checked = settings.browser.autoLocalize,
 		caption = 'autolocalize files',
-		tooltip = 'when this is enabled, selected files will be automatically copied into your maps\' sound folder once your close this window.\n\nnote that internally, the old file & location will be used until the next time you run spring.\n\nthis process may take some time.',
+		tooltip = 'When this is enabled, APE will try to copy the files into your working directory once your close this window.\n\nNote that internally, the old file & location will be used until the next time you run spring.\n\n'..colors.orange_06:Code().."Note also that due to engine limitations, files outside the spring directory cannot be copied in this way.\n\nYou can still use them while you are working on your map, but you will need to copy them manually into the sounds/ambient folder inside your working directory.\n\nAPE will localize path names used internally when you finish working on your map." ,
 		OnChange = {function(self, checked) 
 				settings.browser.autoLocalize = checked
 				--controls.browser.layout_files:Refresh()
@@ -2981,7 +3013,7 @@ local function DeclareFunctionsAfter()
 	--------------------------------------------------------------------------------------------------
 	-- main frame
 	layout_main_templates.Refresh = function(self) 
-		local tooltip_help_templates = colors.green_1:Code().."\n\nselect any number of items, press "..colors.blue_579:Code().."SPACE "..colors.green_1:Code().."and drag with your mouse to add them to an emitter."
+		local tooltip_help_templates = colors.green_1:Code().."\n\nSelect any number of items and drag with your mouse to add them to an emitter.\n\nRight-click to deselect, use "..colors.blue_579:Code().."SHIFT"..colors.green_1:Code().." and/or "..colors.blue_579:Code().."CTRL"..colors.green_1:Code().." to select multiple."
 	
 		local valid = true
 		
@@ -3393,7 +3425,6 @@ local function unpk(args, i)
 	end		
 end
 
-
 function SetupGUI()		
 	Chili = widget.WG.Chili
 	if (not Chili) then		
@@ -3470,18 +3501,7 @@ function UpdateGUI(dt)
 	modkeys.alt ,modkeys.ctrl, modkeys.space, modkeys.shift = GetModKeys()
 	hoveredControl = screen0:HitTest(mx, mz_inv) -- this does not care for windows atm
 		
-	if #callbacks > 0 then
-		local timer = GetTimer()
-		for k, cb in pairs(callbacks) do
-			if DiffTimers(timer, cb.start, true) > cb.length then				
-				if not cb.cancel then
-					cb.func(unpk(cb.args, 1))
-				end	
-				table.remove(callbacks, k)
-			end
-		end
-	end
-	
+
 	if settings.display[1] and (not hoveredControl or hoveredControl.name == 'dragdropdeamon') then
 		local dist = 100000000
 		local nearest
@@ -3930,7 +3950,7 @@ function ScriptBrowserPopup(e, source)
 		y = -24,
 		x = 6,
 		width = 60,
-		value = true,		
+		checked = true,		
 		caption = 'localize',
 		tooltip = 'select this option to copy the file into the scripts folder of your working directory',
 		fontsize = 11,
@@ -3946,23 +3966,29 @@ function ScriptBrowserPopup(e, source)
 		tooltip = 'accept',				
 		OnClick = {
 			function(self,...)
+				--local success = true
 				-- need to check if folder is legit?				
 				local fileAndPath = browser_script_layout.children[browser_script_layout._lastSelected].refer
 				local file = browser_script_layout.children[browser_script_layout._lastSelected].text
-				if browser_script_checkbox.value then					
-					
-					local t = config.path_map..'luaui/scripts/'..file
-					i_o.BinaryCopy(fileAndPath, t, true)
-					fileAndPath = t
-				end				
-				if e.script then
-					widget.RemoveScript(e.name)
+				if browser_script_checkbox.checked then					
+					--local t = config.path_map..PATH_SCRIPT..file
+					--success = i_o.BinaryCopy(fileAndPath, t, true)
+					fileAndPath = i_o.CopyScriptFile(fileAndPath, file)
+					--fileAndPath = t
 				end
-				e.script = fileAndPath
-				i_o.LoadEmitterScript(e, fileAndPath)
-				source.hasPopup = false
-				source.tooltip = (file..colors.green_1:Code().."\n\n(right-cliok to remove)") or 'Add Script File',
-				window_browser_script:Hide()				
+				if fileAndPath then	
+					if e.script then
+						widget.RemoveScript(e)
+					end
+					e.script = fileAndPath
+					i_o.LoadEmitterScript(e, fileAndPath)
+					source.hasPopup = false
+					source.tooltip = (file..colors.green_1:Code().."\n\n(right-cliok to remove)") or 'Add Script File',
+					window_browser_script:Hide()
+				else
+					Echo("unable to copy script file. try using the file externally and copy it later.")
+				end
+
 			end
 		},	
 		
@@ -3985,8 +4011,143 @@ function ScriptBrowserPopup(e, source)
 	}
 	browser_script_layout:Refresh()
 	window_browser_script:Show()
+	return window_browser_script
 end
 
+
+function ScriptParamsPopup(e, source)
+	local script = widget.scripts[e.name]
+	assert (script, "tried to edit script params for "..e.name.." but e has no script!")
+	local window_params_script = Window:New{
+		parent = screen0,
+		x = "30%",
+		y = "30%",
+		width = 290,
+		height = 380,
+		resizable = false,
+		caption = "Script Vars", -- or just set working dir?
+		textColor = colors.grey_08,
+	}	
+	local params_script_scroll = ScrollPanel:New {
+		parent = window_params_script,	
+		y = 20,
+		padding = {5,5,5,5},
+		clientWidth = 250,
+		clientHeight = 290,
+		scrollPosX = -16,
+		verticalSmartScroll = true,	
+		scrollbarSize = 6,
+	}
+	local params_script_layout = LayoutPanel:New {
+		parent = params_script_scroll,
+		minWidth = 230,
+		autosize = true,
+		resizable = false,
+		draggable = false,
+		centerItems = false,
+		selectable = true,
+		multiSelect = false,
+		align = 'left',
+		columns = 2,
+		itemPadding = {3,2,3,2},
+		itemMargin = {0,0,0,0},
+		list = {},
+		Refresh = function(self)
+			local n = 0
+			if script.params and type(script.params) == 'table' then				
+				local list = self.list
+				for k, v in pairs(script.params) do					
+					n = n + 1
+					local typ = type(v)
+					MouseOverTextBox:New{parent = self, clientWidth = 160, fontsize = 11, textColor = colors.yellow_09,
+						padding = {0, 2, 0, 0}, text = k, tooltip = "Type: "..typ, OnClick = {function() end},}
+					if typ == 'boolean' then
+						Checkbox:New{
+							parent = self,
+							checked = v,
+							width = 50,
+							fontsize = 11,
+							textColor = v and colors.green_1 or colors.red_1,		
+							caption = v and 'true' or 'false',
+							OnChange = {function(self, state)
+								--local state = not self.checked
+								if state then 
+									self.font:SetColor(colors.green_1)
+									self.caption = 'true'
+								else
+									self.font:SetColor(colors.red_1)
+									self.caption = 'false'
+								end
+								self:Invalidate()
+								script.params[k] = state
+							end,},
+						}
+					elseif typ == 'table' then
+						local offset = 20
+						Label:New{parent = self, fontsize = 11, textColor = colors.grey_08, caption = 'table',} -- dummy for layout						
+						if #v > 0 then
+							for i = 0, #v do
+							end
+						else
+							for _k, _v in pairs(v) do
+							end
+						end
+					elseif typ == 'userdata' then
+						MouseOverTextBox:New{parent = self, clientWidth = 50, fontsize = 11, textColor = colors.red_1,
+							 text = 'userdata'}						
+					else
+						FilterEditBox:New{
+							parent = self,
+							width = 50,
+							height = 14,
+							--padding = {0, 1, 0, 1},
+							fontsize = 11,
+							textColor = colors.grey_08,
+							borderColor = colors.grey_035,
+							borderColor2 = colors.grey_02,
+							backgroundColor = colors.grey_01,
+							text = tostring(v),							
+						}
+					end
+				end
+			end	
+			if n == 0 then
+				self.columns = 1
+				Label:New{parent = self, width = self.width, textColor = colors.yellow_09,	fontsize = 11,
+					caption = "script has no variable parameters."}
+				Label:New{parent = self, width = self.width, textColor = colors.yellow_09,	fontsize = 11,
+					caption = "add a 'params' table to the file, "}
+				Label:New{parent = self, width = self.width, textColor = colors.yellow_09,	fontsize = 11,
+					caption = "or return a table as the second value."}						
+			end
+		
+		end,
+	}
+	
+	local params_script_button_confirm = Image:New{
+		parent = window_params_script,
+		file = icons.CONFIRM_ICON,
+		x = -30,
+		y = -26,
+		width = 20,
+		height = 20,
+		tooltip = 'accept',	
+	}	
+	local params_script_button_discard = Image:New{
+		parent = window_params_script,
+		file = icons.CLOSE_ICON,
+		x = -60,
+		y = -26,
+		width = 20,
+		height = 20,
+		tooltip = 'cancel',
+		color = {0.8,0.3,0.1,0.7}, --
+	}	
+	params_script_layout:Refresh()
+	window_params_script:Show()
+	return window_params_script	
+	
+end
 
 --
 

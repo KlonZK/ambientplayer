@@ -366,7 +366,8 @@ end
 
 function LoadEmitterScript(e, file)
 	if vfsExist(file) then
-		widget.AddScript(e.name, VFS.Include(file, scripts:_new(e), VFSMODE))
+		local scrp, params = VFS.Include(file, scripts:_new(e), VFSMODE)
+		widget.AddScript(e.name, scrp, params)
 	end	
 end
 
@@ -387,6 +388,7 @@ function SetupWorkingDir()
 	Spring.CreateDir(config.path_map..PATH_LUA..PATH_WIDGET)
 	Spring.CreateDir(config.path_map..PATH_LUA..PATH_MODULE)
 	Spring.CreateDir(config.path_map..PATH_LUA..PATH_CONFIG)
+	Spring.CreateDir(config.path_map..PATH_LUA..PATH_SCRIPT)
 	--Spring.CreateDir(config.path_map..PATH_LUA..PATH_UTIL)
 	--Spring.CreateDir(config.path_map..PATH_LUA..'Images/')
 	SaveAll()
@@ -396,14 +398,18 @@ function SetupWorkingDir()
 	end			
 end
 
+function CopyScriptFile(source, filename)
+	local target = config.path_map..PATH_LUA..PATH_SCRIPT..filename
+	return BinaryCopy(source, target, true) and target or false
+end
 
 function BinaryCopy(source, target, textmode)
 	if vfsExist(target) then
-		Echo("tried to copy "..source.." but file already exists")
-		return
+		Echo("tried to copy "..source.." but file already exists:\n"..target)
+		return true
 	end
 	
-	local timer = Spring.GetTimer()
+	--local timer = Spring.GetTimer()
 	
 	local sfile, tfile
 	local bufsize = 8192
@@ -436,8 +442,8 @@ function BinaryCopy(source, target, textmode)
 	end	
 	tfile:close()
 	
-	local duration = string.format("%.4f",Spring.DiffTimers(Spring.GetTimer(), timer))
-	Echo("done copying "..source..", spent "..duration.." seconds") --string.format("%.0f", e.pos.x)
+	--local duration = string.format("%.4f",Spring.DiffTimers(Spring.GetTimer(), timer))
+	--Echo("done copying "..source..", spent "..duration.." seconds") --string.format("%.0f", e.pos.x)
 	return true
 end
 
@@ -497,7 +503,7 @@ end
 function ReloadSoundDefs()
 	-- not sure they have to be different?
 	local wpath = config.path_map..PATH_LUA..PATH_CONFIG
-	local path = config.path_map..PATH_LUA..PATH_CONFIG
+	local path = 'temp/'--config.path_map..PATH_LUA..PATH_CONFIG
 	
 	
 	Echo("caching...")
