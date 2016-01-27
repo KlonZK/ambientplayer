@@ -250,41 +250,6 @@ function ExtractToFolder(file, folder)
 	return false
 end
 
---[[
-function ImportPlaylist()
-	local path
-	local file = "ambientplaylist.lua"
-	if vfsExist(config.path_map..PATH_LUA..PATH_CONFIG..'ambientplaylist.lua', VFSMODE) then
-		path = cpath
-	elseif vfsExist('ambientplaylist.lua', VFSMODE) then
-		path = ''
-	elseif vfsExist(PATH_LUA..PATH_CONFIG..'ambientplaylist.lua', VFSMODE) then
-		path = PATH_LUA..PATH_CONFIG
-	elseif vfsExist(PATH_LUA..PATH_SOUND..'ambientplaylist.lua', VFSMODE) then
-		path = PATH_LUA..PATH_SOUND
-	else	
-		Echo("import file no found")
-		return false
-	end
-	
-	Echo ("Importing templates...")
-	if vfsExist(path..file, VFSMODE) then
-		if not spLoadSoundDefs(path..file) then
-		--if not spLoadSoundDefs(PATH_LUA..PATH_CONFIG..SOUNDS_ITEMS_DEF_FILENAME) then
-			Echo("failed to import templates: "..path..file.."'\n")
-		end
-		local list = vfsInclude(path..file, nil, VFSMODE)
-		if not list.Sounditems then
-			Echo("playlist file was empty", true)
-		else
-			local i = 0
-			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
-			Echo ("found "..i.." sounditems", true)
-		end
-	else
-		Echo("file not found\n '"..path..file.."'")
-	end
-end--]]
 
 
 function LoadMapConfig(cpath)
@@ -588,3 +553,42 @@ function WriteOptions(path, file)
 end
 
 return true
+
+
+
+
+--[[
+function ImportPlaylist()
+	local path
+	local file = "ambientplaylist.lua"
+	if vfsExist(config.path_map..PATH_LUA..PATH_CONFIG..'ambientplaylist.lua', VFSMODE) then
+		path = cpath
+	elseif vfsExist('ambientplaylist.lua', VFSMODE) then
+		path = ''
+	elseif vfsExist(PATH_LUA..PATH_CONFIG..'ambientplaylist.lua', VFSMODE) then
+		path = PATH_LUA..PATH_CONFIG
+	elseif vfsExist(PATH_LUA..PATH_SOUND..'ambientplaylist.lua', VFSMODE) then
+		path = PATH_LUA..PATH_SOUND
+	else	
+		Echo("import file no found")
+		return false
+	end
+	
+	Echo ("Importing templates...")
+	if vfsExist(path..file, VFSMODE) then
+		if not spLoadSoundDefs(path..file) then
+		--if not spLoadSoundDefs(PATH_LUA..PATH_CONFIG..SOUNDS_ITEMS_DEF_FILENAME) then
+			Echo("failed to import templates: "..path..file.."'\n")
+		end
+		local list = vfsInclude(path..file, nil, VFSMODE)
+		if not list.Sounditems then
+			Echo("playlist file was empty", true)
+		else
+			local i = 0
+			for s, params in pairs(list.Sounditems) do i = i + 1; sounditems.templates[s] = params end
+			Echo ("found "..i.." sounditems", true)
+		end
+	else
+		Echo("file not found\n '"..path..file.."'")
+	end
+end--]]

@@ -1,6 +1,6 @@
 include("keysym.h.lua")
 
-local versionNum = '0.82'
+local versionNum = '0.829'
 
 function widget:GetInfo()
   return {
@@ -34,6 +34,7 @@ local spLoadSoundDefs = Spring.LoadSoundDef
 local VFSMODE = VFS.RAW_FIRST
 
 local PATH_LUA = LUAUI_DIRNAME
+local PATH_APE = PATH_LUA..'APE/'
 local PATH_CONFIG = 'Configs/'
 local PATH_WIDGET = 'Widgets/'
 local PATH_UTIL = 'Utilities/'
@@ -229,7 +230,7 @@ local i_o = {PATH_LUA = PATH_LUA, PATH_CONFIG = PATH_CONFIG, PATH_SOUND = PATH_S
 for k, v in pairs(common) do i_o[k] = v end
 
 do
-	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_IO
+	local file = PATH_APE..PATH_MODULE..FILE_MODULE_IO
 	if vfsExist(file, VFSMODE) and vfsInclude(file, i_o, VFSMODE) then
 		Echo("I/O module successfully loaded")
 
@@ -241,7 +242,7 @@ end
 local draw = {}
 for k, v in pairs(common) do draw[k] = v end
 do
-	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_DRAW
+	local file = PATH_APE..PATH_MODULE..FILE_MODULE_DRAW
 	if vfsExist(file, VFSMODE) and vfsInclude(file, draw, VFSMODE) then
 		Echo("DRAW module successfully loaded")
 	else
@@ -252,7 +253,7 @@ end
 local unitools = {getfenv = getfenv, string = string, math = math}
 
 do
-	local file = PATH_LUA..PATH_UTIL..'unicode.lua'
+	local file = PATH_APE..PATH_UTIL..'unicode.lua'
 	if vfsExist(file, VFSMODE) then
 		unitools = vfsInclude(file, unitools, VFSMODE)
 		if unitools then Echo("unicode utils loaded")
@@ -268,7 +269,7 @@ local gui = {tracklist_controls = tracklist_controls, emitters_controls = emitte
 for k, v in pairs(common) do gui[k] = v end
 
 do
-	local file = PATH_LUA..PATH_MODULE..FILE_MODULE_GUI
+	local file = PATH_APE..PATH_MODULE..FILE_MODULE_GUI
 	if vfsExist(file, VFSMODE) then
 		gui = vfsInclude(file, gui, VFSMODE)
 		if gui then Echo("GUI module successfully loaded")
